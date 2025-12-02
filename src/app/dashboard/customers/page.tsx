@@ -1,7 +1,7 @@
 // src/app/dashboard/customers/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
@@ -14,7 +14,6 @@ import {
   Building,
   FileText,
   Eye,
-  X,
 } from "lucide-react";
 
 import CustomerViewModal from "./CustomerViewModal";
@@ -46,6 +45,15 @@ type FormState = {
   totalSales: string;
 };
 
+type SortMode =
+  | "default"
+  | "credit-asc"
+  | "credit-desc"
+  | "debit-asc"
+  | "debit-desc"
+  | "sales-asc"
+  | "sales-desc";
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -66,6 +74,8 @@ export default function CustomersPage() {
   });
 
   const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("default");
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -90,7 +100,9 @@ export default function CustomersPage() {
     if (!userId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/customers?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(
+        `/api/customers?userId=${encodeURIComponent(userId)}`
+      );
       if (!res.ok) throw new Error("Failed to fetch customers");
       const data = await res.json();
       setCustomers(Array.isArray(data) ? data : []);
@@ -111,10 +123,14 @@ export default function CustomersPage() {
     "w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500";
 
   // contact handlers
-  const addContactField = () => setForm((f) => ({ ...f, contacts: [...f.contacts, ""] }));
+  const addContactField = () =>
+    setForm((f) => ({ ...f, contacts: [...f.contacts, ""] }));
   const removeContactField = (index: number) => {
     if (index === 0) return;
-    setForm((f) => ({ ...f, contacts: f.contacts.filter((_, i) => i !== index) }));
+    setForm((f) => ({
+      ...f,
+      contacts: f.contacts.filter((_, i) => i !== index),
+    }));
   };
   const updateContact = (index: number, value: string) => {
     const c = [...form.contacts];
@@ -123,7 +139,8 @@ export default function CustomersPage() {
   };
 
   // validation for primary contact
-  const isPrimaryContactValid = (c: string) => /^\d{6,15}$/.test(c.replace(/\s+/g, ""));
+  const isPrimaryContactValid = (c: string) =>
+    /^\d{6,15}$/.test(c.replace(/\s+/g, ""));
 
   // clean numbers
   const toNumberSafe = (s: string) => {
@@ -188,7 +205,9 @@ export default function CustomersPage() {
         }
         const updated = await res.json();
         // update local state
-        setCustomers((prev) => prev.map((c) => (c._id === updated._id ? updated : c)));
+        setCustomers((prev) =>
+          prev.map((c) => (c._id === updated._id ? updated : c))
+        );
         toast.success("Customer updated");
         setEditingId(null);
       } else {
@@ -285,18 +304,52 @@ export default function CustomersPage() {
     }
   };
 
-  const filtered = customers.filter((c) => {
+  // search + sort
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      c.name.toLowerCase().includes(q) ||
-      c.shopName.toLowerCase().includes(q) ||
-      c.contacts.join(" ").toLowerCase().includes(q)
-    );
-  });
+    let list = customers.filter((c) => {
+      if (!q) return true;
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.shopName.toLowerCase().includes(q) ||
+        c.contacts.join(" ").toLowerCase().includes(q)
+      );
+    });
+
+    if (sortMode === "default") return list;
+
+    const num = (v: number | undefined) =>
+      Number.isFinite(v as number) ? (v as number) : 0;
+
+    list = [...list].sort((a, b) => {
+      switch (sortMode) {
+        case "credit-asc":
+          return num(a.credit) - num(b.credit);
+        case "credit-desc":
+          return num(b.credit) - num(a.credit);
+        case "debit-asc":
+          return num(a.debit) - num(b.debit);
+        case "debit-desc":
+          return num(b.debit) - num(a.debit);
+        case "sales-asc":
+          return num(a.totalSales) - num(b.totalSales);
+        case "sales-desc":
+          return num(b.totalSales) - num(a.totalSales);
+        default:
+          return 0;
+      }
+    });
+
+    return list;
+  }, [customers, search, sortMode]);
 
   const formatCurrency = (v?: number) =>
     typeof v === "number" ? `₹${v.toFixed(2)}` : "-";
+
+  const handleClearFilters = () => {
+    setSearch("");
+    setSortMode("default");
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -305,24 +358,50 @@ export default function CustomersPage() {
       <main className="flex-grow container mx-auto px-4 py-8">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Customer Management</h1>
+            <h1 className="text-3xl font-bold text-gray-800">
+              Customer Management
+            </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Add, view, edit or delete customers. Edit mode allows changing credit/debit/total sales.
+              Add, view, edit or delete customers. Edit mode allows changing
+              credit/debit/total sales.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
             <input
               type="search"
               placeholder="Search by name, shop or contact..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full md:w-96 border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full md:w-72 border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-500"
             />
+
+            {/* Sort dropdown */}
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            >
+              <option value="default">Sort: Default</option>
+              <option value="credit-asc">Credit (Low → High)</option>
+              <option value="credit-desc">Credit (High → Low)</option>
+              <option value="debit-asc">Debit (Low → High)</option>
+              <option value="debit-desc">Debit (High → Low)</option>
+              <option value="sales-asc">Total Sales (Low → High)</option>
+              <option value="sales-desc">Total Sales (High → Low)</option>
+            </select>
+
+            {/* Clear Filters */}
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="border border-gray-300 bg-white text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50 text-sm"
+            >
+              Clear Filters
+            </button>
 
             <button
               onClick={() => {
-                // if already opening to edit, reset editing state
                 if (!showForm) {
                   setEditingId(null);
                   setForm({
@@ -343,27 +422,43 @@ export default function CustomersPage() {
               }}
               className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-800 text-white px-4 py-2 rounded-lg shadow"
             >
-              <Plus size={18} /> <span className="text-sm font-medium">{showForm ? "Close Form" : "Add Customer"}</span>
+              <Plus size={18} />{" "}
+              <span className="text-sm font-medium">
+                {showForm ? "Close Form" : "Add Customer"}
+              </span>
             </button>
           </div>
         </div>
 
         {/* Form */}
-        <div className={`overflow-hidden transition-all duration-300 ${showForm ? "max-h-[1400px] mb-8" : "max-h-0"}`}>
-          <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div
+          className={`overflow-hidden transition-all duration-300 ${
+            showForm ? "max-h-[1400px] mb-8" : "max-h-0"
+          }`}
+        >
+          <form
+            onSubmit={handleSubmit}
+            className="bg-white rounded-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-6"
+          >
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Customer Name *</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Customer Name *
+              </label>
               <input
                 className={inputBase + " text-lg"}
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, name: e.target.value })
+                }
                 placeholder="e.g. Ramesh & Sons"
                 required
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Primary Contact *</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Primary Contact *
+              </label>
               <div className="flex gap-2">
                 <input
                   className={inputBase + " text-lg"}
@@ -378,12 +473,16 @@ export default function CustomersPage() {
                   <Phone size={18} />
                 </span>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Digits only (6–15). Add additional contacts below.</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Digits only (6–15). Add additional contacts below.
+              </p>
             </div>
 
             {/* additional contacts */}
             <div className="md:col-span-2">
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Additional Contacts</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Additional Contacts
+              </label>
               <div className="space-y-3">
                 {form.contacts.map((c, i) => {
                   if (i === 0) return null;
@@ -408,19 +507,27 @@ export default function CustomersPage() {
                     </div>
                   );
                 })}
-                <button type="button" onClick={addContactField} className="text-blue-600 hover:underline inline-flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={addContactField}
+                  className="text-blue-600 hover:underline inline-flex items-center gap-2"
+                >
                   <Plus size={14} /> Add another contact
                 </button>
               </div>
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Shop Name *</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Shop Name *
+              </label>
               <div className="flex gap-2">
                 <input
                   className={inputBase + " text-lg"}
                   value={form.shopName}
-                  onChange={(e) => setForm({ ...form, shopName: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, shopName: e.target.value })
+                  }
                   placeholder="e.g. Maa Ice Cream Store"
                   required
                 />
@@ -431,22 +538,30 @@ export default function CustomersPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Shop Address *</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Shop Address *
+              </label>
               <input
                 className={inputBase + " text-base"}
                 value={form.shopAddress}
-                onChange={(e) => setForm({ ...form, shopAddress: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, shopAddress: e.target.value })
+                }
                 placeholder="Full shop address"
                 required
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Latitude (optional)</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Latitude (optional)
+              </label>
               <input
                 className={inputBase}
                 value={form.latitude}
-                onChange={(e) => setForm({ ...form, latitude: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, latitude: e.target.value })
+                }
                 placeholder="e.g. 21.1458"
                 type="number"
                 step="any"
@@ -454,11 +569,15 @@ export default function CustomersPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Longitude (optional)</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Longitude (optional)
+              </label>
               <input
                 className={inputBase}
                 value={form.longitude}
-                onChange={(e) => setForm({ ...form, longitude: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, longitude: e.target.value })
+                }
                 placeholder="e.g. 72.7758"
                 type="number"
                 step="any"
@@ -467,25 +586,43 @@ export default function CustomersPage() {
 
             {/* editable numeric fields when editing; read-only when creating */}
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Credit</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Credit
+              </label>
               <input
                 className={inputBase}
                 value={form.credit}
-                onChange={(e) => setForm({ ...form, credit: e.target.value.replace(/[^\d.-]/g, "") })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    credit: e.target.value.replace(/[^\d.-]/g, ""),
+                  })
+                }
                 placeholder="0.00"
                 type="text"
                 inputMode="decimal"
                 readOnly={!editingId}
               />
-              <p className="text-xs text-gray-400 mt-1">{editingId ? "You can update credit value." : "Starts at 0 (editable after creation)."}</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {editingId
+                  ? "You can update credit value."
+                  : "Starts at 0 (editable after creation)."}
+              </p>
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Debit</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Debit
+              </label>
               <input
                 className={inputBase}
                 value={form.debit}
-                onChange={(e) => setForm({ ...form, debit: e.target.value.replace(/[^\d.-]/g, "") })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    debit: e.target.value.replace(/[^\d.-]/g, ""),
+                  })
+                }
                 placeholder="0.00"
                 type="text"
                 inputMode="decimal"
@@ -494,11 +631,18 @@ export default function CustomersPage() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Total Sales</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Total Sales
+              </label>
               <input
                 className={inputBase}
                 value={form.totalSales}
-                onChange={(e) => setForm({ ...form, totalSales: e.target.value.replace(/[^\d.-]/g, "") })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    totalSales: e.target.value.replace(/[^\d.-]/g, ""),
+                  })
+                }
                 placeholder="0.00"
                 type="text"
                 inputMode="decimal"
@@ -507,12 +651,16 @@ export default function CustomersPage() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="text-sm font-medium text-gray-700 mb-1 block">Remarks</label>
+              <label className="text-sm font-medium text-gray-700 mb-1 block">
+                Remarks
+              </label>
               <textarea
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
                 rows={3}
                 value={form.remarks}
-                onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, remarks: e.target.value })
+                }
                 placeholder="Optional remarks (e.g. moved to other supplier)"
               />
             </div>
@@ -546,9 +694,14 @@ export default function CustomersPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className={`inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg ${saving ? "opacity-70" : ""}`}
+                className={`inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg ${
+                  saving ? "opacity-70" : ""
+                }`}
               >
-                <FileText size={16} /> <span className="font-medium">{editingId ? "Update Customer" : "Save Customer"}</span>
+                <FileText size={16} />{" "}
+                <span className="font-medium">
+                  {editingId ? "Update Customer" : "Save Customer"}
+                </span>
               </button>
             </div>
           </form>
@@ -557,8 +710,13 @@ export default function CustomersPage() {
         {/* Customers list */}
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">Customer List</h2>
-            <div className="text-sm text-gray-500">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</div>
+            <h2 className="text-lg font-semibold text-gray-800">
+              Customer List
+            </h2>
+            <div className="text-sm text-gray-500">
+              {filtered.length} result
+              {filtered.length !== 1 ? "s" : ""}
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -580,40 +738,71 @@ export default function CustomersPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="p-6 text-center text-gray-500">Loading...</td>
+                    <td
+                      colSpan={10}
+                      className="p-6 text-center text-gray-500"
+                    >
+                      Loading...
+                    </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="p-6 text-center text-gray-500">No customers found.</td>
+                    <td
+                      colSpan={10}
+                      className="p-6 text-center text-gray-500"
+                    >
+                      No customers found.
+                    </td>
                   </tr>
                 ) : (
                   filtered.map((c) => (
                     <tr key={c._id} className="hover:bg-gray-50">
-                      <td className="p-3 align-top text-sm text-gray-700 font-mono">{c._id.slice(-8)}</td>
-                      <td className="p-3 align-top text-base text-gray-800 font-semibold">{c.name}</td>
+                      <td className="p-3 align-top text-sm text-gray-700 font-mono">
+                        {c._id.slice(-8)}
+                      </td>
+                      <td className="p-3 align-top text-base text-gray-800 font-semibold">
+                        {c.name}
+                      </td>
                       <td className="p-3 align-top text-sm text-gray-700">
                         <div className="flex items-center gap-2">
                           <Phone size={16} />
                           <div>
-                            <div className="font-medium">{c.contacts?.[0] || "-"}</div>
-                            {c.contacts?.length > 1 && <div className="text-xs text-gray-500">+{c.contacts.length - 1} more</div>}
+                            <div className="font-medium">
+                              {c.contacts?.[0] || "-"}
+                            </div>
+                            {c.contacts?.length > 1 && (
+                              <div className="text-xs text-gray-500">
+                                +{c.contacts.length - 1} more
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
-                      <td className="p-3 align-top text-sm text-gray-700">{c.shopName}</td>
+                      <td className="p-3 align-top text-sm text-gray-700">
+                        {c.shopName}
+                      </td>
                       <td className="p-3 align-top text-sm text-gray-700">
                         {c.location?.latitude && c.location?.longitude ? (
                           <div className="flex items-center gap-2">
-                            <MapPin size={16} /> <span>{`${c.location.latitude}, ${c.location.longitude}`}</span>
+                            <MapPin size={16} />{" "}
+                            <span>{`${c.location.latitude}, ${c.location.longitude}`}</span>
                           </div>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="p-3 align-top text-sm text-gray-700">{formatCurrency(c.credit)}</td>
-                      <td className="p-3 align-top text-sm text-gray-700">{formatCurrency(c.debit)}</td>
-                      <td className="p-3 align-top text-sm text-gray-700">{formatCurrency(c.totalSales)}</td>
-                      <td className="p-3 align-top text-sm text-gray-700">{c.remarks || "-"}</td>
+                      <td className="p-3 align-top text-sm text-gray-700">
+                        {formatCurrency(c.credit)}
+                      </td>
+                      <td className="p-3 align-top text-sm text-gray-700">
+                        {formatCurrency(c.debit)}
+                      </td>
+                      <td className="p-3 align-top text-sm text-gray-700">
+                        {formatCurrency(c.totalSales)}
+                      </td>
+                      <td className="p-3 align-top text-sm text-gray-700">
+                        {c.remarks || "-"}
+                      </td>
                       <td className="p-3 align-top text-sm text-gray-700">
                         <div className="flex gap-2">
                           <button
@@ -652,34 +841,50 @@ export default function CustomersPage() {
 
       <Footer />
 
-     {/* VIEW Modal */}
-{viewingCustomer && (
-  <CustomerViewModal
-    customer={viewingCustomer}
-    onClose={() => setViewingCustomer(null)}
-    onEdit={(c) => {
-      setViewingCustomer(null);
-      handleEdit(c);
-    }}
-    onDelete={(id) => {
-      setViewingCustomer(null);
-      openDeleteModal(id);
-    }}
-  />
-)}
-
-
+      {/* VIEW Modal */}
+      {viewingCustomer && (
+        <CustomerViewModal
+          customer={viewingCustomer}
+          onClose={() => setViewingCustomer(null)}
+          onEdit={(c) => {
+            setViewingCustomer(null);
+            handleEdit(c);
+          }}
+          onDelete={(id) => {
+            setViewingCustomer(null);
+            openDeleteModal(id);
+          }}
+        />
+      )}
 
       {/* Delete Modal */}
       {deleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 px-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-800">Delete customer?</h3>
-            <p className="text-sm text-gray-500 mt-2">This action cannot be undone. Are you sure you want to delete this customer?</p>
+          <div className="bg.white rounded-lg shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold text-gray-800">
+              Delete customer?
+            </h3>
+            <p className="text-sm text-gray-500 mt-2">
+              This action cannot be undone. Are you sure you want to delete this
+              customer?
+            </p>
 
             <div className="mt-6 flex justify-end gap-3">
-              <button onClick={cancelDelete} className="px-4 py-2 rounded border text-gray-700">Cancel</button>
-              <button onClick={performDelete} disabled={deleting} className={`px-4 py-2 rounded bg-red-600 text-white ${deleting ? "opacity-70" : ""}`}>Delete</button>
+              <button
+                onClick={cancelDelete}
+                className="px-4 py-2 rounded border text-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={performDelete}
+                disabled={deleting}
+                className={`px-4 py-2 rounded bg-red-600 text-white ${
+                  deleting ? "opacity-70" : ""
+                }`}
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
