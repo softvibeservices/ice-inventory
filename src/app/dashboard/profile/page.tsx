@@ -1,5 +1,4 @@
-// src\app\dashboard\profile\page.tsx
-
+// src/app/dashboard/profile/page.tsx
 
 "use client";
 import { useEffect, useState, useMemo } from "react";
@@ -38,12 +37,20 @@ type BankDetails = {
 
 export default function ProfilePage() {
   const router = useRouter();
+
   // user/profile
   const [user, setUser] = useState<any>(null);
   const [originalUser, setOriginalUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("basic");
-  const [passwordForm, setPasswordForm] = useState({ oldPassword: "", newPassword: "" });
+
+  // password + otp
+  const [passwordForm, setPasswordForm] = useState({
+    oldPassword: "",
+    newPassword: "",
+    otp: "",
+  });
+  const [otpSent, setOtpSent] = useState(false);
 
   // billing / seller details
   const emptyBill: SellerDetails = {
@@ -57,7 +64,11 @@ export default function ProfilePage() {
   };
   const [bill, setBill] = useState<SellerDetails>({ ...emptyBill });
   const [originalBill, setOriginalBill] = useState<SellerDetails | null>(null);
-  const [uploading, setUploading] = useState({ logo: false, qr: false, sig: false });
+  const [uploading, setUploading] = useState({
+    logo: false,
+    qr: false,
+    sig: false,
+  });
   const [editMode, setEditMode] = useState<boolean>(false);
   const [billSaved, setBillSaved] = useState<boolean>(false);
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
@@ -88,75 +99,73 @@ export default function ProfilePage() {
   };
 
   // ===== Fetch logged user profile =====
-  // src/app/dashboard/profile/page.tsx
-useEffect(() => {
-  const stored = localStorage.getItem("user");
-  const remember = localStorage.getItem("rememberMe");
+  useEffect(() => {
+    const stored = localStorage.getItem("user");
 
-  if (!stored) {
-    // no session at all → go to login
-    router.push("/login");
-    return;
-  }
+    if (!stored) {
+      router.push("/login");
+      return;
+    }
 
-  let parsed: any = null;
-  try {
-    parsed = JSON.parse(stored);
-  } catch {
-    localStorage.removeItem("user");
-    localStorage.removeItem("rememberMe");
-    router.push("/login");
-    return;
-  }
-
-  if (!parsed?._id) {
-    localStorage.removeItem("user");
-    localStorage.removeItem("rememberMe");
-    router.push("/login");
-    return;
-  }
-
-  const loadProfile = async () => {
+    let parsed: any = null;
     try {
-      const res = await fetch(
-        `/api/profile?userId=${encodeURIComponent(parsed._id)}`
-      );
-      const data = await res.json().catch(() => null);
+      parsed = JSON.parse(stored);
+    } catch {
+      localStorage.removeItem("user");
+      localStorage.removeItem("rememberMe");
+      router.push("/login");
+      return;
+    }
 
-      if (!res.ok || !data || data.error) {
-        // e.g. 400 (UserId required) or 404 (User not found)
-        toast.error(data?.error || "Failed to load profile ❌");
+    if (!parsed?._id) {
+      localStorage.removeItem("user");
+      localStorage.removeItem("rememberMe");
+      router.push("/login");
+      return;
+    }
 
-        // Clean up bad session and send user to login
+    const loadProfile = async () => {
+      try {
+        const res = await fetch(
+          `/api/profile?userId=${encodeURIComponent(parsed._id)}`
+        );
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok || !data || data.error) {
+          toast.error(data?.error || "Failed to load profile ❌");
+          localStorage.removeItem("user");
+          localStorage.removeItem("rememberMe");
+          router.push("/login");
+          return;
+        }
+
+        setUser(data);
+        setOriginalUser(data);
+      } catch {
+        toast.error("Failed to load profile ❌");
         localStorage.removeItem("user");
         localStorage.removeItem("rememberMe");
         router.push("/login");
-        return;
       }
+    };
 
-      setUser(data);
-      setOriginalUser(data);
-    } catch {
-      toast.error("Failed to load profile ❌");
-    }
-  };
-
-  loadProfile();
-}, [router]);
-
+    loadProfile();
+  }, [router]);
 
   // ===== Fetch seller/billing details (last saved) =====
   useEffect(() => {
     if (!user?._id) return;
     (async () => {
       try {
-        const res = await fetch(`/api/seller-details?userId=${encodeURIComponent(user._id)}`);
+        const res = await fetch(
+          `/api/seller-details?userId=${encodeURIComponent(user._id)}`
+        );
         if (!res.ok) {
           return;
         }
         const data = await res.json();
         if (data && !data.error && Object.keys(data).length > 0) {
-          setBill({
+          const mapped: SellerDetails = {
             sellerName: data.sellerName ?? "",
             gstNumber: data.gstNumber ?? "",
             fullAddress: data.fullAddress ?? "",
@@ -165,25 +174,14 @@ useEffect(() => {
             qrCodeUrl: data.qrCodeUrl ?? "",
             qrPublicId: data.qrPublicId ?? data.qrPublicId,
             signatureUrl: data.signatureUrl ?? "",
-            signaturePublicId: data.signaturePublicId ?? data.signaturePublicId,
+            signaturePublicId:
+              data.signaturePublicId ?? data.signaturePublicId,
             slogan: data.slogan ?? "",
             _id: data._id ?? undefined,
             userId: data.userId ?? undefined,
-          });
-          setOriginalBill({
-            sellerName: data.sellerName ?? "",
-            gstNumber: data.gstNumber ?? "",
-            fullAddress: data.fullAddress ?? "",
-            logoUrl: data.logoUrl ?? "",
-            logoPublicId: data.logoPublicId ?? data.logoPublicId,
-            qrCodeUrl: data.qrCodeUrl ?? "",
-            qrPublicId: data.qrPublicId ?? data.qrPublicId,
-            signatureUrl: data.signatureUrl ?? "",
-            signaturePublicId: data.signaturePublicId ?? data.signaturePublicId,
-            slogan: data.slogan ?? "",
-            _id: data._id ?? undefined,
-            userId: data.userId ?? undefined,
-          });
+          };
+          setBill(mapped);
+          setOriginalBill(mapped);
           setBillSaved(true);
           setEditMode(false);
           setIsBillDirty(false);
@@ -204,7 +202,9 @@ useEffect(() => {
   useEffect(() => {
     if (!bill?._id) return;
     (async () => {
-      const res = await fetch(`/api/bank-details?sellerId=${bill._id}`);
+      const res = await fetch(
+        `/api/bank-details?sellerId=${encodeURIComponent(bill._id!)}`
+      );
       if (!res.ok) return;
       const data = await res.json();
       if (data && Object.keys(data).length > 0) {
@@ -272,28 +272,83 @@ useEffect(() => {
     }
   };
 
-  // ===== Change password =====
+  // ===== Change password with OTP =====
   const changePassword = async () => {
-    if (!passwordForm.oldPassword || !passwordForm.newPassword) {
-      toast.error("Please fill both fields");
+    if (!user) {
+      toast.error("User not loaded");
       return;
     }
+
+    if (!passwordForm.oldPassword || !passwordForm.newPassword) {
+      toast.error("Please fill old and new password");
+      return;
+    }
+
+    // STEP 1: Send OTP
+    if (!otpSent) {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          "/api/profile/change-password/request-otp",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: user._id,
+              oldPassword: passwordForm.oldPassword,
+            }),
+          }
+        );
+
+        const data = await res.json();
+        setLoading(false);
+
+        if (!res.ok) {
+          toast.error(data.error || "Failed to send OTP ❌");
+          return;
+        }
+
+        setOtpSent(true);
+        toast.success(
+          "OTP sent to your registered email. Please check your inbox 📧"
+        );
+      } catch (error) {
+        setLoading(false);
+        toast.error("Something went wrong while sending OTP ❌");
+      }
+      return;
+    }
+
+    // STEP 2: Verify OTP and change password
+    if (!passwordForm.otp) {
+      toast.error("Please enter the OTP sent to your email");
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await fetch("/api/profile/change-password", {
+      const res = await fetch("/api/profile/change-password/verify", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user._id, ...passwordForm }),
+        body: JSON.stringify({
+          userId: user._id,
+          newPassword: passwordForm.newPassword,
+          otp: passwordForm.otp,
+        }),
       });
+
       const data = await res.json();
       setLoading(false);
-      if (res.ok) {
-        toast.success("Password changed successfully 🔑");
-        setPasswordForm({ oldPassword: "", newPassword: "" });
-      } else {
+
+      if (!res.ok) {
         toast.error(data.error || "Failed to change password ❌");
+        return;
       }
-    } catch {
+
+      toast.success("Password changed successfully 🔑");
+      setPasswordForm({ oldPassword: "", newPassword: "", otp: "" });
+      setOtpSent(false);
+    } catch (error) {
       setLoading(false);
       toast.error("Something went wrong ❌");
     }
@@ -302,6 +357,7 @@ useEffect(() => {
   // ===== Logout =====
   const logout = () => {
     localStorage.removeItem("user");
+    localStorage.removeItem("rememberMe");
     toast.success("Logged out 👋");
     router.push("/login");
   };
@@ -325,25 +381,33 @@ useEffect(() => {
     if (kind === "logo") {
       if (sizeKB > 200) throw new Error("Logo must be ≤ 200 KB");
       if (width < 240 || height < 90) {
-        toast.error("Logo is smaller than recommended (300×120). It may appear blurry.");
+        toast.error(
+          "Logo is smaller than recommended (300×120). It may appear blurry."
+        );
       }
     }
     if (kind === "qr") {
       if (sizeKB > 250) throw new Error("QR must be ≤ 250 KB");
-      if (width < 260 || height < 260) toast.error("QR is smaller than recommended (300×300).");
+      if (width < 260 || height < 260)
+        toast.error("QR is smaller than recommended (300×300).");
       if (Math.abs(width - height) > 5) {
         throw new Error("QR should be square (e.g., 300×300)");
       }
     }
     if (kind === "sig") {
       if (sizeKB > 200) throw new Error("Signature must be ≤ 200 KB");
-      if (width < 240 || height < 90) toast.error("Signature is smaller than recommended (300×120).");
+      if (width < 240 || height < 90)
+        toast.error("Signature is smaller than recommended (300×120).");
     }
     return { width, height, sizeKB };
   };
 
   const pickLabel = useMemo(
-    () => ({ logo: "Logo (optional)", qr: "QR Code (required)", sig: "Supplier Signature (required)" }),
+    () => ({
+      logo: "Logo (optional)",
+      qr: "QR Code (required)",
+      sig: "Supplier Signature (required)",
+    }),
     []
   );
 
@@ -363,11 +427,23 @@ useEffect(() => {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Upload failed");
       if (tag === "logo") {
-        setBill((b) => ({ ...b, logoUrl: data.secure_url, logoPublicId: data.public_id }));
+        setBill((b) => ({
+          ...b,
+          logoUrl: data.secure_url,
+          logoPublicId: data.public_id,
+        }));
       } else if (tag === "qr") {
-        setBill((b) => ({ ...b, qrCodeUrl: data.secure_url, qrPublicId: data.public_id }));
+        setBill((b) => ({
+          ...b,
+          qrCodeUrl: data.secure_url,
+          qrPublicId: data.public_id,
+        }));
       } else {
-        setBill((b) => ({ ...b, signatureUrl: data.secure_url, signaturePublicId: data.public_id }));
+        setBill((b) => ({
+          ...b,
+          signatureUrl: data.secure_url,
+          signaturePublicId: data.public_id,
+        }));
       }
       toast.success(`${pickLabel[tag]} uploaded ✅`);
     } catch (e: any) {
@@ -383,8 +459,17 @@ useEffect(() => {
       toast.error("User not found");
       return;
     }
-    if (!bill.sellerName || !bill.gstNumber || !bill.fullAddress || !bill.qrCodeUrl || !bill.signatureUrl || !bill.slogan) {
-      toast.error("Please fill all required bill fields (QR & Signature are mandatory) ❗");
+    if (
+      !bill.sellerName ||
+      !bill.gstNumber ||
+      !bill.fullAddress ||
+      !bill.qrCodeUrl ||
+      !bill.signatureUrl ||
+      !bill.slogan
+    ) {
+      toast.error(
+        "Please fill all required bill fields (QR & Signature are mandatory) ❗"
+      );
       return;
     }
     setSaveLoading(true);
@@ -409,7 +494,8 @@ useEffect(() => {
         qrCodeUrl: data.qrCodeUrl ?? bill.qrCodeUrl,
         qrPublicId: data.qrPublicId ?? bill.qrPublicId,
         signatureUrl: data.signatureUrl ?? bill.signatureUrl,
-        signaturePublicId: data.signaturePublicId ?? bill.signaturePublicId,
+        signaturePublicId:
+          data.signaturePublicId ?? bill.signaturePublicId,
         slogan: data.slogan ?? bill.slogan,
         _id: data._id ?? data._id,
         userId: data.userId ?? user._id,
@@ -468,7 +554,17 @@ useEffect(() => {
   };
 
   // ===== UI =====
-  if (!user) return <p className="p-6 text-gray-700">Loading...</p>;
+  if (!user) {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-100">
+        <DashboardNavbar />
+        <main className="flex-grow flex items-center justify-center">
+          <p className="text-gray-600 text-lg">Loading profile...</p>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100">
@@ -479,7 +575,9 @@ useEffect(() => {
           <button
             onClick={() => setActiveTab("basic")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
-              activeTab === "basic" ? "bg-blue-600 text-white" : "hover:bg-gray-100 text-gray-700"
+              activeTab === "basic"
+                ? "bg-blue-600 text-white"
+                : "hover:bg-gray-100 text-gray-700"
             }`}
           >
             <User size={18} /> Basic Information
@@ -487,7 +585,9 @@ useEffect(() => {
           <button
             onClick={() => setActiveTab("billing")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
-              activeTab === "billing" ? "bg-purple-600 text-white" : "hover:bg-gray-100 text-gray-700"
+              activeTab === "billing"
+                ? "bg-purple-600 text-white"
+                : "hover:bg-gray-100 text-gray-700"
             }`}
           >
             <FileText size={18} /> Bill Details
@@ -495,7 +595,9 @@ useEffect(() => {
           <button
             onClick={() => setActiveTab("bank")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
-              activeTab === "bank" ? "bg-indigo-600 text-white" : "hover:bg-gray-100 text-gray-700"
+              activeTab === "bank"
+                ? "bg-indigo-600 text-white"
+                : "hover:bg-gray-100 text-gray-700"
             }`}
           >
             🏦 Bank Details
@@ -503,7 +605,9 @@ useEffect(() => {
           <button
             onClick={() => setActiveTab("password")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
-              activeTab === "password" ? "bg-green-600 text-white" : "hover:bg-gray-100 text-gray-700"
+              activeTab === "password"
+                ? "bg-green-600 text-white"
+                : "hover:bg-gray-100 text-gray-700"
             }`}
           >
             <Lock size={18} /> Change Password
@@ -511,7 +615,9 @@ useEffect(() => {
           <button
             onClick={() => setActiveTab("logout")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
-              activeTab === "logout" ? "bg-red-600 text-white" : "hover:bg-gray-100 text-gray-700"
+              activeTab === "logout"
+                ? "bg-red-600 text-white"
+                : "hover:bg-gray-100 text-gray-700"
             }`}
           >
             <LogOut size={18} /> Logout
@@ -532,7 +638,9 @@ useEffect(() => {
                   <input
                     className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
                     value={user.name || ""}
-                    onChange={(e) => setUser({ ...user, name: e.target.value })}
+                    onChange={(e) =>
+                      setUser({ ...user, name: e.target.value })
+                    }
                     placeholder="Full Name"
                   />
                 </label>
@@ -541,7 +649,9 @@ useEffect(() => {
                   <input
                     className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
                     value={user.email || ""}
-                    onChange={(e) => setUser({ ...user, email: e.target.value })}
+                    onChange={(e) =>
+                      setUser({ ...user, email: e.target.value })
+                    }
                     placeholder="Email"
                   />
                 </label>
@@ -550,7 +660,9 @@ useEffect(() => {
                   <input
                     className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
                     value={user.contact || ""}
-                    onChange={(e) => setUser({ ...user, contact: e.target.value })}
+                    onChange={(e) =>
+                      setUser({ ...user, contact: e.target.value })
+                    }
                     placeholder="Contact Number"
                   />
                 </label>
@@ -559,7 +671,9 @@ useEffect(() => {
                   <input
                     className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
                     value={user.shopName || ""}
-                    onChange={(e) => setUser({ ...user, shopName: e.target.value })}
+                    onChange={(e) =>
+                      setUser({ ...user, shopName: e.target.value })
+                    }
                     placeholder="Shop / Business Name"
                   />
                 </label>
@@ -568,7 +682,9 @@ useEffect(() => {
                   <input
                     className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
                     value={user.shopAddress || ""}
-                    onChange={(e) => setUser({ ...user, shopAddress: e.target.value })}
+                    onChange={(e) =>
+                      setUser({ ...user, shopAddress: e.target.value })
+                    }
                     placeholder="Shop Address"
                   />
                 </label>
@@ -588,7 +704,8 @@ useEffect(() => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold flex items-center gap-2 text-gray-800">
-                  <FileText className="w-5 h-5" /> Bill Details (for Invoice Generation)
+                  <FileText className="w-5 h-5" /> Bill Details (for Invoice
+                  Generation)
                 </h2>
                 {billSaved && !editMode && (
                   <button
@@ -604,44 +721,75 @@ useEffect(() => {
                   <div className="grid md:grid-cols-2 gap-2">
                     <div>
                       <div className="text-xs text-gray-500">Seller</div>
-                      <div className="font-medium text-gray-800">{bill.sellerName || "—"}</div>
+                      <div className="font-medium text-gray-800">
+                        {bill.sellerName || "—"}
+                      </div>
                     </div>
                     <div>
-                      <div className="text-xs text-gray-500">GST Number</div>
-                      <div className="font-medium text-gray-800">{bill.gstNumber || "—"}</div>
+                      <div className="text-xs text-gray-500">
+                        GST Number
+                      </div>
+                      <div className="font-medium text-gray-800">
+                        {bill.gstNumber || "—"}
+                      </div>
                     </div>
                     <div className="md:col-span-2">
-                      <div className="text-xs text-gray-500">Full Address</div>
-                      <div className="text-sm text-gray-800">{bill.fullAddress || "—"}</div>
+                      <div className="text-xs text-gray-500">
+                        Full Address
+                      </div>
+                      <div className="text-sm text-gray-800">
+                        {bill.fullAddress || "—"}
+                      </div>
                     </div>
                     <div>
                       <div className="text-xs text-gray-500">Slogan</div>
-                      <div className="text-sm text-gray-800">{bill.slogan || "—"}</div>
+                      <div className="text-sm text-gray-800">
+                        {bill.slogan || "—"}
+                      </div>
                     </div>
                     <div className="md:col-span-2">
                       <div className="text-xs text-gray-500">Assets</div>
                       <div className="flex items-center gap-4 mt-2">
                         {bill.logoUrl ? (
-                          <img src={bill.logoUrl} alt="Logo" className="h-12 object-contain rounded" />
+                          <img
+                            src={bill.logoUrl}
+                            alt="Logo"
+                            className="h-12 object-contain rounded"
+                          />
                         ) : (
-                          <div className="h-12 w-32 bg-white border flex items-center justify-center text-xs text-gray-400">No Logo</div>
+                          <div className="h-12 w-32 bg-white border flex items-center justify-center text-xs text-gray-400">
+                            No Logo
+                          </div>
                         )}
                         {bill.qrCodeUrl ? (
-                          <img src={bill.qrCodeUrl} alt="QR" className="h-16 w-16 object-contain rounded" />
+                          <img
+                            src={bill.qrCodeUrl}
+                            alt="QR"
+                            className="h-16 w-16 object-contain rounded"
+                          />
                         ) : (
-                          <div className="h-16 w-16 bg-white border flex items-center justify-center text-xs text-gray-400">No QR</div>
+                          <div className="h-16 w-16 bg-white border flex items-center justify-center text-xs text-gray-400">
+                            No QR
+                          </div>
                         )}
                         {bill.signatureUrl ? (
-                          <img src={bill.signatureUrl} alt="Signature" className="h-12 object-contain rounded" />
+                          <img
+                            src={bill.signatureUrl}
+                            alt="Signature"
+                            className="h-12 object-contain rounded"
+                          />
                         ) : (
-                          <div className="h-12 w-40 bg-white border flex items-center justify-center text-xs text-gray-400">No Signature</div>
+                          <div className="h-12 w-40 bg-white border flex items-center justify-center text-xs text-gray-400">
+                            No Signature
+                          </div>
                         )}
                       </div>
                     </div>
                   </div>
                   <div className="mt-4 flex items-center gap-3">
                     <div className="inline-flex items-center gap-2 text-green-600">
-                      <Check size={16} /> <span className="text-sm">Saved</span>
+                      <Check size={16} />{" "}
+                      <span className="text-sm">Saved</span>
                     </div>
                   </div>
                 </div>
@@ -653,7 +801,12 @@ useEffect(() => {
                       <input
                         className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400"
                         value={bill.sellerName || ""}
-                        onChange={(e) => setBill((b) => ({ ...b, sellerName: e.target.value }))}
+                        onChange={(e) =>
+                          setBill((b) => ({
+                            ...b,
+                            sellerName: e.target.value,
+                          }))
+                        }
                         placeholder="Seller / Supplier Name"
                       />
                     </label>
@@ -662,7 +815,12 @@ useEffect(() => {
                       <input
                         className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400"
                         value={bill.gstNumber || ""}
-                        onChange={(e) => setBill((b) => ({ ...b, gstNumber: e.target.value }))}
+                        onChange={(e) =>
+                          setBill((b) => ({
+                            ...b,
+                            gstNumber: e.target.value,
+                          }))
+                        }
                         placeholder="e.g., 24ABCDE1234F1Z5"
                       />
                     </label>
@@ -671,16 +829,28 @@ useEffect(() => {
                       <textarea
                         className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400"
                         value={bill.fullAddress || ""}
-                        onChange={(e) => setBill((b) => ({ ...b, fullAddress: e.target.value }))}
+                        onChange={(e) =>
+                          setBill((b) => ({
+                            ...b,
+                            fullAddress: e.target.value,
+                          }))
+                        }
                         placeholder="Street, Area, City, State, Pincode"
                         rows={3}
                       />
                     </label>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm text-gray-600">Logo (optional) — ~300×120 px, ≤ 200 KB</div>
+                        <div className="text-sm text-gray-600">
+                          Logo (optional) — ~300×120 px, ≤ 200 KB
+                        </div>
                         {bill.logoUrl ? (
-                          <a href={bill.logoUrl} target="_blank" rel="noreferrer" className="text-blue-600 text-xs underline">
+                          <a
+                            href={bill.logoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 text-xs underline"
+                          >
                             Preview
                           </a>
                         ) : null}
@@ -696,13 +866,24 @@ useEffect(() => {
                         className="w-full border rounded-lg p-2 bg-white"
                         disabled={uploading.logo}
                       />
-                      {uploading.logo && <p className="text-xs text-gray-500">Uploading logo...</p>}
+                      {uploading.logo && (
+                        <p className="text-xs text-gray-500">
+                          Uploading logo...
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm text-gray-600">QR Code (required) — 300×300 px, ≤ 250 KB</div>
+                        <div className="text-sm text-gray-600">
+                          QR Code (required) — 300×300 px, ≤ 250 KB
+                        </div>
                         {bill.qrCodeUrl ? (
-                          <a href={bill.qrCodeUrl} target="_blank" rel="noreferrer" className="text-blue-600 text-xs underline">
+                          <a
+                            href={bill.qrCodeUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 text-xs underline"
+                          >
                             Preview
                           </a>
                         ) : null}
@@ -718,13 +899,25 @@ useEffect(() => {
                         className="w-full border rounded-lg p-2 bg-white"
                         disabled={uploading.qr}
                       />
-                      {uploading.qr && <p className="text-xs text-gray-500">Uploading QR code...</p>}
+                      {uploading.qr && (
+                        <p className="text-xs text-gray-500">
+                          Uploading QR code...
+                        </p>
+                      )}
                     </div>
                     <div className="md:col-span-2 space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm text-gray-600">Signature of the Supplier (required) — ~300×120 px, ≤ 200 KB</div>
+                        <div className="text-sm text-gray-600">
+                          Signature of the Supplier (required) — ~300×120 px,
+                          ≤ 200 KB
+                        </div>
                         {bill.signatureUrl ? (
-                          <a href={bill.signatureUrl} target="_blank" rel="noreferrer" className="text-blue-600 text-xs underline">
+                          <a
+                            href={bill.signatureUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 text-xs underline"
+                          >
                             Preview
                           </a>
                         ) : null}
@@ -740,14 +933,23 @@ useEffect(() => {
                         className="w-full border rounded-lg p-2 bg-white"
                         disabled={uploading.sig}
                       />
-                      {uploading.sig && <p className="text-xs text-gray-500">Uploading signature...</p>}
+                      {uploading.sig && (
+                        <p className="text-xs text-gray-500">
+                          Uploading signature...
+                        </p>
+                      )}
                     </div>
                     <label className="text-sm text-gray-600 md:col-span-2">
                       Slogan (appears in bill footer) *
                       <input
                         className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400"
                         value={bill.slogan || ""}
-                        onChange={(e) => setBill((b) => ({ ...b, slogan: e.target.value }))}
+                        onChange={(e) =>
+                          setBill((b) => ({
+                            ...b,
+                            slogan: e.target.value,
+                          }))
+                        }
                         placeholder="Thank you for choosing <Your Shop Name>!"
                       />
                     </label>
@@ -756,9 +958,19 @@ useEffect(() => {
                     <button
                       onClick={saveBillDetails}
                       disabled={saveLoading || !isBillDirty}
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded text-white ${saveLoading ? "bg-purple-400" : isBillDirty ? "bg-purple-600 hover:bg-purple-700" : "bg-gray-300 cursor-not-allowed"}`}
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded text-white ${
+                        saveLoading
+                          ? "bg-purple-400"
+                          : isBillDirty
+                          ? "bg-purple-600 hover:bg-purple-700"
+                          : "bg-gray-300 cursor-not-allowed"
+                      }`}
                     >
-                      {saveLoading ? "Saving..." : billSaved ? "Update Bill Details" : "Save Bill Details"}
+                      {saveLoading
+                        ? "Saving..."
+                        : billSaved
+                        ? "Update Bill Details"
+                        : "Save Bill Details"}
                     </button>
                     {editMode && (
                       <button
@@ -769,7 +981,9 @@ useEffect(() => {
                       </button>
                     )}
                     <div className="text-xs text-gray-500">
-                      {billSaved ? "Saved to database. Click Edit to modify." : "Fill required fields and save to store billing info."}
+                      {billSaved
+                        ? "Saved to database. Click Edit to modify."
+                        : "Fill required fields and save to store billing info."}
                     </div>
                   </div>
                 </div>
@@ -781,7 +995,9 @@ useEffect(() => {
           {activeTab === "bank" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-800">🏦 Bank Details</h2>
+                <h2 className="text-xl font-semibold text-gray-800">
+                  🏦 Bank Details
+                </h2>
                 {bankSaved && !bankEditMode && (
                   <button
                     onClick={() => setBankEditMode(true)}
@@ -792,70 +1008,103 @@ useEffect(() => {
                 )}
               </div>
               {!bankEditMode && bankSaved ? (
-  <div className="border rounded-lg p-4 bg-white shadow-sm grid md:grid-cols-2 gap-4">
-    <div>
-      <div className="text-sm font-medium text-gray-600">Bank Name</div>
-      <div className="text-base font-semibold text-gray-900">{bank.bankName || "—"}</div>
-    </div>
-    <div>
-      <div className="text-sm font-medium text-gray-600">IFSC Code</div>
-      <div className="text-base font-semibold text-gray-900">{bank.ifscCode || "—"}</div>
-    </div>
-    <div>
-      <div className="text-sm font-medium text-gray-600">Branch Name</div>
-      <div className="text-base font-semibold text-gray-900">{bank.branchName || "—"}</div>
-    </div>
-    <div>
-      <div className="text-sm font-medium text-gray-600">Banking Name</div>
-      <div className="text-base font-semibold text-gray-900">{bank.bankingName || "—"}</div>
-    </div>
-    <div className="md:col-span-2">
-      <div className="text-sm font-medium text-gray-600">Account Number</div>
-      <div className="text-base font-semibold text-gray-900">{bank.accountNumber || "—"}</div>
-    </div>
-  </div>
-) : (
-  <div className="border rounded-lg p-4 bg-gray-50 grid md:grid-cols-2 gap-4">
-    <input
-      className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500"
-      placeholder="Bank Name"
-      value={bank.bankName}
-      onChange={(e) => setBank({ ...bank, bankName: e.target.value })}
-    />
-    <input
-      className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500"
-      placeholder="IFSC Code"
-      value={bank.ifscCode}
-      onChange={(e) => setBank({ ...bank, ifscCode: e.target.value })}
-    />
-    <input
-      className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500"
-      placeholder="Branch Name"
-      value={bank.branchName}
-      onChange={(e) => setBank({ ...bank, branchName: e.target.value })}
-    />
-    <input
-      className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500"
-      placeholder="Banking Name"
-      value={bank.bankingName}
-      onChange={(e) => setBank({ ...bank, bankingName: e.target.value })}
-    />
-    <input
-      className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500 md:col-span-2"
-      placeholder="Account Number"
-      value={bank.accountNumber}
-      onChange={(e) => setBank({ ...bank, accountNumber: e.target.value })}
-    />
-    <button
-      onClick={saveBankDetails}
-      disabled={bankLoading}
-      className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg shadow-md md:col-span-2"
-    >
-      {bankLoading ? "Saving..." : bankSaved ? "Update Bank Details" : "Save Bank Details"}
-    </button>
-  </div>
-)}
-
+                <div className="border rounded-lg p-4 bg-white shadow-sm grid md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-sm font-medium text-gray-600">
+                      Bank Name
+                    </div>
+                    <div className="text-base font-semibold text-gray-900">
+                      {bank.bankName || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-600">
+                      IFSC Code
+                    </div>
+                    <div className="text-base font-semibold text-gray-900">
+                      {bank.ifscCode || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-600">
+                      Branch Name
+                    </div>
+                    <div className="text-base font-semibold text-gray-900">
+                      {bank.branchName || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-gray-600">
+                      Banking Name
+                    </div>
+                    <div className="text-base font-semibold text-gray-900">
+                      {bank.bankingName || "—"}
+                    </div>
+                  </div>
+                  <div className="md:col-span-2">
+                    <div className="text-sm font-medium text-gray-600">
+                      Account Number
+                    </div>
+                    <div className="text-base font-semibold text-gray-900">
+                      {bank.accountNumber || "—"}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="border rounded-lg p-4 bg-gray-50 grid md:grid-cols-2 gap-4">
+                  <input
+                    className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Bank Name"
+                    value={bank.bankName}
+                    onChange={(e) =>
+                      setBank({ ...bank, bankName: e.target.value })
+                    }
+                  />
+                  <input
+                    className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500"
+                    placeholder="IFSC Code"
+                    value={bank.ifscCode}
+                    onChange={(e) =>
+                      setBank({ ...bank, ifscCode: e.target.value })
+                    }
+                  />
+                  <input
+                    className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Branch Name"
+                    value={bank.branchName}
+                    onChange={(e) =>
+                      setBank({ ...bank, branchName: e.target.value })
+                    }
+                  />
+                  <input
+                    className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Banking Name"
+                    value={bank.bankingName}
+                    onChange={(e) =>
+                      setBank({ ...bank, bankingName: e.target.value })
+                    }
+                  />
+                  <input
+                    className="border p-3 rounded-lg text-gray-900 placeholder-gray-400 shadow-sm focus:ring-2 focus:ring-indigo-500 md:col-span-2"
+                    placeholder="Account Number"
+                    value={bank.accountNumber}
+                    onChange={(e) =>
+                      setBank({ ...bank, accountNumber: e.target.value })
+                    }
+                  />
+                  <button
+                    onClick={saveBankDetails}
+                    disabled={bankLoading || !isBankDirty}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg shadow-md md:col-span-2 disabled:opacity-50"
+                  >
+                    {bankLoading
+                      ? "Saving..."
+                      : bankSaved
+                      ? "Update Bank Details"
+                      : "Save Bank Details"}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -865,6 +1114,7 @@ useEffect(() => {
               <h2 className="text-xl font-semibold flex items-center gap-2 text-gray-800">
                 <Lock className="w-5 h-5" /> Change Password
               </h2>
+
               <div className="grid md:grid-cols-2 gap-4">
                 <label className="text-sm text-gray-600">
                   Old Password
@@ -872,7 +1122,12 @@ useEffect(() => {
                     className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400"
                     type="password"
                     value={passwordForm.oldPassword}
-                    onChange={(e) => setPasswordForm((p) => ({ ...p, oldPassword: e.target.value }))}
+                    onChange={(e) =>
+                      setPasswordForm((p) => ({
+                        ...p,
+                        oldPassword: e.target.value,
+                      }))
+                    }
                     placeholder="Old Password"
                   />
                 </label>
@@ -882,22 +1137,68 @@ useEffect(() => {
                     className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400"
                     type="password"
                     value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))}
+                    onChange={(e) =>
+                      setPasswordForm((p) => ({
+                        ...p,
+                        newPassword: e.target.value,
+                      }))
+                    }
                     placeholder="New Password"
                   />
                 </label>
+
+                {/* OTP field appears only after OTP is sent */}
+                {otpSent && (
+                  <label className="text-sm text-gray-600 md:col-span-2">
+                    OTP (sent to your registered email)
+                    <input
+                      className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400"
+                      type="text"
+                      value={passwordForm.otp}
+                      onChange={(e) =>
+                        setPasswordForm((p) => ({
+                          ...p,
+                          otp: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter 6-digit OTP"
+                    />
+                  </label>
+                )}
               </div>
-              <button onClick={changePassword} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg shadow disabled:opacity-50">
-                {loading ? "Updating..." : "🔑 Change Password"}
-              </button>
+
+              <div className="space-y-1">
+                <button
+                  onClick={changePassword}
+                  disabled={loading}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg shadow disabled:opacity-50"
+                >
+                  {loading
+                    ? otpSent
+                      ? "Verifying OTP..."
+                      : "Sending OTP..."
+                    : otpSent
+                    ? "✅ Verify OTP & Change Password"
+                    : "🔑 Send OTP to Change Password"}
+                </button>
+                <p className="text-xs text-gray-500">
+                  First click will send an OTP to your registered email. After
+                  entering OTP, click again to change your password.
+                </p>
+              </div>
             </div>
           )}
 
           {/* LOGOUT */}
           {activeTab === "logout" && (
             <div className="flex flex-col items-center justify-center gap-4">
-              <h2 className="text-xl font-semibold text-gray-800">Ready to leave?</h2>
-              <button onClick={logout} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg shadow">
+              <h2 className="text-xl font-semibold text-gray-800">
+                Ready to leave?
+              </h2>
+              <button
+                onClick={logout}
+                className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg shadow"
+              >
                 🚪 Logout
               </button>
             </div>
