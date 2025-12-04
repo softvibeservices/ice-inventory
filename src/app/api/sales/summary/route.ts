@@ -1,5 +1,3 @@
-// src\app\api\sales\summary\route.ts
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
@@ -30,11 +28,19 @@ function parseDateParam(value: string | null): Date | null {
   return d;
 }
 
+// INCLUSIVE helper, same logic as customer-ledger
 function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
   if (!date) return false;
   const ts = date.getTime();
+
   if (from && ts < from.getTime()) return false;
-  if (to && ts > to.getTime()) return false;
+
+  if (to) {
+    const toLimit = new Date(to);
+    toLimit.setDate(toLimit.getDate() + 1);
+    if (ts >= toLimit.getTime()) return false;
+  }
+
   return true;
 }
 
@@ -70,20 +76,19 @@ export async function GET(req: Request) {
 
     // 1) Fetch orders for this user in the date range (by createdAt),
     //    excluding discarded orders.
-   const orderMatch: any = { userId };
+    const orderMatch: any = { userId };
 
-if (from || to) {
-  orderMatch.createdAt = {};
-  if (from) {
-    orderMatch.createdAt.$gte = from; // inclusive start
-  }
-  if (to) {
-    const toLimit = new Date(to);
-    toLimit.setDate(toLimit.getDate() + 1); // end of "to" day
-    orderMatch.createdAt.$lt = toLimit;     // half-open [from, to+1day)
-  }
-}
-
+    if (from || to) {
+      orderMatch.createdAt = {};
+      if (from) {
+        orderMatch.createdAt.$gte = from; // inclusive start
+      }
+      if (to) {
+        const toLimit = new Date(to);
+        toLimit.setDate(toLimit.getDate() + 1); // end of "to" day
+        orderMatch.createdAt.$lt = toLimit; // half-open [from, to+1day)
+      }
+    }
 
     // ignore discarded orders in analytics
     orderMatch.discardedAt = null;

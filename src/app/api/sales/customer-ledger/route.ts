@@ -1,5 +1,3 @@
-// src\app\api\sales\customer-ledger\route.ts
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
@@ -26,6 +24,7 @@ function parseDateParam(value: string | null): Date | null {
   return d;
 }
 
+// INCLUSIVE date range helper
 function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
   if (!date) return false;
   const ts = date.getTime();
@@ -42,7 +41,6 @@ function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
 
   return true;
 }
-
 
 export async function GET(req: Request) {
   try {

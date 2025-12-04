@@ -79,7 +79,17 @@ type CustomerLedgerResponse = {
   };
 };
 
-type RangePreset = "7d" | "30d" | "90d" | "all";
+// Presets including custom
+type RangePreset =
+  | "today"
+  | "yesterday"
+  | "thisMonth"
+  | "thisYear"
+  | "7d"
+  | "30d"
+  | "90d"
+  | "all"
+  | "custom";
 
 function formatINR(v: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -97,6 +107,14 @@ function formatDate(d: string) {
     month: "short",
     year: "numeric",
   });
+}
+
+// ✅ Local YYYY-MM-DD (no timezone shift)
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export default function SalesPage() {
@@ -120,6 +138,11 @@ export default function SalesPage() {
   const [customerLedger, setCustomerLedger] =
     useState<CustomerLedgerResponse | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
+   const handleClearFilters = () => {
+    setRangePreset("all");  // go back to default preset
+    setFrom("");            // clear date inputs
+    setTo("");              // clear date inputs
+  };
 
   // Read userId from localStorage (adjust if your app stores it differently)
   useEffect(() => {
@@ -127,10 +150,8 @@ export default function SalesPage() {
 
     let id: string | null = null;
 
-    // Example 1: userId stored directly
     id = window.localStorage.getItem("userId");
 
-    // Example 2: user JSON in "user" key (uncomment & adapt if needed)
     if (!id) {
       try {
         const raw = window.localStorage.getItem("user");
@@ -150,27 +171,66 @@ export default function SalesPage() {
     }
   }, []);
 
-  // When preset changes, recompute from/to
+  // 🔁 When preset changes, recompute from/to using LOCAL date math
   useEffect(() => {
+    // "all" -> no date filters
     if (rangePreset === "all") {
       setFrom("");
       setTo("");
       return;
     }
 
+    // "custom" -> keep whatever user typed
+    if (rangePreset === "custom") {
+      return;
+    }
+
     const now = new Date();
-    const toStr = now.toISOString().slice(0, 10);
+    let fromDate = new Date(now);
+    let toDate = new Date(now);
 
-    let days = 30;
-    if (rangePreset === "7d") days = 7;
-    if (rangePreset === "90d") days = 90;
+    switch (rangePreset) {
+      case "today": {
+        // from = today, to = today
+        // fromDate/toDate already = now
+        break;
+      }
+      case "yesterday": {
+        fromDate.setDate(fromDate.getDate() - 1);
+        toDate.setDate(toDate.getDate() - 1);
+        break;
+      }
+      case "thisMonth": {
+        fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        // toDate = today
+        break;
+      }
+      case "thisYear": {
+        fromDate = new Date(now.getFullYear(), 0, 1);
+        // toDate = today
+        break;
+      }
+      case "7d": {
+        fromDate.setDate(fromDate.getDate() - 6); // last 7 days including today
+        // toDate = today
+        break;
+      }
+      case "30d": {
+        fromDate.setDate(fromDate.getDate() - 29); // last 30 days including today
+        // toDate = today
+        break;
+      }
+      case "90d": {
+        fromDate.setDate(fromDate.getDate() - 89); // last 90 days including today
+        // toDate = today
+        break;
+      }
+      default:
+        break;
+    }
 
-    const fromDate = new Date(
-      now.getTime() - days * 24 * 60 * 60 * 1000
-    ).toISOString().slice(0, 10);
-
-    setFrom(fromDate);
-    setTo(toStr);
+    setFrom(toDateInputValue(fromDate));
+    setTo(toDateInputValue(toDate));
   }, [rangePreset]);
 
   // Fetch sales summary
@@ -233,7 +293,8 @@ export default function SalesPage() {
         console.error(err);
       })
       .finally(() => setCustomersLoading(false));
-  }, [userId]);
+    // 🔧 only depend on userId so we don't reset selection repeatedly
+  }, [userId]); 
 
   // Fetch customer ledger whenever selection / range changes
   useEffect(() => {
@@ -271,6 +332,17 @@ export default function SalesPage() {
     );
   }, [customers]);
 
+  const presetButtons: { key: RangePreset; label: string }[] = [
+    { key: "today", label: "Today" },
+    { key: "yesterday", label: "Yesterday" },
+    { key: "thisMonth", label: "This Month" },
+    { key: "thisYear", label: "This Year" },
+    { key: "7d", label: "Last 7 days" },
+    { key: "30d", label: "Last 30 days" },
+    { key: "90d", label: "Last 90 days" },
+    { key: "all", label: "All time" },
+  ];
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <DashboardNavbar />
@@ -296,43 +368,50 @@ export default function SalesPage() {
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {(["7d", "30d", "90d", "all"] as RangePreset[]).map((preset) => (
+              {presetButtons.map(({ key, label }) => (
                 <button
-                  key={preset}
-                  onClick={() => setRangePreset(preset)}
+                  key={key}
+                  onClick={() => setRangePreset(key)}
                   className={`px-2.5 py-1 text-xs rounded-full border transition ${
-                    rangePreset === preset
+                    rangePreset === key
                       ? "bg-blue-600 text-white border-blue-600"
                       : "bg-white text-gray-700 border-gray-200 hover:bg-blue-50"
                   }`}
                 >
-                  {preset === "7d" && "Last 7 days"}
-                  {preset === "30d" && "Last 30 days"}
-                  {preset === "90d" && "Last 90 days"}
-                  {preset === "all" && "All time"}
+                  {label}
                 </button>
               ))}
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
+                        <div className="flex gap-2 w-full sm:w-auto items-center">
               <input
                 type="date"
                 value={from}
                 onChange={(e) => {
-                  setRangePreset("all");
+                  setRangePreset("custom");
                   setFrom(e.target.value);
                 }}
-                className="px-2 py-1 text-xs border rounded-md bg-white flex-1"
+                className="px-2 py-1 text-xs border rounded-md bg-white flex-1 text-gray-500"
               />
               <input
                 type="date"
                 value={to}
                 onChange={(e) => {
-                  setRangePreset("all");
+                  setRangePreset("custom");
                   setTo(e.target.value);
                 }}
-                className="px-2 py-1 text-xs border rounded-md bg-white flex-1"
+                className="px-2 py-1 text-xs border rounded-md bg-white flex-1 text-gray-500"
               />
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="px-2.5 py-1 text-xs rounded-full border border-gray-300 text-gray-600 hover:bg-gray-100 whitespace-nowrap"
+              >
+                Clear
+              </button>
             </div>
+
+
+
           </div>
         </section>
 
@@ -413,17 +492,13 @@ export default function SalesPage() {
             <p className="text-xs text-gray-600">
               Cash:{" "}
               <span className="font-semibold text-gray-800">
-                {summary
-                  ? formatINR(summary.paymentBreakdown.cash)
-                  : "--"}
+                {summary ? formatINR(summary.paymentBreakdown.cash) : "--"}
               </span>
             </p>
             <p className="text-xs text-gray-600">
               Bank/UPI:{" "}
               <span className="font-semibold text-gray-800">
-                {summary
-                  ? formatINR(summary.paymentBreakdown.bank)
-                  : "--"}
+                {summary ? formatINR(summary.paymentBreakdown.bank) : "--"}
               </span>
             </p>
             <p className="text-xs text-gray-600">
@@ -446,23 +521,21 @@ export default function SalesPage() {
               Quantities Sold (Total)
             </h2>
             <div className="grid grid-cols-2 gap-3 text-sm">
-              {[
+              {([
                 ["Box", "box"],
                 ["Kg", "kg"],
                 ["Litre", "litre"],
                 ["Piece", "piece"],
                 ["Gram", "gm"],
                 ["ML", "ml"],
-              ].map(([label, key]) => (
+              ] as const).map(([label, key]) => (
                 <div
                   key={key}
                   className="flex flex-col border border-gray-100 rounded-lg px-3 py-2 bg-gray-50/60"
                 >
                   <span className="text-xs text-gray-500">{label}</span>
                   <span className="text-base font-semibold text-gray-800">
-                    {summary
-                      ? (summary.quantities as any)[key] || 0
-                      : "--"}
+                    {summary ? (summary.quantities as any)[key] || 0 : "--"}
                   </span>
                 </div>
               ))}
@@ -516,18 +589,16 @@ export default function SalesPage() {
                       </td>
                     </tr>
                   )}
-                  {!summaryLoading &&
-                    summary &&
-                    summary.daily.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={8}
-                          className="px-3 py-4 text-center text-gray-400"
-                        >
-                          No data in this range
-                        </td>
-                      </tr>
-                    )}
+                  {!summaryLoading && summary && summary.daily.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-3 py-4 text-center text-gray-400"
+                      >
+                        No data in this range
+                      </td>
+                    </tr>
+                  )}
                   {!summaryLoading &&
                     summary &&
                     summary.daily.map((d) => (
@@ -726,9 +797,7 @@ export default function SalesPage() {
                             )}
                           </td>
                           <td className="px-3 py-2">
-                            <span className="block">
-                              {e.note || "-"}
-                            </span>
+                            <span className="block">{e.note || "-"}</span>
                             {e.serialNumber && (
                               <span className="text-[11px] text-gray-400">
                                 Serial: {e.serialNumber}

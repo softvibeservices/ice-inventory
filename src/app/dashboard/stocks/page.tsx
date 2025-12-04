@@ -376,7 +376,7 @@ export default function StockPage() {
               type="text"
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 text-gray-700"
               placeholder="Type CONFIRM to enable"
               autoFocus
             />
@@ -387,7 +387,7 @@ export default function StockPage() {
                   setShowEmptyModal(false);
                   setConfirmText("");
                 }}
-                className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600"
                 disabled={emptying}
               >
                 Cancel

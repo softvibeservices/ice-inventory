@@ -863,7 +863,7 @@ export default function ProfilePage() {
                           if (!file) return;
                           uploadToCloudinary(file, "logo");
                         }}
-                        className="w-full border rounded-lg p-2 bg-white"
+                        className="w-full border rounded-lg p-2 bg-white text-gray-500"
                         disabled={uploading.logo}
                       />
                       {uploading.logo && (
@@ -896,11 +896,11 @@ export default function ProfilePage() {
                           if (!file) return;
                           uploadToCloudinary(file, "qr");
                         }}
-                        className="w-full border rounded-lg p-2 bg-white"
+                        className="w-full border rounded-lg p-2 bg-white text-gray-500"
                         disabled={uploading.qr}
                       />
                       {uploading.qr && (
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-600">
                           Uploading QR code...
                         </p>
                       )}
@@ -930,7 +930,7 @@ export default function ProfilePage() {
                           if (!file) return;
                           uploadToCloudinary(file, "sig");
                         }}
-                        className="w-full border rounded-lg p-2 bg-white"
+                        className="w-full border rounded-lg p-2 bg-white text-gray-500"
                         disabled={uploading.sig}
                       />
                       {uploading.sig && (
@@ -958,7 +958,7 @@ export default function ProfilePage() {
                     <button
                       onClick={saveBillDetails}
                       disabled={saveLoading || !isBillDirty}
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded text-white ${
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded text-gray-700 ${
                         saveLoading
                           ? "bg-purple-400"
                           : isBillDirty
