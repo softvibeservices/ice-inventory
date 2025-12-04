@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
@@ -61,10 +61,32 @@ type Product = {
   packUnit?: string; // e.g. "1L", "90ml", "500g"
 };
 
+type CustomerLite = {
+  _id: string;
+  name: string;
+  shopName: string;
+  shopAddress?: string;
+  area?: string;
+  contacts?: string[];
+};
 
 type SettleMethod = "Cash" | "Bank/UPI" | "Debt";
 type CashBankMethod = "Cash" | "Bank/UPI";
 type TabFilter = "Unsettled" | "Settled" | "Discarded" | "Debt";
+
+type SortMode =
+  | "date-desc"
+  | "date-asc"
+  | "total-desc"
+  | "total-asc"
+  | "shop-asc"
+  | "shop-desc"
+  | "customer-asc"
+  | "customer-desc"
+  | "area-asc"
+  | "area-desc"
+  | "serial-asc"
+  | "serial-desc";
 
 export default function OrdersPage() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -74,7 +96,11 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [customers, setCustomers] = useState<CustomerLite[]>([]);
 
+  // search / sort UI state
+  const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("date-desc");
 
   // settlement modal state (for UNSETTLED orders)
   const [settleOrder, setSettleOrder] = useState<Order | null>(null);
@@ -114,6 +140,13 @@ export default function OrdersPage() {
     });
   };
 
+  const parseDateNumber = (iso?: string | null) => {
+    if (!iso) return 0;
+    const d = new Date(iso);
+    const t = d.getTime();
+    return Number.isNaN(t) ? 0 : t;
+  };
+
   // helper: rupee formatter
   const fmt = (n: number) => {
     const num = Number(n || 0);
@@ -131,9 +164,7 @@ export default function OrdersPage() {
     if (tab !== "Settled") return null;
 
     const paid =
-      typeof order.settlementAmount === "number"
-        ? order.settlementAmount
-        : 0;
+      typeof order.settlementAmount === "number" ? order.settlementAmount : 0;
     const remaining = Math.max(0, (order.total || 0) - paid);
 
     return (
@@ -158,9 +189,7 @@ export default function OrdersPage() {
     if (tab !== "Debt") return null;
 
     const paid =
-      typeof order.settlementAmount === "number"
-        ? order.settlementAmount
-        : 0;
+      typeof order.settlementAmount === "number" ? order.settlementAmount : 0;
     const remaining = Math.max(0, (order.total || 0) - paid);
 
     return (
@@ -197,7 +226,6 @@ export default function OrdersPage() {
     return byName?.packUnit;
   };
 
-
   // ===== load userId from localStorage =====
   useEffect(() => {
     try {
@@ -223,13 +251,17 @@ export default function OrdersPage() {
 
     const loadProducts = async () => {
       try {
-        const res = await fetch(`/api/products?userId=${encodeURIComponent(userId)}`);
+        const res = await fetch(
+          `/api/products?userId=${encodeURIComponent(userId)}`
+        );
         const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Failed to fetch products");
+        if (!res.ok)
+          throw new Error(data?.error || "Failed to fetch products");
 
         let arr: any[] = [];
         if (Array.isArray(data)) arr = data;
-        else if (Array.isArray((data as any).products)) arr = (data as any).products;
+        else if (Array.isArray((data as any).products))
+          arr = (data as any).products;
         else
           arr = Object.values(data)
             .filter((v) => Array.isArray(v))
@@ -250,6 +282,47 @@ export default function OrdersPage() {
     loadProducts();
   }, [userId]);
 
+  // ===== fetch customers (for area, etc.) =====
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchCustomers = async () => {
+      try {
+        const res = await fetch(
+          `/api/customers?userId=${encodeURIComponent(userId)}`
+        );
+        const data = await res.json();
+        if (!res.ok)
+          throw new Error(data?.error || "Failed to fetch customers");
+
+        const arr: CustomerLite[] = Array.isArray(data)
+          ? data.map((c: any) => ({
+              _id: String(c._id),
+              name: c.name,
+              shopName: c.shopName,
+              shopAddress: c.shopAddress,
+              area: c.area,
+              contacts: c.contacts,
+            }))
+          : [];
+
+        setCustomers(arr);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchCustomers();
+  }, [userId]);
+
+  // memo map: customerId -> customer
+  const customerById = useMemo(() => {
+    const map: Record<string, CustomerLite> = {};
+    for (const c of customers) {
+      map[c._id] = c;
+    }
+    return map;
+  }, [customers]);
 
   // ===== fetch orders whenever tab or userId changes =====
   useEffect(() => {
@@ -304,6 +377,119 @@ export default function OrdersPage() {
 
     fetchOrders();
   }, [userId, tab]);
+
+  // ===== derived: filtered + sorted orders WITH area info =====
+  const displayOrders = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    // decorate with customer + area
+    let list = orders.map((order) => {
+      const cust = order.customerId
+        ? customerById[order.customerId]
+        : undefined;
+      const area = (cust?.area || "").trim();
+      const areaLower = area.toLowerCase();
+
+      return {
+        order,
+        customer: cust,
+        area,
+        areaLower,
+      };
+    });
+
+    // global search (INCLUDING AREA)
+    if (q) {
+      list = list.filter(({ order, customer, areaLower }) => {
+        const haystacks: string[] = [];
+
+        haystacks.push(order.shopName || "");
+        haystacks.push(order.customerName || "");
+        haystacks.push(order.customerAddress || "");
+        haystacks.push(order.customerContact || "");
+        haystacks.push(order.orderId || "");
+        haystacks.push(order.serialNumber || "");
+        haystacks.push(order.remarks || "");
+        haystacks.push(order.status || "");
+        if (order.settlementMethod) haystacks.push(order.settlementMethod);
+        if (customer?.name) haystacks.push(customer.name);
+        if (customer?.shopName) haystacks.push(customer.shopName);
+        if (customer?.shopAddress) haystacks.push(customer.shopAddress);
+        if (customer?.contacts?.length)
+          haystacks.push(customer.contacts.join(" "));
+
+        // AREA is compulsory in search
+        if (areaLower) haystacks.push(areaLower);
+
+        // search inside item names
+        if (order.items?.length) {
+          for (const it of order.items) {
+            if (it.productName) haystacks.push(it.productName);
+          }
+        }
+        if (order.freeItems?.length) {
+          for (const it of order.freeItems) {
+            if (it.productName) haystacks.push(it.productName);
+          }
+        }
+
+        return haystacks.some(
+          (text) => text && text.toLowerCase().includes(q)
+        );
+      });
+    }
+
+    // sorting
+    const sorted = [...list];
+
+    sorted.sort((a, b) => {
+      const oa = a.order;
+      const ob = b.order;
+
+      switch (sortMode) {
+        case "date-asc":
+          return (
+            parseDateNumber(oa.createdAt) - parseDateNumber(ob.createdAt)
+          );
+        case "date-desc":
+          return (
+            parseDateNumber(ob.createdAt) - parseDateNumber(oa.createdAt)
+          );
+        case "total-asc":
+          return (oa.total || 0) - (ob.total || 0);
+        case "total-desc":
+          return (ob.total || 0) - (oa.total || 0);
+        case "shop-asc":
+          return (oa.shopName || "").localeCompare(ob.shopName || "");
+        case "shop-desc":
+          return (ob.shopName || "").localeCompare(oa.shopName || "");
+        case "customer-asc":
+          return (oa.customerName || "").localeCompare(
+            ob.customerName || ""
+          );
+        case "customer-desc":
+          return (ob.customerName || "").localeCompare(
+            oa.customerName || ""
+          );
+        case "area-asc":
+          return a.areaLower.localeCompare(b.areaLower);
+        case "area-desc":
+          return b.areaLower.localeCompare(a.areaLower);
+        case "serial-asc":
+          return (oa.serialNumber || "").localeCompare(
+            ob.serialNumber || ""
+          );
+        case "serial-desc":
+          return (ob.serialNumber || "").localeCompare(
+            oa.serialNumber || ""
+          );
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [orders, customerById, search, sortMode]);
 
   // ===== actions: discard, open settle, confirm settle =====
   const handleDiscard = async (order: Order) => {
@@ -450,7 +636,9 @@ export default function OrdersPage() {
       setOrders((prev) => {
         // if still Debt -> update in-place; else remove from Debt list
         if (updated.settlementMethod === "Debt") {
-          return prev.map((o) => (o._id === updated._id ? { ...o, ...updated } : o));
+          return prev.map((o) =>
+            o._id === updated._id ? { ...o, ...updated } : o
+          );
         }
         return prev.filter((o) => o._id !== updated._id);
       });
@@ -471,6 +659,11 @@ export default function OrdersPage() {
     setViewOrder(null);
   };
 
+  const handleClearFilters = () => {
+    setSearch("");
+    setSortMode("date-desc");
+  };
+
   // ===== UI =====
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -487,39 +680,83 @@ export default function OrdersPage() {
             <div className="inline-flex rounded-md shadow-sm border border-gray-200 overflow-hidden text-sm font-medium">
               <button
                 onClick={() => setTab("Unsettled")}
-                className={`px-3 py-1.5 ${tab === "Unsettled"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
+                className={`px-3 py-1.5 ${
+                  tab === "Unsettled"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-700 hover:bg-gray-50"
+                }`}
               >
                 Unsettled
               </button>
               <button
                 onClick={() => setTab("Settled")}
-                className={`px-3 py-1.5 border-l border-gray-200 ${tab === "Settled"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
+                className={`px-3 py-1.5 border-l border-gray-200 ${
+                  tab === "Settled"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-700 hover:bg-gray-50"
+                }`}
               >
                 Settled
               </button>
               <button
                 onClick={() => setTab("Debt")}
-                className={`px-3 py-1.5 border-l border-gray-200 ${tab === "Debt"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
+                className={`px-3 py-1.5 border-l border-gray-200 ${
+                  tab === "Debt"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-700 hover:bg-gray-50"
+                }`}
               >
                 Debt
               </button>
               <button
                 onClick={() => setTab("Discarded")}
-                className={`px-3 py-1.5 border-l border-gray-200 ${tab === "Discarded"
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
+                className={`px-3 py-1.5 border-l border-gray-200 ${
+                  tab === "Discarded"
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-700 hover:bg-gray-50"
+                }`}
               >
                 Discarded
+              </button>
+            </div>
+          </div>
+
+          {/* Search + sort row */}
+          <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between mb-4">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by area, customer, shop, serial, product, contact..."
+              className="w-full md:w-96 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+
+            <div className="flex flex-wrap gap-3 items-center">
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as SortMode)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="date-desc">Newest first</option>
+                <option value="date-asc">Oldest first</option>
+                <option value="total-desc">Amount: High → Low</option>
+                <option value="total-asc">Amount: Low → High</option>
+                <option value="area-asc">Area: A → Z</option>
+                <option value="area-desc">Area: Z → A</option>
+                <option value="customer-asc">Customer: A → Z</option>
+                <option value="customer-desc">Customer: Z → A</option>
+                <option value="shop-asc">Shop: A → Z</option>
+                <option value="shop-desc">Shop: Z → A</option>
+                <option value="serial-asc">Serial: Low → High</option>
+                <option value="serial-desc">Serial: High → Low</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="border border-gray-300 bg-white text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                Clear Filters
               </button>
             </div>
           </div>
@@ -532,9 +769,13 @@ export default function OrdersPage() {
             <div className="py-10 text-center text-gray-500 text-sm">
               No {tab.toLowerCase()} orders found.
             </div>
+          ) : displayOrders.length === 0 ? (
+            <div className="py-10 text-center text-gray-500 text-sm">
+              No orders match your search / filters.
+            </div>
           ) : (
             <div className="space-y-4">
-              {orders.map((order) => (
+              {displayOrders.map(({ order, area }) => (
                 <div
                   key={order._id}
                   className="border border-gray-200 rounded-lg p-4 md:p-5 bg-gray-50/80 flex flex-col gap-3"
@@ -575,6 +816,10 @@ export default function OrdersPage() {
                     </div>
 
                     <div className="space-y-1 md:col-span-1">
+                      <div>
+                        <span className="font-semibold">Area: </span>
+                        {area || "-"}
+                      </div>
                       <div className="font-semibold">Address:</div>
                       <div className="text-gray-700">
                         {order.customerAddress}
@@ -658,7 +903,7 @@ export default function OrdersPage() {
 
       {/* SETTLEMENT MODAL for UNSETTLED */}
       {settleOrder && (
-        <div className="fixed inset-0 z-40 flex items-center justify.center justify-center bg-black/40">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-5">
             <h2 className="text-lg font-semibold mb-2 text-gray-900">
               Settle Order {settleOrder.serialNumber}
@@ -678,10 +923,11 @@ export default function OrdersPage() {
                     key={m}
                     type="button"
                     onClick={() => setSettleMethod(m)}
-                    className={`px-3 py-1.5 text-xs rounded-md border transition ${settleMethod === m
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                      }`}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition ${
+                      settleMethod === m
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
                     {m}
                   </button>
@@ -769,10 +1015,11 @@ export default function OrdersPage() {
                     key={m}
                     type="button"
                     onClick={() => setDebtSettleMethod(m)}
-                    className={`px-3 py-1.5 text-xs rounded-md border transition ${debtSettleMethod === m
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                      }`}
+                    className={`px-3 py-1.5 text-xs rounded-md border transition ${
+                      debtSettleMethod === m
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
                     {m}
                   </button>
@@ -851,7 +1098,6 @@ export default function OrdersPage() {
                     })}
                   </ul>
                 ) : (
-
                   <div className="text-xs text-gray-500">
                     No main items recorded.
                   </div>
@@ -879,7 +1125,6 @@ export default function OrdersPage() {
                     })}
                   </ul>
                 ) : (
-
                   <div className="text-xs text-gray-500">
                     No free items for this order.
                   </div>

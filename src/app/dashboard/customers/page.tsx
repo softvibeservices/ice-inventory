@@ -9,7 +9,6 @@ import {
   Plus,
   Trash2,
   Edit3,
-  MapPin,
   Phone,
   Building,
   FileText,
@@ -856,7 +855,7 @@ export default function CustomersPage() {
                   <th className="p-3 border-b">Primary Contact</th>
                   <th className="p-3 border-b">Shop</th>
                   <th className="p-3 border-b">Area</th>          
-                  <th className="p-3 border-b">Location</th>
+                  
                   <th className="p-3 border-b">Credit</th>
                   <th className="p-3 border-b">Debit</th>
                   <th className="p-3 border-b">Total Sales</th>
@@ -913,16 +912,7 @@ export default function CustomersPage() {
                       <td className="p-3 align-top text-sm text-gray-700">
                         {c.area || "-"}                       {/* 👉 NEW */}
                       </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        {c.location?.latitude && c.location?.longitude ? (
-                          <div className="flex items-center gap-2">
-                            <MapPin size={16} />{" "}
-                            <span>{`${c.location.latitude}, ${c.location.longitude}`}</span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
+                      
                       <td className="p-3 align-top text-sm text-gray-700">
                         {formatCurrency(c.credit)}
                       </td>
