@@ -1,5 +1,6 @@
 // src/models/Order.ts
 import mongoose, { Schema, Document, models } from "mongoose";
+import Product, { IProduct } from "./Product";
 
 export interface IOrderItem {
   productId?: string; // optional link to Product
@@ -160,7 +161,7 @@ const OrderSchema = new Schema<IOrder>(
 
     status: {
       type: String,
-      enum: ["Unsettled", "settled", "Debt"], // ✅ Added "Debt" here
+      enum: ["Unsettled", "settled", "Debt"], // ✅ includes "Debt"
       required: true,
       default: "Unsettled",
     },
@@ -183,5 +184,93 @@ const OrderSchema = new Schema<IOrder>(
   },
   { timestamps: true }
 );
+
+// 🔥 Recalculate quantitySummary before every save
+OrderSchema.pre<IOrder>("save", async function (next) {
+  try {
+    const order = this;
+
+    const summary: IQuantitySummary = {
+      piece: 0,
+      box: 0,
+      kg: 0,
+      litre: 0,
+      gm: 0,
+      ml: 0,
+    };
+
+    const lineItems: (IOrderItem | IFreeItem)[] = [
+      ...(order.items || []),
+      ...(order.freeItems || []),
+    ];
+
+    // cache per-pack quantity derived from packUnit string (e.g. "5 L", "700 ml")
+    const productCache = new Map<string, number>(); // productId -> perPack
+
+    for (const it of lineItems) {
+      if (!it || !it.unit) continue;
+
+      const unit = it.unit;
+      let qty = Number(it.quantity || 0);
+      if (!qty || qty <= 0) continue;
+
+      // ✅ BOX: only count number of boxes (your existing behaviour is correct)
+      if (unit === "box") {
+        summary.box += qty;
+        continue;
+      }
+
+      // ✅ Other units: multiply by numeric amount from packUnit
+      let perPack = 1;
+
+      if (it.productId) {
+        let cached = productCache.get(it.productId);
+
+        if (cached === undefined) {
+          const prod = await Product.findOne(
+            { _id: it.productId, userId: order.userId },
+            { packUnit: 1 }
+          )
+            .lean<IProduct>()
+            .exec();
+
+          // parse first numeric value from packUnit, e.g. "5 L" -> 5, "700 ml" -> 700
+          if (prod?.packUnit) {
+            const match = prod.packUnit.match(/([\d.]+)/);
+            const n = match ? parseFloat(match[1]) : NaN;
+            cached = !Number.isNaN(n) && n > 0 ? n : 1;
+          } else {
+            cached = 1;
+          }
+
+          productCache.set(it.productId, cached);
+        }
+
+        perPack = cached;
+      }
+
+      const effectiveQty = qty * perPack;
+
+      if (unit === "piece") {
+        summary.piece += effectiveQty;
+      } else if (unit === "kg") {
+        summary.kg += effectiveQty;
+      } else if (unit === "litre") {
+        summary.litre += effectiveQty;
+      } else if (unit === "gm") {
+        summary.gm += effectiveQty;
+      } else if (unit === "ml") {
+        summary.ml += effectiveQty;
+      }
+    }
+
+    order.quantitySummary = summary;
+    next();
+  } catch (err) {
+    next(err as any);
+  }
+});
+
+
 
 export default models.Order || mongoose.model<IOrder>("Order", OrderSchema);

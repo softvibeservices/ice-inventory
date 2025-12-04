@@ -14,7 +14,7 @@ type QuantitySummary = {
   ml: number;
 };
 
-type OrderStatus = "Unsettled" | "settled";
+type OrderStatus = "Unsettled" | "settled" | "Debt";
 
 type SettlementMethod = "Cash" | "Bank/UPI" | "Debt";
 
