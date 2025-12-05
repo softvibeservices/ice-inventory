@@ -132,13 +132,16 @@ export default function OrdersPage() {
   );
 
   // ===== helpers =====
+
+  // --- Updated formatQtySummary (keeps units separate; improved ordering/plurals)
   const formatQtySummary = (q?: QuantitySummary) => {
     if (!q) return "-";
     const parts: string[] = [];
-    if (q.litre) parts.push(`${q.litre} litre`);
-    if (q.box) parts.push(`${q.box} box`);
+    // show bigger units first (litre, kg) then smaller (ml, gm), keep box as-is
+    if (q.litre) parts.push(`${q.litre} litre${q.litre !== 1 ? "s" : ""}`);
     if (q.kg) parts.push(`${q.kg} kg`);
-    if (q.piece) parts.push(`${q.piece} piece`);
+    if (q.box) parts.push(`${q.box} box${q.box !== 1 ? "es" : ""}`);
+    if (q.piece) parts.push(`${q.piece} piece${q.piece !== 1 ? "s" : ""}`);
     if (q.gm) parts.push(`${q.gm} gm`);
     if (q.ml) parts.push(`${q.ml} ml`);
     return parts.length ? parts.join(", ") : "-";
@@ -240,6 +243,128 @@ export default function OrdersPage() {
     );
     return byName?.packUnit;
   };
+
+  // ---------- Quantity parsing & summary helpers ----------
+  type BaseUnit = "ml" | "litre" | "gm" | "kg" | "piece" | "box";
+
+  /**
+   * Parse packUnit strings like "1L", "1 L", "90ml", "500 g", "250ML", "1Kg", "250 g"
+   * Returns {value, unit} or undefined if cannot parse.
+   */
+  function parsePackUnit(packUnit?: string): { value: number; unit: BaseUnit } | undefined {
+    if (!packUnit || typeof packUnit !== "string") return undefined;
+    const s = packUnit.trim().toLowerCase().replace(/\s+/g, "");
+    // patterns: number + unit (ml, l, litre, kg, g, gm, piece, pc, box)
+    const m = s.match(/^([\d.]+)(ml|l|litre|litres|kg|g|gm|pc|piece|box)$/);
+    if (!m) return undefined;
+    const num = Number(m[1]);
+    if (Number.isNaN(num)) return undefined;
+    const u = m[2];
+    if (u === "ml") return { value: num, unit: "ml" };
+    if (u === "l" || u.startsWith("litre")) return { value: num, unit: "litre" };
+    if (u === "g" || u === "gm") return { value: num, unit: "gm" };
+    if (u === "kg") return { value: num, unit: "kg" };
+    if (u === "pc" || u === "piece") return { value: num, unit: "piece" };
+    if (u === "box") return { value: num, unit: "box" };
+    return undefined;
+  }
+
+  /**
+   * Compute a QuantitySummary from items arrays and product packUnit metadata.
+   * Rules:
+   *  - If item.unit === "box" -> treat as boxes (sum item.quantity)
+   *  - Else if product.packUnit parses to a base unit (ml/litre/gm/kg/piece): use
+   *      total = item.quantity * packUnit.value and add to that base unit accumulator.
+   *  - Else fallback: if item.unit is a base unit (ml/gm/litre/kg/piece) treat total = item.quantity for that unit.
+   *  - Do NOT convert between units (e.g. ml ↔ litre) — they accumulate separately.
+   */
+  function computeQuantitySummaryForOrder(
+    items: OrderLineItem[] | undefined,
+    freeItems: OrderLineItem[] | undefined,
+    productsList: Product[]
+  ): QuantitySummary {
+    const out: QuantitySummary = { piece: 0, box: 0, kg: 0, litre: 0, gm: 0, ml: 0 };
+
+    const addLine = (it: OrderLineItem) => {
+      if (!it) return;
+      // If it's a box, keep as box count (do not expand using packUnit)
+      if (it.unit === "box") {
+        out.box += Number(it.quantity || 0);
+        return;
+      }
+
+      // Try find product packUnit
+      let packUnitVal = undefined as ReturnType<typeof parsePackUnit> | undefined;
+      if (it.productId) {
+        const prod = productsList.find((p) => p._id === it.productId);
+        if (prod?.packUnit) packUnitVal = parsePackUnit(prod.packUnit);
+      }
+
+      // fallback: if packUnit not found, try matching by productName
+      if (!packUnitVal) {
+        const pn = (it.productName || "").trim().toLowerCase();
+        if (pn) {
+          const byName = productsList.find((p) => (p.name || "").trim().toLowerCase() === pn);
+          if (byName?.packUnit) packUnitVal = parsePackUnit(byName.packUnit);
+        }
+      }
+
+      // If we have packUnit and it's not 'box', multiply
+      if (packUnitVal) {
+        const qty = Number(it.quantity || 0);
+        const total = qty * packUnitVal.value;
+        switch (packUnitVal.unit) {
+          case "ml":
+            out.ml += total;
+            break;
+          case "litre":
+            out.litre += total;
+            break;
+          case "gm":
+            out.gm += total;
+            break;
+          case "kg":
+            out.kg += total;
+            break;
+          case "piece":
+            out.piece += total;
+            break;
+          case "box":
+            out.box += total;
+            break;
+        }
+        return;
+      }
+
+      // No packUnit: fallback to item.unit if it's a base unit (treat item's quantity as total)
+      const qty = Number(it.quantity || 0);
+if (it.unit === "ml") {
+  out.ml += qty;
+} else if (it.unit === "litre") {
+  out.litre += qty;
+} else if (it.unit === "gm") {
+  out.gm += qty;
+} else if (it.unit === "kg") {
+  out.kg += qty;
+} else if (it.unit === "piece") {
+  out.piece += qty;
+} else if (it.unit === "box") {
+  out.box += qty;
+} else {
+  // unknown unit: ignore
+}
+
+    };
+
+    (items || []).forEach(addLine);
+    (freeItems || []).forEach(addLine);
+
+    // Ensure integers where appropriate
+    out.box = Math.round(out.box);
+    out.piece = Math.round(out.piece);
+    // keep gm/ml/kg/litre possibly fractional if packUnit had decimals
+    return out;
+  }
 
   // ===== load userId from localStorage =====
   useEffect(() => {
@@ -381,7 +506,13 @@ export default function OrdersPage() {
         }
         // For Unsettled tab, "filtered" stays as "all" (which already is only Unsettled)
 
-        setOrders(filtered);
+        // compute client-side quantitySummary using available products (may be empty)
+        const computed = filtered.map((o) => ({
+          ...o,
+          quantitySummary: computeQuantitySummaryForOrder(o.items, o.freeItems, products),
+        }));
+
+        setOrders(computed);
       } catch (err: any) {
         console.error(err);
         toast.error(err?.message || "Failed to load orders");
@@ -391,7 +522,18 @@ export default function OrdersPage() {
     };
 
     fetchOrders();
-  }, [userId, tab]);
+  }, [userId, tab, products]); // note: include products so if products arrives while this runs it triggers recompute on fetch
+
+  // recompute client-side quantitySummary whenever products change (apply packUnit once products available)
+  useEffect(() => {
+    if (!products || products.length === 0) return;
+    setOrders((prevOrders) =>
+      prevOrders.map((o) => ({
+        ...o,
+        quantitySummary: computeQuantitySummaryForOrder(o.items, o.freeItems, products),
+      }))
+    );
+  }, [products]);
 
   // per-order refresh: re-fetch all orders for user and update only that order
   const refreshOrder = async (orderId: string) => {
@@ -414,13 +556,14 @@ export default function OrdersPage() {
       const all: Order[] = Array.isArray(data) ? data : [];
       const found = all.find((o) => String(o._id) === String(orderId));
       if (found) {
-        setOrders((prev) => prev.map((o) => (o._id === found._id ? found : o)));
+        // compute summary for the updated order using current products
+        const updated = { ...found, quantitySummary: computeQuantitySummaryForOrder(found.items, found.freeItems, products) };
+        setOrders((prev) => prev.map((o) => (o._id === updated._id ? updated : o)));
         toast.success("Order refreshed");
       } else {
         // order not present in updated set (maybe moved tabs) — remove locally
         setOrders((prev) => prev.filter((o) => o._id !== orderId));
         toast("Order no longer present in this tab");
-
       }
     } catch (err: any) {
       console.error(err);
@@ -1121,83 +1264,119 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* VIEW ORDER MODAL (items + free items) */}
-      {viewOrder && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg max-w-lg w-full p-5 max-h-[80vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-2 text-gray-900">
-              Order Details – {viewOrder.serialNumber}
-            </h2>
-            <p className="text-sm text-gray-700 mb-3">
-              {viewOrder.shopName} — {viewOrder.customerName}
-            </p>
+    {/* VIEW ORDER MODAL (items + free items) */}
+{viewOrder && (
+  <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+    <div className="bg-white rounded-lg shadow-lg max-w-lg w-full p-5 max-h-[80vh] overflow-y-auto">
+      <h2 className="text-lg font-semibold mb-2 text-gray-900">
+        Order Details – {viewOrder.serialNumber}
+      </h2>
+      <p className="text-sm text-gray-700 mb-3">
+        {viewOrder.shopName} — {viewOrder.customerName}
+      </p>
 
-            <div className="space-y-3 text-sm text-gray-800">
-              <div>
-                <div className="font-semibold mb-1">Items:</div>
-                {viewOrder.items && viewOrder.items.length > 0 ? (
-                  <ul className="list-disc list-inside space-y-1">
-                    {viewOrder.items.map((it, idx) => {
-                      const packUnit = getPackUnitForItem(it);
-                      return (
-                        <li key={idx}>
-                          {it.productName} —{" "}
-                          <span className="font-semibold">
-                            {it.quantity}
-                            {packUnit ? ` ${packUnit}` : ""}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <div className="text-xs text-gray-500">No main items recorded.</div>
-                )}
-              </div>
+      <div className="space-y-3 text-sm text-gray-800">
+        <div>
+          <div className="font-semibold mb-1">Items:</div>
+          {viewOrder.items && viewOrder.items.length > 0 ? (
+            <ul className="list-disc list-inside space-y-1">
+              {viewOrder.items.map((it, idx) => {
+                const packUnitStr = getPackUnitForItem(it); // e.g. "70ml" or "1L"
+                const parsed = parsePackUnit(packUnitStr); // uses parsePackUnit helper
+                const isBoxItem = it.unit === "box" || parsed?.unit === "box";
 
-              <div>
-                <div className="font-semibold mb-1">Free Items:</div>
-                {viewOrder.freeItems && viewOrder.freeItems.length > 0 ? (
-                  <ul className="list-disc list-inside space-y-1">
-                    {viewOrder.freeItems.map((it, idx) => {
-                      const packUnit = getPackUnitForItem(it);
-                      return (
-                        <li key={idx}>
-                          {it.productName} —{" "}
-                          <span className="font-semibold">
-                            {it.quantity}
-                            {packUnit ? ` ${packUnit}` : ""}
-                          </span>{" "}
-                          <span className="text-xs text-green-700">(FREE)</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <div className="text-xs text-gray-500">No free items for this order.</div>
-                )}
-              </div>
+                // formatting helper: integer if whole, else up to 2 decimals trimmed
+                const fmtNum = (n: number) => {
+                  if (Number.isNaN(n)) return String(n);
+                  if (Math.round(n) === n) return String(Math.round(n));
+                  return String(Number(n.toFixed(2)).toString());
+                };
 
-              {viewOrder.deliveryStatus && (
-                <div className="mt-2">
-                  <div className="font-semibold">Delivery Status:</div>
-                  <div className="mt-1"><DeliveryStatusBadge status={viewOrder.deliveryStatus} /></div>
-                </div>
-              )}
-            </div>
+                let qtyDisplay = "";
+                if (isBoxItem) {
+                  // show box count (no slash, no multiplication)
+                  qtyDisplay = `${it.quantity} box`;
+                } else if (parsed && parsed.unit) {
+                  // show "qty / packUnit_value UNIT" (pack unit value only, not qty*value)
+                  qtyDisplay = `${it.quantity} / ${fmtNum(parsed.value)} ${parsed.unit.toUpperCase()}`;
+                } else {
+                  // fallback: show item.unit if available, else just quantity
+                  qtyDisplay = it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
+                }
 
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                onClick={closeViewModal}
-                className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
-              >
-                Close
-              </button>
-            </div>
-          </div>
+                return (
+                  <li key={idx}>
+                    {it.productName} —{" "}
+                    <span className="font-semibold">{qtyDisplay}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="text-xs text-gray-500">No main items recorded.</div>
+          )}
         </div>
-      )}
+
+        <div>
+          <div className="font-semibold mb-1">Free Items:</div>
+          {viewOrder.freeItems && viewOrder.freeItems.length > 0 ? (
+            <ul className="list-disc list-inside space-y-1">
+              {viewOrder.freeItems.map((it, idx) => {
+                const packUnitStr = getPackUnitForItem(it);
+                const parsed = parsePackUnit(packUnitStr);
+                const isBoxItem = it.unit === "box" || parsed?.unit === "box";
+
+                const fmtNum = (n: number) => {
+                  if (Number.isNaN(n)) return String(n);
+                  if (Math.round(n) === n) return String(Math.round(n));
+                  return String(Number(n.toFixed(2)).toString());
+                };
+
+                let qtyDisplay = "";
+                if (isBoxItem) {
+                  qtyDisplay = `${it.quantity} box`;
+                } else if (parsed && parsed.unit) {
+                  qtyDisplay = `${it.quantity} / ${fmtNum(parsed.value)} ${parsed.unit.toUpperCase()}`;
+                } else {
+                  qtyDisplay = it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
+                }
+
+                return (
+                  <li key={idx}>
+                    {it.productName} —{" "}
+                    <span className="font-semibold">{qtyDisplay}</span>{" "}
+                    <span className="text-xs text-green-700">(FREE)</span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="text-xs text-gray-500">No free items for this order.</div>
+          )}
+        </div>
+
+        {viewOrder.deliveryStatus && (
+          <div className="mt-2">
+            <div className="font-semibold">Delivery Status:</div>
+            <div className="mt-1"><DeliveryStatusBadge status={viewOrder.deliveryStatus} /></div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2 mt-4">
+        <button
+          type="button"
+          onClick={closeViewModal}
+          className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
     </div>
   );
 }
