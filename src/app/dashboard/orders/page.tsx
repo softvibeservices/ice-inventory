@@ -1,3 +1,4 @@
+// src/app/dashboard/orders/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -50,6 +51,15 @@ type Order = {
   settlementAmount?: number;
   settledAt?: string | null;
   discardedAt?: string | null;
+
+  // delivery fields (present in schema)
+  deliveryPartnerId?: string | null;
+  deliveryStatus?: "Pending" | "On the Way" | "Delivered";
+  deliveryAssignedAt?: string | null;
+  deliveryOnTheWayAt?: string | null;
+  deliveryCompletedAt?: string | null;
+
+  deliveryNotes?: string;
 
   remarks?: string;
   createdAt?: string;
@@ -115,6 +125,11 @@ export default function OrdersPage() {
 
   // view modal state
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
+
+  // per-order refresh map: orderId -> boolean
+  const [refreshingMap, setRefreshingMap] = useState<Record<string, boolean>>(
+    {}
+  );
 
   // ===== helpers =====
   const formatQtySummary = (q?: QuantitySummary) => {
@@ -377,6 +392,47 @@ export default function OrdersPage() {
 
     fetchOrders();
   }, [userId, tab]);
+
+  // per-order refresh: re-fetch all orders for user and update only that order
+  const refreshOrder = async (orderId: string) => {
+    if (!userId) {
+      toast.error("User not loaded");
+      return;
+    }
+    setRefreshingMap((m) => ({ ...m, [orderId]: true }));
+    try {
+      const params = new URLSearchParams({ userId });
+      // match the same status selection as main list to get the freshest state for this tab
+      if (tab === "Unsettled") params.set("status", "Unsettled");
+      else params.set("status", "settled");
+
+      const res = await fetch(`/api/orders?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch orders");
+      }
+      const all: Order[] = Array.isArray(data) ? data : [];
+      const found = all.find((o) => String(o._id) === String(orderId));
+      if (found) {
+        setOrders((prev) => prev.map((o) => (o._id === found._id ? found : o)));
+        toast.success("Order refreshed");
+      } else {
+        // order not present in updated set (maybe moved tabs) — remove locally
+        setOrders((prev) => prev.filter((o) => o._id !== orderId));
+        toast("Order no longer present in this tab");
+
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to refresh order");
+    } finally {
+      setRefreshingMap((m) => {
+        const copy = { ...m };
+        delete copy[orderId];
+        return copy;
+      });
+    }
+  };
 
   // ===== derived: filtered + sorted orders WITH area info =====
   const displayOrders = useMemo(() => {
@@ -780,7 +836,7 @@ export default function OrdersPage() {
                   key={order._id}
                   className="border border-gray-200 rounded-lg p-4 md:p-5 bg-gray-50/80 flex flex-col gap-3"
                 >
-                  {/* Top row: serial + date + total */}
+                  {/* Top row: serial + date + total + delivery status + refresh */}
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                       <span className="font-semibold text-gray-800">
@@ -789,12 +845,33 @@ export default function OrdersPage() {
                       <span className="text-gray-600">
                         Bill Date: {formatDate(order.createdAt)}
                       </span>
+                      {/* delivery status badge */}
+                      <span>
+                        <DeliveryStatusBadge status={order.deliveryStatus} />
+                      </span>
                     </div>
-                    <div className="text-right">
-                      <div className="text-xs text-gray-500">Bill Total</div>
-                      <div className="text-lg font-bold text-green-700">
-                        {fmt(order.total)}
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-xs text-gray-500">Bill Total</div>
+                        <div className="text-lg font-bold text-green-700">
+                          {fmt(order.total)}
+                        </div>
                       </div>
+
+                      {/* per-order refresh button */}
+                      <button
+                        onClick={() => refreshOrder(order._id)}
+                        className="px-2 py-1 text-xs rounded border border-gray-300 bg-white hover:bg-gray-50 flex items-center gap-2"
+                        title="Refresh this order"
+                        disabled={!!refreshingMap[order._id]}
+                      >
+                        {refreshingMap[order._id] ? (
+                          <span className="text-xs text-gray-600">Refreshing…</span>
+                        ) : (
+                          <span className="text-xs text-gray-700">Refresh</span>
+                        )}
+                      </button>
                     </div>
                   </div>
 
@@ -821,9 +898,7 @@ export default function OrdersPage() {
                         {area || "-"}
                       </div>
                       <div className="font-semibold">Address:</div>
-                      <div className="text-gray-700">
-                        {order.customerAddress}
-                      </div>
+                      <div className="text-gray-700">{order.customerAddress}</div>
                     </div>
 
                     <div className="space-y-1">
@@ -909,14 +984,11 @@ export default function OrdersPage() {
               Settle Order {settleOrder.serialNumber}
             </h2>
             <p className="text-sm text-gray-700 mb-3">
-              Bill Total:{" "}
-              <span className="font-semibold">{fmt(settleOrder.total)}</span>
+              Bill Total: <span className="font-semibold">{fmt(settleOrder.total)}</span>
             </p>
 
             <div className="mb-4">
-              <div className="text-sm font-medium mb-1">
-                Select settlement method:
-              </div>
+              <div className="text-sm font-medium mb-1">Select settlement method:</div>
               <div className="flex flex-wrap gap-2">
                 {(["Cash", "Bank/UPI", "Debt"] as SettleMethod[]).map((m) => (
                   <button
@@ -937,9 +1009,7 @@ export default function OrdersPage() {
 
             {(settleMethod === "Cash" || settleMethod === "Bank/UPI") && (
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-1">
-                  Amount received
-                </label>
+                <label className="block text-sm font-medium mb-1">Amount received</label>
                 <input
                   type="number"
                   min={0}
@@ -949,18 +1019,14 @@ export default function OrdersPage() {
                   className="w-full border rounded px-3 py-1.5 text-sm text-gray-900"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  If amount is less than bill total, remaining amount will be
-                  kept as <strong>Debt</strong>. If amount &gt; customer debit,
-                  extra will be added to customer&apos;s credit.
+                  If amount is less than bill total, remaining amount will be kept as <strong>Debt</strong>. If amount &gt; customer debit, extra will be added to customer's credit.
                 </p>
               </div>
             )}
 
             {settleMethod === "Debt" && (
               <p className="text-xs text-gray-600 mb-4">
-                Entire bill amount will stay in customer&apos;s debit, but this
-                order will be marked as <strong>Debt</strong> and appear in the{" "}
-                <strong>Debt</strong> tab.
+                Entire bill amount will stay in customer's debit, but this order will be marked as <strong>Debt</strong> and appear in the <strong>Debt</strong> tab.
               </p>
             )}
 
@@ -993,22 +1059,14 @@ export default function OrdersPage() {
               Settle Debt Order {debtSettleOrder.serialNumber}
             </h2>
             <p className="text-sm text-gray-700 mb-3">
-              Bill Total:{" "}
-              <span className="font-semibold">
-                {fmt(debtSettleOrder.total)}
-              </span>
+              Bill Total: <span className="font-semibold">{fmt(debtSettleOrder.total)}</span>
             </p>
             <p className="text-xs text-gray-500 mb-2">
-              This order is currently in <strong>Debt</strong>. Any amount you
-              receive will reduce the remaining amount. Once the total paid is
-              greater than or equal to bill total, this order will move to the{" "}
-              <strong>Settled</strong> tab.
+              This order is currently in <strong>Debt</strong>. Any amount you receive will reduce the remaining amount. Once the total paid is greater than or equal to bill total, this order will move to the <strong>Settled</strong> tab.
             </p>
 
             <div className="mb-4">
-              <div className="text-sm font-medium mb-1">
-                Select settlement method:
-              </div>
+              <div className="text-sm font-medium mb-1">Select settlement method:</div>
               <div className="flex flex-wrap gap-2">
                 {(["Cash", "Bank/UPI"] as CashBankMethod[]).map((m) => (
                   <button
@@ -1028,9 +1086,7 @@ export default function OrdersPage() {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-1">
-                Amount received
-              </label>
+              <label className="block text-sm font-medium mb-1">Amount received</label>
               <input
                 type="number"
                 min={0}
@@ -1040,10 +1096,7 @@ export default function OrdersPage() {
                 className="w-full border rounded px-3 py-1.5 text-sm text-gray-900"
               />
               <p className="text-xs text-gray-500 mt-1">
-                If the cumulative amount received for this order becomes greater
-                than or equal to the bill total, it will move to the{" "}
-                <strong>Settled</strong> tab. Otherwise it will remain in{" "}
-                <strong>Debt</strong>.
+                If the cumulative amount received for this order becomes greater than or equal to the bill total, it will move to the <strong>Settled</strong> tab. Otherwise it will remain in <strong>Debt</strong>.
               </p>
             </div>
 
@@ -1098,9 +1151,7 @@ export default function OrdersPage() {
                     })}
                   </ul>
                 ) : (
-                  <div className="text-xs text-gray-500">
-                    No main items recorded.
-                  </div>
+                  <div className="text-xs text-gray-500">No main items recorded.</div>
                 )}
               </div>
 
@@ -1117,19 +1168,22 @@ export default function OrdersPage() {
                             {it.quantity}
                             {packUnit ? ` ${packUnit}` : ""}
                           </span>{" "}
-                          <span className="text-xs text-green-700">
-                            (FREE)
-                          </span>
+                          <span className="text-xs text-green-700">(FREE)</span>
                         </li>
                       );
                     })}
                   </ul>
                 ) : (
-                  <div className="text-xs text-gray-500">
-                    No free items for this order.
-                  </div>
+                  <div className="text-xs text-gray-500">No free items for this order.</div>
                 )}
               </div>
+
+              {viewOrder.deliveryStatus && (
+                <div className="mt-2">
+                  <div className="font-semibold">Delivery Status:</div>
+                  <div className="mt-1"><DeliveryStatusBadge status={viewOrder.deliveryStatus} /></div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 mt-4">
@@ -1146,4 +1200,22 @@ export default function OrdersPage() {
       )}
     </div>
   );
+}
+
+/* ---------- small helper component: DeliveryStatusBadge ---------- */
+
+function DeliveryStatusBadge({ status }: { status?: string | null }) {
+  const s = status ?? "Pending";
+  const label = s;
+  const base =
+    "inline-flex items-center gap-2 text-xs font-semibold px-2 py-0.5 rounded-full";
+
+  if (label === "Delivered") {
+    return <span className={`${base} bg-green-100 text-green-800`}>✅ Delivered</span>;
+  }
+  if (label === "On the Way" || label === "On the way") {
+    return <span className={`${base} bg-yellow-100 text-amber-800`}>🚚 On the Way</span>;
+  }
+  // Pending / default
+  return <span className={`${base} bg-slate-100 text-slate-800`}>⏳ Pending</span>;
 }

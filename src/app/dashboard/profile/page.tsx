@@ -1,5 +1,4 @@
 // src/app/dashboard/profile/page.tsx
-
 "use client";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -7,8 +6,10 @@ import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
 import { User, Lock, LogOut, FileText, Edit3, Check } from "lucide-react";
+// import the delivery partners component
+import DeliveryPartnersTable from "@/app/dashboard/profile/delivery-partners/page";
 
-type ActiveTab = "basic" | "password" | "billing" | "bank" | "logout";
+type ActiveTab = "basic" | "password" | "billing" | "bank" | "logout" | "delivery";
 
 type SellerDetails = {
   _id?: string;
@@ -602,6 +603,19 @@ export default function ProfilePage() {
           >
             🏦 Bank Details
           </button>
+
+          {/* NEW: Delivery Partners */}
+          <button
+            onClick={() => setActiveTab("delivery")}
+            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
+              activeTab === "delivery"
+                ? "bg-yellow-600 text-white"
+                : "hover:bg-gray-100 text-gray-700"
+            }`}
+          >
+            🚚 Delivery Partners
+          </button>
+
           <button
             onClick={() => setActiveTab("password")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
@@ -1105,6 +1119,21 @@ export default function ProfilePage() {
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* DELIVERY PARTNERS */}
+          {activeTab === "delivery" && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-800">🚚 Delivery Partners</h2>
+                <div className="text-sm text-gray-500">Manage delivery partners linked to your account</div>
+              </div>
+
+              <div>
+                {/* Pass userId so the delivery table can fetch the list */}
+                <DeliveryPartnersTable userId={user._id} />
+              </div>
             </div>
           )}
 
