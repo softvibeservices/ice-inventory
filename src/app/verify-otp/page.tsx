@@ -31,13 +31,28 @@ function VerifyOtpContent() {
   };
 
   const handleResend = async () => {
-    await fetch("/api/register", {
+  try {
+    const res = await fetch("/api/register/resend", {
       method: "POST",
-      body: JSON.stringify({ email, resend: true }),
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
     });
-    toast.info("OTP resent!");
-  };
+    const data = await res.json();
+    if (!res.ok) {
+      if (res.status === 429 && data.waitSeconds) {
+        toast.error(`Please wait ${data.waitSeconds}s before resending.`);
+      } else {
+        toast.error(data.error || "Unable to resend OTP");
+      }
+      return;
+    }
+    toast.success("OTP resent to your email.");
+  } catch (err) {
+    console.error(err);
+    toast.error("Network error while resending OTP");
+  }
+};
+
 
   return (
     <div className="flex flex-col min-h-screen">
