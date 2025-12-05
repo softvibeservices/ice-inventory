@@ -129,17 +129,25 @@ export default function LoginPage() {
             </form>
 
             {/* Extra Links */}
-            <div className="mt-8 text-center text-sm text-gray-600">
-              <p>
-                Don’t have an account?{" "}
-                <Link
-                  href="/register"
-                  className="text-blue-600 font-semibold hover:underline"
-                >
-                  Register
-                </Link>
-              </p>
-            </div>
+            {/* Extra Links */}
+<div className="mt-4 text-center text-sm text-gray-600">
+  <p>
+    <button
+      onClick={() => router.push("/forgot-password")}
+      className="text-blue-600 font-semibold hover:underline mr-4"
+      type="button"
+    >
+      Forgot password?
+    </button>
+    <br/>
+
+    Don’t have an account?{" "}
+    <Link href="/register" className="text-blue-600 font-semibold hover:underline">
+      Register
+    </Link>
+  </p>
+</div>
+
           </div>
         </div>
       </main>
