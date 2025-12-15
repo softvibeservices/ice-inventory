@@ -268,7 +268,7 @@ export async function PATCH(req: NextRequest) {
       // 3) mark as "settled" but discarded, and store history
       order.status = "settled";
       order.discardedAt = new Date();
-      order.settlementMethod = null;
+      order.settlementMethod = "Discarded";
       order.settlementAmount = 0;
       order.settledAt = null;
 

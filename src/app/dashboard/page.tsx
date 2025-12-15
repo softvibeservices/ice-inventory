@@ -1,4 +1,7 @@
-// icecream-inventory/src/app/dashboard/page.tsx
+
+// src\app\dashboard\page.tsx
+
+
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -12,8 +15,22 @@ import {
   RotateCcw,
   Trash2,
   Pin,
+  Truck,
+  CheckCircle,
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
+
+interface Order {
+  _id: string;
+  serialNumber?: string;
+  shopName?: string;
+  customerName?: string;
+  total?: number;
+  status?: "Unsettled" | "settled";
+  settlementMethod?: string | null;
+  deliveryStatus?: "Pending" | "On the Way" | "Delivered";
+  createdAt?: string;
+}
 
 interface Product {
   _id: string;
@@ -46,23 +63,19 @@ interface StickyNote {
   customerName: string;
   shopName: string;
   items: StickyNoteItem[];
-  totalQuantity: number; // saved in DB (may include all units)
+  totalQuantity: number;
   createdAt?: string;
   updatedAt?: string;
-}
-
-// For form rows (quantity as string for controlled input)
-interface StickyRow {
-  productId?: string;
-  productName: string;
-  quantity: string;
-  unit?: Product["unit"];
 }
 
 type ModalMode = "create" | "edit";
 
 export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
+
+  // dashboard orders
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
 
   // master data
   const [products, setProducts] = useState<Product[]>([]);
@@ -84,25 +97,17 @@ export default function DashboardPage() {
   // customer selection
   const [customerInput, setCustomerInput] = useState("");
   const [shopInput, setShopInput] = useState("");
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
-    null
-  );
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
-  const [customerHighlightIndex, setCustomerHighlightIndex] = useState<
-    number | null
-  >(null);
+  const [customerHighlightIndex, setCustomerHighlightIndex] = useState<number | null>(null);
 
   // rows
   const [rows, setRows] = useState<StickyRow[]>([]);
-  const [originalRowsForEdit, setOriginalRowsForEdit] = useState<StickyRow[]>(
-    []
-  ); // for Clear in edit mode
+  const [originalRowsForEdit, setOriginalRowsForEdit] = useState<StickyRow[]>([]);
 
   // for product suggestion dropdown active row
   const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
-  const [productHighlightIndex, setProductHighlightIndex] = useState<
-    number | null
-  >(null);
+  const [productHighlightIndex, setProductHighlightIndex] = useState<number | null>(null);
 
   // focus management: product + qty refs
   const productRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -121,43 +126,61 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // ========= FETCH PRODUCTS / CUSTOMERS / NOTES =========
+  // ========= FETCH PRODUCTS / CUSTOMERS / NOTES / ORDERS =========
   useEffect(() => {
     if (!userId) return;
 
     const fetchMasterData = async () => {
       try {
-        const [prodRes, custRes, notesRes] = await Promise.all([
+        const [prodRes, custRes, notesRes, ordersRes] = await Promise.all([
           fetch(`/api/products?userId=${encodeURIComponent(userId)}`),
           fetch(`/api/customers?userId=${encodeURIComponent(userId)}`),
           fetch(`/api/sticky-notes?userId=${encodeURIComponent(userId)}`),
+          fetch(`/api/orders?userId=${encodeURIComponent(userId)}`),
         ]);
 
         if (!prodRes.ok) throw new Error("Products fetch failed");
         if (!custRes.ok) throw new Error("Customers fetch failed");
         if (!notesRes.ok) throw new Error("Sticky notes fetch failed");
+        if (!ordersRes.ok) throw new Error("Orders fetch failed");
 
         const prodData = await prodRes.json();
         const custData = await custRes.json();
         const notesData = await notesRes.json();
+        const ordersData = await ordersRes.json();
 
         setProducts(Array.isArray(prodData) ? prodData : []);
         setCustomers(Array.isArray(custData) ? custData : []);
         setNotes(Array.isArray(notesData) ? notesData : []);
+        setOrders(Array.isArray(ordersData) ? ordersData : []);
       } catch (err: any) {
         console.error(err);
         toast.error(err?.message || "Failed to load dashboard data");
       } finally {
         setLoadingNotes(false);
+        setLoadingOrders(false);
       }
     };
 
     setLoadingNotes(true);
+    setLoadingOrders(true);
     fetchMasterData();
   }, [userId]);
 
-  // ========= HELPERS =========
+  // ========= DERIVED DASHBOARD LISTS =========
+  const pendingOrOnTheWay = useMemo(() => {
+    return orders.filter(
+      (o) => o.deliveryStatus === "Pending" || o.deliveryStatus === "On the Way"
+    );
+  }, [orders]);
 
+  const deliveredButUnsettled = useMemo(() => {
+    return orders.filter(
+      (o) => o.deliveryStatus === "Delivered" && o.status === "Unsettled"
+    );
+  }, [orders]);
+
+  // ========= HELPERS (STICKY NOTES) =========
   const resetForm = () => {
     setCustomerInput("");
     setShopInput("");
@@ -202,19 +225,18 @@ export default function DashboardPage() {
       unit: it.unit,
     }));
 
-    // make sure minimum 5 rows visible
     const padded =
       converted.length >= 5
         ? converted
         : [
-            ...converted,
-            ...Array.from({ length: 5 - converted.length }).map(() => ({
-              productId: undefined,
-              productName: "",
-              quantity: "",
-              unit: undefined,
-            })),
-          ];
+          ...converted,
+          ...Array.from({ length: 5 - converted.length }).map(() => ({
+            productId: undefined,
+            productName: "",
+            quantity: "",
+            unit: undefined,
+          })),
+        ];
 
     setRows(padded);
     setOriginalRowsForEdit(padded);
@@ -267,7 +289,6 @@ export default function DashboardPage() {
       .slice(0, 8);
   };
 
-  // TOTAL = only count items whose unit is "box"
   const totalQuantity = useMemo(() => {
     return rows.reduce((sum, row) => {
       const prod = getProductForRow(row);
@@ -297,7 +318,6 @@ export default function DashboardPage() {
         }
       } else if (field === "productName") {
         target.productName = value;
-        // when editing name manually, reset productId + unit
         target.productId = undefined;
         target.unit = undefined;
       }
@@ -321,7 +341,6 @@ export default function DashboardPage() {
     setActiveRowIndex(null);
     setProductHighlightIndex(null);
 
-    // move focus to quantity after selecting product
     setTimeout(() => {
       quantityRefs.current[rowIndex]?.focus();
     }, 0);
@@ -338,8 +357,6 @@ export default function DashboardPage() {
       })),
     ]);
   };
-
-  // ========= SAVE (CREATE / UPDATE) =========
 
   const buildPayload = () => {
     if (!userId) {
@@ -428,15 +445,13 @@ export default function DashboardPage() {
     }
   };
 
-  // ========= SORT / CLEAR (EDIT MODAL) =========
-
   const handleSortByQuantity = () => {
     setRows((prev) => {
       const clone = [...prev];
       clone.sort((a, b) => {
         const qa = Number(a.quantity) || 0;
         const qb = Number(b.quantity) || 0;
-        return qb - qa; // desc
+        return qb - qa;
       });
       return clone;
     });
@@ -447,8 +462,6 @@ export default function DashboardPage() {
       setRows(originalRowsForEdit);
     }
   };
-
-  // ========= DELETE NOTE =========
 
   const openDeleteConfirm = (note: StickyNote) => {
     setNoteToDelete(note);
@@ -498,50 +511,130 @@ export default function DashboardPage() {
     }, 0);
   };
 
-  // ========= RENDER =========
+  const formatBillDate = (date?: string) => {
+    if (!date) return "-";
+    return new Date(date).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
+  // ========= RENDER =========
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
+    <div className="flex flex-col min-h-screen bg-slate-50 overflow-hidden">
       <DashboardNavbar />
 
-      <main className="flex-grow text-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8">
-          {/* Always horizontal split: left ~60%, right 40% */}
-          <div className="flex gap-6 items-start">
-            {/* LEFT: free space for your other dashboard work */}
-            <section className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-6 lg:p-8 min-h-[60vh]">
-              <h1 className="text-2xl lg:text-3xl font-bold text-blue-700 mb-2">
-                Your Dashboard Workspace
+      <main className="flex-grow text-gray-700 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8 h-full">
+          <div className="flex gap-6 items-start h-full">
+            {/* LEFT: Delivery Overview Dashboard */}
+            <section className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-6 lg:p-8 min-h-[60vh] overflow-hidden">
+              <h1 className="text-2xl lg:text-3xl font-bold text-blue-700 mb-6">
+                Delivery Overview
               </h1>
-              <p className="text-gray-500 text-sm lg:text-base mb-4">
-                This left area is for your main dashboard: sales widgets,
-                charts, quick actions, etc. Sticky-note phone orders stay in the
-                vertical right 40% panel.
-              </p>
 
-              {/* Placeholder content – you can replace later */}
-              <div className="grid sm:grid-cols-2 gap-4 text-sm">
-                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-                  <h2 className="font-semibold text-blue-800 mb-1">
-                    Example Widget
-                  </h2>
-                  <p className="text-gray-600">
-                    Replace this with your real dashboard tiles / charts.
-                  </p>
+              {loadingOrders ? (
+                <p className="text-sm text-gray-500">Loading dashboard…</p>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-6 h-[calc(100vh-200px)]">
+                  {/* Pending / On the Way */}
+                  <div className="border rounded-lg p-4 bg-blue-50 h-full flex flex-col overflow-hidden">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Truck className="w-5 h-5 text-blue-600" />
+                      <h2 className="font-semibold text-blue-800">
+                        Pending / On the Way
+                      </h2>
+                    </div>
+
+                    {pendingOrOnTheWay.length === 0 ? (
+                      <p className="text-sm text-gray-600">
+                        No active deliveries.
+                      </p>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto pr-2">
+                        <ul className="space-y-2">
+                          {pendingOrOnTheWay.map((o) => (
+                            <li
+                              key={o._id}
+                              className="bg-white border rounded-md px-3 py-2 text-sm flex justify-between"
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {o.customerName}
+                                </p>
+                                <p className="text-sm font-semibold text-gray-800">
+                                  {o.shopName}
+                                </p>
+
+                                <p className="text-[11px] text-gray-500 mt-0.5">
+                                  Bill Date: {formatBillDate(o.createdAt)} •
+                                  Serial: #{o.serialNumber} •
+                                  Amount: ₹{o.total ?? 0}
+                                </p>
+                              </div>
+
+                              <span className="text-xs font-medium text-blue-700">
+                                {o.deliveryStatus}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Delivered but Unsettled */}
+                  <div className="border rounded-lg p-4 bg-green-50 h-full flex flex-col overflow-hidden">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <h2 className="font-semibold text-green-800">
+                        Delivered but Unsettled
+                      </h2>
+                    </div>
+
+                    {deliveredButUnsettled.length === 0 ? (
+                      <p className="text-sm text-gray-600">
+                        All delivered orders are settled 🎉
+                      </p>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto pr-2">
+                        <ul className="space-y-2">
+                          {deliveredButUnsettled.map((o) => (
+                            <li
+                              key={o._id}
+                              className="bg-white border rounded-md px-3 py-2 text-sm flex justify-between"
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {o.customerName}
+                                </p>
+                                <p className="text-sm font-semibold text-gray-800">
+                                  {o.shopName}
+                                </p>
+
+                                <p className="text-[11px] text-gray-500 mt-0.5">
+                                  Bill Date: {formatBillDate(o.createdAt)} •
+                                  Serial: #{o.serialNumber} •
+                                  Amount: ₹{o.total ?? 0}
+                                </p>
+                              </div>
+
+
+                              <span className="text-xs font-semibold text-red-600">
+                                Unsettled
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="bg-green-50 border border-green-100 rounded-lg p-4">
-                  <h2 className="font-semibold text-green-800 mb-1">
-                    Another Area
-                  </h2>
-                  <p className="text-gray-600">
-                    Sticky notes are fully independent, so you can design this
-                    part however you like.
-                  </p>
-                </div>
-              </div>
+              )}
             </section>
 
-            {/* RIGHT: sticky notes panel (vertical 40%) */}
+            {/* RIGHT: Sticky Notes Panel (UNCHANGED) */}
             <aside className="w-[40%] min-w-[260px] bg-[#fff9e6] rounded-xl shadow-md border border-amber-200 p-4 lg:p-5 flex flex-col max-h-[calc(100vh-7rem)]">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -581,7 +674,6 @@ export default function DashboardPage() {
                         key={note._id}
                         className={`relative border border-amber-300 rounded-xl px-3 py-3 flex flex-col gap-1 bg-gradient-to-br from-amber-100 to-amber-200 shadow-lg ${tilt} hover:-translate-y-1 transition-transform`}
                       >
-                        {/* pin effect */}
                         <div className="absolute -top-2 left-1/2 -translate-x-1/2">
                           <div className="w-7 h-1.5 rounded-full bg-amber-300 shadow-sm" />
                         </div>
@@ -640,11 +732,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* STICKY NOTE MODAL */}
+        {/* STICKY NOTE MODAL (UNCHANGED) */}
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-              {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
                 <div className="flex items-center gap-2">
                   <Pin className="w-4 h-4 text-amber-500" />
@@ -668,9 +759,7 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              {/* Body */}
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 text-xs sm:text-sm">
-                {/* Customer line */}
                 <div className="grid grid-cols-1 sm:grid-cols-[2fr,2fr] gap-3 items-start">
                   <div className="relative">
                     <label className="block text-[11px] font-medium text-gray-700 mb-1">
@@ -691,7 +780,6 @@ export default function DashboardPage() {
                       }}
                       onBlur={() => {
                         setShowCustomerSuggestions(false);
-                        // if exact match, store id
                         const match = findCustomerMatch(customerInput);
                         if (match) {
                           setSelectedCustomerId(match._id);
@@ -738,7 +826,6 @@ export default function DashboardPage() {
                       placeholder="e.g. Rahul"
                       className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-amber-400 outline-none"
                     />
-                    {/* suggestions */}
                     {showCustomerSuggestions &&
                       customerSuggestions.length > 0 &&
                       customerInput.trim() && (
@@ -750,11 +837,10 @@ export default function DashboardPage() {
                               <button
                                 key={c._id}
                                 type="button"
-                                className={`w-full text-left px-3 py-1.5 text-xs sm:text-sm ${
-                                  isActive
+                                className={`w-full text-left px-3 py-1.5 text-xs sm:text-sm ${isActive
                                     ? "bg-amber-100"
                                     : "hover:bg-amber-50"
-                                }`}
+                                  }`}
                                 onMouseDown={(e) => {
                                   e.preventDefault();
                                   setCustomerInput(c.name);
@@ -790,7 +876,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Table */}
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <table className="w-full text-xs sm:text-sm border-collapse">
                     <thead className="bg-gray-50">
@@ -819,7 +904,6 @@ export default function DashboardPage() {
                               {idx + 1}
                             </td>
 
-                            {/* Product name + suggestions */}
                             <td className="px-2 py-1.5 align-top relative">
                               <input
                                 ref={(el) => {
@@ -838,7 +922,6 @@ export default function DashboardPage() {
                                   setProductHighlightIndex(null);
                                 }}
                                 onBlur={() => {
-                                  // on blur, try to bind product
                                   const prod = getProductForRow(row);
                                   if (prod) {
                                     handleSelectProduct(idx, prod);
@@ -892,7 +975,6 @@ export default function DashboardPage() {
                                 placeholder="Type product name"
                                 className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs sm:text-sm focus:ring-2 focus:ring-amber-400 outline-none"
                               />
-                              {/* product suggestions dropdown */}
                               {showSuggestions && (
                                 <div className="absolute left-2 right-2 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto z-20">
                                   {suggestions.map((p, sIdx) => {
@@ -903,11 +985,10 @@ export default function DashboardPage() {
                                       <button
                                         key={p._id}
                                         type="button"
-                                        className={`w-full text-left px-2 py-1.5 text-[11px] sm:text-xs ${
-                                          isActive
+                                        className={`w-full text-left px-2 py-1.5 text-[11px] sm:text-xs ${isActive
                                             ? "bg-amber-100"
                                             : "hover:bg-amber-50"
-                                        }`}
+                                          }`}
                                         onMouseDown={(e) => {
                                           e.preventDefault();
                                           handleSelectProduct(idx, p);
@@ -929,7 +1010,6 @@ export default function DashboardPage() {
                               )}
                             </td>
 
-                            {/* Quantity */}
                             <td className="px-2 py-1.5 align-top">
                               <input
                                 ref={(el) => {
@@ -959,7 +1039,6 @@ export default function DashboardPage() {
                               />
                             </td>
 
-                            {/* Current stock */}
                             <td className="px-2 py-1.5 align-top">
                               {product ? (
                                 <div className="text-[11px] sm:text-xs text-gray-700">
@@ -981,7 +1060,6 @@ export default function DashboardPage() {
                   </table>
                 </div>
 
-                {/* Below table: add rows + total + sort controls */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <button
                     type="button"
@@ -1026,7 +1104,6 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Footer buttons */}
               <div className="flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-200 bg-gray-50">
                 <button
                   onClick={closeModal}
@@ -1045,7 +1122,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* DELETE CONFIRM MODAL */}
+        {/* DELETE CONFIRM MODAL (UNCHANGED) */}
         {noteToDelete && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-5">
@@ -1086,4 +1163,11 @@ export default function DashboardPage() {
       <Footer />
     </div>
   );
+}
+
+interface StickyRow {
+  productId?: string;
+  productName: string;
+  quantity: string;
+  unit?: Product["unit"];
 }

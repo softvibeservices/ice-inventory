@@ -1,6 +1,10 @@
 // src/models/Order.ts
 import mongoose, { Schema, Document, models } from "mongoose";
 
+/* =======================
+   Interfaces (TypeScript)
+======================= */
+
 export interface IOrderItem {
   productId?: string;
   productName: string;
@@ -28,7 +32,6 @@ export interface IOrder extends Document {
   customerName?: string;
   customerAddress?: string;
   customerContact?: string;
-  // optional geo (copied from Customer)
   customerLat?: number | null;
   customerLng?: number | null;
 
@@ -45,21 +48,26 @@ export interface IOrder extends Document {
   settlementMethod?: string | null;
   settlementAmount?: number;
   settlementHistory?: ISettlementHistory[];
+  discardedAt?: Date | null;
 
-  // ===== NEW: Delivery fields =====
-  deliveryPartnerId?: string | null; // assigned partner _id
-  deliveryStatus?: "Pending" | "On the Way" | "Delivered"; // UI visible state
+  // Delivery
+  deliveryPartnerId?: string | null;
+  deliveryStatus?: "Pending" | "On the Way" | "Delivered";
   deliveryAssignedAt?: Date | null;
   deliveryOnTheWayAt?: Date | null;
   deliveryCompletedAt?: Date | null;
-  deliveryNotes?: string; // optional notes by partner/admin
+  deliveryNotes?: string;
 
-  // timestamps
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-const OrderItemSchema = new Schema<IOrderItem>(
+/* =======================
+   Sub Schemas
+======================= */
+
+// ✅ NO GENERICS HERE (fixes TS2590)
+const OrderItemSchema = new Schema(
   {
     productId: { type: String },
     productName: { type: String, required: true },
@@ -71,7 +79,8 @@ const OrderItemSchema = new Schema<IOrderItem>(
   { _id: false }
 );
 
-const SettlementSchema = new Schema<ISettlementHistory>(
+// ✅ NO GENERICS HERE EITHER
+const SettlementSchema = new Schema(
   {
     action: { type: String, required: true },
     method: { type: String },
@@ -81,6 +90,10 @@ const SettlementSchema = new Schema<ISettlementHistory>(
   },
   { _id: false }
 );
+
+/* =======================
+   Main Order Schema
+======================= */
 
 const OrderSchema = new Schema<IOrder>(
   {
@@ -100,6 +113,7 @@ const OrderSchema = new Schema<IOrder>(
     items: { type: [OrderItemSchema], default: [] },
     freeItems: { type: [OrderItemSchema], default: [] },
     quantitySummary: { type: Schema.Types.Mixed },
+
     subtotal: { type: Number, default: 0 },
     discountPercentage: { type: Number, default: 0 },
     total: { type: Number, default: 0 },
@@ -109,6 +123,9 @@ const OrderSchema = new Schema<IOrder>(
     settlementMethod: { type: String, default: null },
     settlementAmount: { type: Number, default: 0 },
     settlementHistory: { type: [SettlementSchema], default: [] },
+
+    // ✅ REQUIRED FOR DISCARDED TAB
+    discardedAt: { type: Date, default: null, index: true },
 
     // Delivery fields
     deliveryPartnerId: { type: String, default: null, index: true },
@@ -122,11 +139,15 @@ const OrderSchema = new Schema<IOrder>(
     deliveryOnTheWayAt: { type: Date, default: null },
     deliveryCompletedAt: { type: Date, default: null },
     deliveryNotes: { type: String },
-
   },
   { timestamps: true }
 );
 
-// prevent model overwrite upon hot reload in dev
-const Order = models.Order || mongoose.model<IOrder>("Order", OrderSchema);
+/* =======================
+   Model Export
+======================= */
+
+const Order =
+  models.Order || mongoose.model<IOrder>("Order", OrderSchema);
+
 export default Order;

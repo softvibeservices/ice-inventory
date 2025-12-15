@@ -492,12 +492,18 @@ if (it.unit === "ml") {
 
         let filtered: Order[] = all;
         if (tab === "Settled") {
-          // Settled, not discarded, and not "Debt" (Debt gets its own tab)
           filtered = all.filter(
-            (o) => !o.discardedAt && o.settlementMethod !== "Debt"
+            (o) =>
+              o.discardedAt == null &&           // not discarded
+              o.settlementMethod != null &&      // must actually be settled
+              o.settlementMethod !== "Debt"      // not debt
           );
-        } else if (tab === "Discarded") {
-          filtered = all.filter((o) => !!o.discardedAt);
+        }
+        
+         else if (tab === "Discarded") {
+          filtered = all.filter(
+            (o) => o.discardedAt != null
+          );
         } else if (tab === "Debt") {
           // Settled with Debt, not discarded
           filtered = all.filter(
@@ -722,6 +728,7 @@ if (it.unit === "ml") {
 
       // remove from current list (now belongs in Discarded tab)
       setOrders((prev) => prev.filter((o) => o._id !== order._id));
+      setTab("Discarded");
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Failed to discard order");
