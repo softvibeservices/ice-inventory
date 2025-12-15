@@ -18,7 +18,6 @@ interface Product {
   unit: "piece" | "box" | "kg" | "litre" | "gm" | "ml";
   packQuantity?: number;
   packUnit?: string;
-  purchasePrice?: number;
   sellingPrice: number;
   mrp?: number;
   quantity?: number;
@@ -34,8 +33,7 @@ type FormState = {
   unit: Product["unit"];
   packQuantity: string;
   packUnit: string;
-  purchasePrice: string;
-  sellingPrice: string;
+    sellingPrice: string;
   mrp: string;
   quantity: string;
   minStock: string;
@@ -72,7 +70,6 @@ export default function ProductsPage(): JSX.Element {
     unit: "piece",
     packQuantity: "",
     packUnit: "",
-    purchasePrice: "",
     sellingPrice: "",
     mrp: "",
     quantity: "",
@@ -124,10 +121,6 @@ export default function ProductsPage(): JSX.Element {
     error?: string;
     payload?: Partial<Product>;
   } => {
-    const purchasePrice =
-      formData.purchasePrice !== ""
-        ? Number(formData.purchasePrice)
-        : undefined;
     const sellingPrice =
       formData.sellingPrice !== "" ? Number(formData.sellingPrice) : NaN;
     const quantity =
@@ -142,8 +135,6 @@ export default function ProductsPage(): JSX.Element {
 
     if (!formData.name.trim()) return { error: "Name is required" };
     if (!formData.unit) return { error: "Unit is required" };
-    if (purchasePrice !== undefined && !Number.isFinite(purchasePrice))
-      return { error: "Invalid purchase price" };
     if (!Number.isFinite(sellingPrice))
       return { error: "Valid selling price is required" };
     if (quantity !== undefined && !Number.isFinite(quantity))
@@ -155,7 +146,6 @@ export default function ProductsPage(): JSX.Element {
       unit: formData.unit,
       packQuantity,
       packUnit: formData.packUnit?.trim() || undefined,
-      purchasePrice: purchasePrice === undefined ? undefined : purchasePrice,
       sellingPrice: Number(formData.sellingPrice),
       mrp,
       quantity,
@@ -262,8 +252,7 @@ export default function ProductsPage(): JSX.Element {
       unit: p.unit ?? "piece",
       packQuantity: p.packQuantity !== undefined ? String(p.packQuantity) : "",
       packUnit: p.packUnit ?? "",
-      purchasePrice:
-        p.purchasePrice !== undefined ? String(p.purchasePrice) : "",
+      
       sellingPrice: p.sellingPrice !== undefined ? String(p.sellingPrice) : "",
       mrp: p.mrp !== undefined ? String(p.mrp) : "",
       quantity: p.quantity !== undefined ? String(p.quantity) : "",
@@ -654,22 +643,7 @@ export default function ProductsPage(): JSX.Element {
               />
             </div>
 
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Purchase Price
-              </label>
-              <input
-                type="number"
-                min={0}
-                step="any"
-                value={formData.purchasePrice}
-                onChange={(e) =>
-                  setFormData({ ...formData, purchasePrice: e.target.value })
-                }
-                placeholder="e.g. 50"
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
+            
 
             <div>
               <label className="text-sm font-medium text-gray-700">

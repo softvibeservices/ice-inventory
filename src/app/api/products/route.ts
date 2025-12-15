@@ -9,17 +9,31 @@ import Product from "@/models/Product";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { userId, name, unit, purchasePrice, sellingPrice, quantity } = body;
+    const { userId, name, unit, sellingPrice, quantity } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
     }
-    if (!name || !unit || purchasePrice === undefined || sellingPrice === undefined || quantity === undefined) {
+    if (!name || unit === undefined || sellingPrice === undefined || quantity === undefined) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+    
 
     await connectDB();
-    const newProduct = await Product.create(body);
+    const newProduct = await Product.create({
+      userId,
+      name,
+      unit,
+      sellingPrice,
+      quantity,
+      category: body.category,
+      packQuantity: body.packQuantity,
+      packUnit: body.packUnit,
+      mrp: body.mrp,
+      minStock: body.minStock,
+      notes: body.notes,
+    });
+    
     return NextResponse.json(newProduct, { status: 201 });
   } catch  {
     return NextResponse.json({ error: "Failed to add product" }, { status: 500 });

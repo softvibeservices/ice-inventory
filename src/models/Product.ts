@@ -11,7 +11,6 @@ export interface IProduct extends Document {
   unit: "piece" | "box" | "kg" | "litre" | "gm" | "ml";
   packQuantity?: number;      // e.g., 6, 24
   packUnit?: string;          // e.g., "1L", "90ml", "500g"
-  purchasePrice: number;      // buy price
   sellingPrice: number;       // sell price
   mrp?: number;               // optional
   quantity: number;           // stock
@@ -34,7 +33,6 @@ const ProductSchema = new Schema<IProduct>(
     },
     packQuantity: { type: Number, min: 0 },
     packUnit: { type: String, trim: true },
-    purchasePrice: { type: Number, required: true, min: 0 },
     sellingPrice: { type: Number, required: true, min: 0 },
     mrp: { type: Number, min: 0 },
     quantity: { type: Number, required: true, min: 0, default: 0 },
