@@ -521,33 +521,60 @@ sessionStorage.setItem("billing-serial", newSerial);
 
   const sortByUnitGroup = () => {
     setItems((prev) => {
-      const filled = prev.filter((it) => it.productName);
-      const empty = prev.filter((it) => !it.productName);
-
-      // group strictly by PRODUCT.unit (from schema)
+      // keep empty rows at bottom
+      const filled = prev.filter(
+        (it) => it.productName && it.quantity > 0
+      );
+      const empty = prev.filter(
+        (it) => !it.productName || it.quantity <= 0
+      );
+  
+      /**
+       * 🔑 GROUP BY PRODUCT.unit ONLY
+       * - unit is already copied from Product schema at selection time
+       * - DO NOT use packUnit / packQuantity here
+       */
       const grouped = filled.reduce((acc, it) => {
-        const key = (it.unit || "").toLowerCase();
-        if (!key) return acc;
-        acc[key] = acc[key] || [];
-        acc[key].push(it);
+        const unitKey = it.unit?.toLowerCase();
+        if (!unitKey) return acc;
+  
+        if (!acc[unitKey]) acc[unitKey] = [];
+        acc[unitKey].push(it);
+  
         return acc;
       }, {} as Record<string, BillItem[]>);
-
-      // preferred unit order (business-friendly)
-      const unitOrder = ["box", "litre", "kg", "gm", "ml", "piece"];
-
-      const sortedUnits = Object.keys(grouped).sort(
-        (a, b) => unitOrder.indexOf(a) - unitOrder.indexOf(b)
+  
+      /**
+       * Optional but consistent ordering of unit groups
+       * (business-friendly, not required for correctness)
+       */
+      const unitPriority: Array<BillItem["unit"]> = [
+        "box",
+        "litre",
+        "kg",
+        "gm",
+        "ml",
+        "piece",
+      ];
+  
+      const orderedUnits = Object.keys(grouped).sort(
+        (a, b) => unitPriority.indexOf(a) - unitPriority.indexOf(b)
       );
-
-      // sort BY QUANTITY inside each unit group
-      const sorted = sortedUnits.flatMap((unit) =>
-        grouped[unit].sort((a, b) => a.quantity - b.quantity)
+  
+      /**
+       * 🔽 SORT INSIDE EACH UNIT GROUP BY BILL QUANTITY
+       * Using quantity entered by user in bill
+       */
+      const sortedFilled = orderedUnits.flatMap((unit) =>
+        grouped[unit].sort(
+          (a, b) => b.quantity - a.quantity // High → Low (more practical)
+        )
       );
-
-      return [...sorted, ...empty];
+  
+      return [...sortedFilled, ...empty];
     });
   };
+  
 
   // ===== Helper: basic validation before we open dialog / save =====
   const validateBeforeSave = () => {
