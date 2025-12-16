@@ -146,12 +146,25 @@ export default function BillingPage() {
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const year = now.getFullYear();
     const key = `serial-${month}-${year}`;
-    let last = Number(localStorage.getItem(key) || "0");
-    last = last + 1;
-    if (last > 9999) last = 1;
-    const padded = String(last).padStart(4, "0");
-    localStorage.setItem(key, padded);
-    return `${month}${padded}`;
+    const shouldReset =
+  localStorage.getItem("reset-billing-serial") === "1";
+
+let last = shouldReset ? 0 : Number(localStorage.getItem(key) || "0");
+
+last = last + 1;
+if (last > 9999) last = 1;
+
+const padded = String(last).padStart(4, "0");
+localStorage.setItem(key, padded);
+
+// 🔁 clear reset flag AFTER use
+if (shouldReset) {
+  localStorage.removeItem("reset-billing-serial");
+  sessionStorage.removeItem("billing-serial");
+}
+
+return `${month}${padded}`;
+
   };
 
   const updateDateToToday = () => {
@@ -261,14 +274,21 @@ export default function BillingPage() {
 
     // --- Set Serial & Date (persist per tab using sessionStorage) ---
     try {
-      const existingSerial = sessionStorage.getItem("billing-serial");
-      if (existingSerial) {
-        setSerialNo(existingSerial);
-      } else {
-        const newSerial = generateSerial();
-        setSerialNo(newSerial);
-        sessionStorage.setItem("billing-serial", newSerial);
-      }
+      const resetRequested =
+  localStorage.getItem("reset-billing-serial") === "1";
+
+if (!resetRequested) {
+  const existingSerial = sessionStorage.getItem("billing-serial");
+  if (existingSerial) {
+    setSerialNo(existingSerial);
+    return;
+  }
+}
+
+const newSerial = generateSerial();
+setSerialNo(newSerial);
+sessionStorage.setItem("billing-serial", newSerial);
+
     } catch {
       const newSerial = generateSerial();
       setSerialNo(newSerial);

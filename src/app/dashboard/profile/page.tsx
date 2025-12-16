@@ -90,6 +90,10 @@ export default function ProfilePage() {
   const [bankLoading, setBankLoading] = useState(false);
   const [isBankDirty, setIsBankDirty] = useState(false);
 
+  // Serial reset confirmation
+  const [showResetSerialConfirm, setShowResetSerialConfirm] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState("");
+
   // ===== helper: deep equality (simple) =====
   const isEqual = (a: any, b: any) => {
     try {
@@ -626,6 +630,18 @@ export default function ProfilePage() {
           >
             <Lock size={18} /> Change Password
           </button>
+
+          {/* NEW: Reset Serial Number */}
+          <button
+            onClick={() => {
+              setResetConfirmText("");
+              setShowResetSerialConfirm(true);
+            }}
+            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium hover:bg-gray-100 text-gray-700"
+          >
+            🔁 Reset Bill Serial Number
+          </button>
+
           <button
             onClick={() => setActiveTab("logout")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
@@ -1234,6 +1250,64 @@ export default function ProfilePage() {
           )}
         </section>
       </main>
+
+      {/* Reset Serial Confirmation Dialog */}
+      {showResetSerialConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+              Reset Bill Serial Number
+            </h2>
+
+            <p className="text-sm text-gray-700 mb-3">
+              This will <strong>completely reset</strong> the bill serial number.
+              The next bill will start from <strong>1</strong>.
+              <br />
+              <br />
+              To confirm, type <strong>CONFIRM</strong> below and press Enter.
+            </p>
+
+            <input
+              autoFocus
+              value={resetConfirmText}
+              onChange={(e) => setResetConfirmText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && resetConfirmText === "CONFIRM") {
+                  localStorage.setItem("reset-billing-serial", "1");
+                  toast.success("Serial number reset confirmed ✅");
+                  setShowResetSerialConfirm(false);
+                  router.push("/dashboard/billing");
+                }
+              }}
+              placeholder="Type CONFIRM"
+              className="w-full border rounded-lg p-2 text-gray-900 mb-4"
+            />
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowResetSerialConfirm(false)}
+                className="px-4 py-2 rounded border text-gray-700"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={resetConfirmText !== "CONFIRM"}
+                onClick={() => {
+                  localStorage.setItem("reset-billing-serial", "1");
+                  toast.success("Serial number reset confirmed ✅");
+                  setShowResetSerialConfirm(false);
+                  router.push("/dashboard/billing");
+                }}
+                className="px-4 py-2 rounded bg-red-600 text-white disabled:opacity-50"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );
