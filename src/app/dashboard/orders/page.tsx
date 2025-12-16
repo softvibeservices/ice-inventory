@@ -1,4 +1,5 @@
-// src/app/dashboard/orders/page.tsx
+// src\app\dashboard\orders\page.tsx
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -125,11 +126,6 @@ export default function OrdersPage() {
 
   // view modal state
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
-
-  // per-order refresh map: orderId -> boolean
-  const [refreshingMap, setRefreshingMap] = useState<Record<string, boolean>>(
-    {}
-  );
 
   // ===== helpers =====
 
@@ -498,8 +494,8 @@ if (it.unit === "ml") {
               o.settlementMethod != null &&      // must actually be settled
               o.settlementMethod !== "Debt"      // not debt
           );
+
         }
-        
          else if (tab === "Discarded") {
           filtered = all.filter(
             (o) => o.discardedAt != null
@@ -528,7 +524,7 @@ if (it.unit === "ml") {
     };
 
     fetchOrders();
-  }, [userId, tab, products]); // note: include products so if products arrives while this runs it triggers recompute on fetch
+  }, [userId, tab, products]);
 
   // recompute client-side quantitySummary whenever products change (apply packUnit once products available)
   useEffect(() => {
@@ -542,12 +538,12 @@ if (it.unit === "ml") {
   }, [products]);
 
   // per-order refresh: re-fetch all orders for user and update only that order
-  const refreshOrder = async (orderId: string) => {
+  const refreshCurrentTab = async () => {
     if (!userId) {
       toast.error("User not loaded");
       return;
     }
-    setRefreshingMap((m) => ({ ...m, [orderId]: true }));
+    setLoading(true);
     try {
       const params = new URLSearchParams({ userId });
       // match the same status selection as main list to get the freshest state for this tab
@@ -560,26 +556,39 @@ if (it.unit === "ml") {
         throw new Error(data.error || "Failed to fetch orders");
       }
       const all: Order[] = Array.isArray(data) ? data : [];
-      const found = all.find((o) => String(o._id) === String(orderId));
-      if (found) {
-        // compute summary for the updated order using current products
-        const updated = { ...found, quantitySummary: computeQuantitySummaryForOrder(found.items, found.freeItems, products) };
-        setOrders((prev) => prev.map((o) => (o._id === updated._id ? updated : o)));
-        toast.success("Order refreshed");
-      } else {
-        // order not present in updated set (maybe moved tabs) — remove locally
-        setOrders((prev) => prev.filter((o) => o._id !== orderId));
-        toast("Order no longer present in this tab");
+
+      let filtered: Order[] = all;
+      if (tab === "Settled") {
+        filtered = all.filter(
+          (o) =>
+            o.discardedAt == null &&           // not discarded
+            o.settlementMethod != null &&      // must actually be settled
+            o.settlementMethod !== "Debt"      // not debt
+        );
       }
+       else if (tab === "Discarded") {
+        filtered = all.filter(
+          (o) => o.discardedAt != null
+        );
+      } else if (tab === "Debt") {
+        // Settled with Debt, not discarded
+        filtered = all.filter(
+          (o) => !o.discardedAt && o.settlementMethod === "Debt"
+        );
+      }
+
+      const computed = filtered.map((o) => ({
+        ...o,
+        quantitySummary: computeQuantitySummaryForOrder(o.items, o.freeItems, products),
+      }));
+
+      setOrders(computed);
+      toast.success("Orders refreshed");
     } catch (err: any) {
       console.error(err);
-      toast.error(err?.message || "Failed to refresh order");
+      toast.error(err?.message || "Failed to refresh orders");
     } finally {
-      setRefreshingMap((m) => {
-        const copy = { ...m };
-        delete copy[orderId];
-        return copy;
-      });
+      setLoading(false);
     }
   };
 
@@ -657,6 +666,14 @@ if (it.unit === "ml") {
             parseDateNumber(oa.createdAt) - parseDateNumber(ob.createdAt)
           );
         case "date-desc":
+          // Settled tab → sort by last settlement time
+          if (tab === "Settled") {
+            return (
+              parseDateNumber(ob.settledAt) -
+              parseDateNumber(oa.settledAt)
+            );
+          }
+          // other tabs → bill date
           return (
             parseDateNumber(ob.createdAt) - parseDateNumber(oa.createdAt)
           );
@@ -694,7 +711,7 @@ if (it.unit === "ml") {
     });
 
     return sorted;
-  }, [orders, customerById, search, sortMode]);
+  }, [orders, customerById, search, sortMode, tab]);
 
   // ===== actions: discard, open settle, confirm settle =====
   const handleDiscard = async (order: Order) => {
@@ -957,6 +974,16 @@ if (it.unit === "ml") {
                 <option value="serial-desc">Serial: High → Low</option>
               </select>
 
+              {(tab === "Unsettled" || tab === "Debt") && (
+                <button
+                  type="button"
+                  onClick={refreshCurrentTab}
+                  className="border border-gray-300 bg-white text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50 text-sm"
+                >
+                  Refresh
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={handleClearFilters}
@@ -986,7 +1013,7 @@ if (it.unit === "ml") {
                   key={order._id}
                   className="border border-gray-200 rounded-lg p-4 md:p-5 bg-gray-50/80 flex flex-col gap-3"
                 >
-                  {/* Top row: serial + date + total + delivery status + refresh */}
+                  {/* Top row: serial + date + total + delivery status */}
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                       <span className="font-semibold text-gray-800">
@@ -1008,20 +1035,6 @@ if (it.unit === "ml") {
                           {fmt(order.total)}
                         </div>
                       </div>
-
-                      {/* per-order refresh button */}
-                      <button
-                        onClick={() => refreshOrder(order._id)}
-                        className="px-2 py-1 text-xs rounded border border-gray-300 bg-white hover:bg-gray-50 flex items-center gap-2"
-                        title="Refresh this order"
-                        disabled={!!refreshingMap[order._id]}
-                      >
-                        {refreshingMap[order._id] ? (
-                          <span className="text-xs text-gray-600">Refreshing…</span>
-                        ) : (
-                          <span className="text-xs text-gray-700">Refresh</span>
-                        )}
-                      </button>
                     </div>
                   </div>
 
@@ -1382,7 +1395,6 @@ if (it.unit === "ml") {
     </div>
   </div>
 )}
-
 
     </div>
   );
