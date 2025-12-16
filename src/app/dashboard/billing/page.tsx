@@ -81,6 +81,9 @@ export default function BillingPage() {
   const [productSuggestionIndex, setProductSuggestionIndex] = useState<number[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
+  // Product suggestion dropdown (UI based)
+  const [activeProductRow, setActiveProductRow] = useState<number | null>(null);
+
   // seller + bank
   const [seller, setSeller] = useState<SellerDetails | null>(null);
   const [bank, setBank] = useState<BankDetails | null>(null);
@@ -147,24 +150,23 @@ export default function BillingPage() {
     const year = now.getFullYear();
     const key = `serial-${month}-${year}`;
     const shouldReset =
-  localStorage.getItem("reset-billing-serial") === "1";
+      localStorage.getItem("reset-billing-serial") === "1";
 
-let last = shouldReset ? 0 : Number(localStorage.getItem(key) || "0");
+    let last = shouldReset ? 0 : Number(localStorage.getItem(key) || "0");
 
-last = last + 1;
-if (last > 9999) last = 1;
+    last = last + 1;
+    if (last > 9999) last = 1;
 
-const padded = String(last).padStart(4, "0");
-localStorage.setItem(key, padded);
+    const padded = String(last).padStart(4, "0");
+    localStorage.setItem(key, padded);
 
-// 🔁 clear reset flag AFTER use
-if (shouldReset) {
-  localStorage.removeItem("reset-billing-serial");
-  sessionStorage.removeItem("billing-serial");
-}
+    // 🔁 clear reset flag AFTER use
+    if (shouldReset) {
+      localStorage.removeItem("reset-billing-serial");
+      sessionStorage.removeItem("billing-serial");
+    }
 
-return `${month}${padded}`;
-
+    return `${month}${padded}`;
   };
 
   const updateDateToToday = () => {
@@ -202,6 +204,16 @@ return `${month}${padded}`;
   const focusProduct = (index: number) => {
     const el = productRefs.current[index];
     if (el) el.focus();
+  };
+
+  // Product suggestion helper
+  const getFilteredProducts = (query: string) => {
+    if (!query.trim()) return [];
+    return products
+      .filter((p) =>
+        p.name.toLowerCase().includes(query.toLowerCase())
+      )
+      .slice(0, 8); // 🔒 limit suggestions (professional)
   };
 
   // ===== Load Data =====
@@ -275,19 +287,19 @@ return `${month}${padded}`;
     // --- Set Serial & Date (persist per tab using sessionStorage) ---
     try {
       const resetRequested =
-  localStorage.getItem("reset-billing-serial") === "1";
+        localStorage.getItem("reset-billing-serial") === "1";
 
-if (!resetRequested) {
-  const existingSerial = sessionStorage.getItem("billing-serial");
-  if (existingSerial) {
-    setSerialNo(existingSerial);
-    return;
-  }
-}
+      if (!resetRequested) {
+        const existingSerial = sessionStorage.getItem("billing-serial");
+        if (existingSerial) {
+          setSerialNo(existingSerial);
+          return;
+        }
+      }
 
-const newSerial = generateSerial();
-setSerialNo(newSerial);
-sessionStorage.setItem("billing-serial", newSerial);
+      const newSerial = generateSerial();
+      setSerialNo(newSerial);
+      sessionStorage.setItem("billing-serial", newSerial);
 
     } catch {
       const newSerial = generateSerial();
@@ -528,7 +540,7 @@ sessionStorage.setItem("billing-serial", newSerial);
       const empty = prev.filter(
         (it) => !it.productName || it.quantity <= 0
       );
-  
+
       /**
        * 🔑 GROUP BY PRODUCT.unit ONLY
        * - unit is already copied from Product schema at selection time
@@ -537,13 +549,13 @@ sessionStorage.setItem("billing-serial", newSerial);
       const grouped = filled.reduce((acc, it) => {
         const unitKey = it.unit?.toLowerCase();
         if (!unitKey) return acc;
-  
+
         if (!acc[unitKey]) acc[unitKey] = [];
         acc[unitKey].push(it);
-  
+
         return acc;
       }, {} as Record<string, BillItem[]>);
-  
+
       /**
        * Optional but consistent ordering of unit groups
        * (business-friendly, not required for correctness)
@@ -556,11 +568,11 @@ sessionStorage.setItem("billing-serial", newSerial);
         "ml",
         "piece",
       ];
-  
+
       const orderedUnits = Object.keys(grouped).sort(
         (a, b) => unitPriority.indexOf(a) - unitPriority.indexOf(b)
       );
-  
+
       /**
        * 🔽 SORT INSIDE EACH UNIT GROUP BY BILL QUANTITY
        * Using quantity entered by user in bill
@@ -570,11 +582,10 @@ sessionStorage.setItem("billing-serial", newSerial);
           (a, b) => b.quantity - a.quantity // High → Low (more practical)
         )
       );
-  
+
       return [...sortedFilled, ...empty];
     });
   };
-  
 
   // ===== Helper: basic validation before we open dialog / save =====
   const validateBeforeSave = () => {
@@ -1393,10 +1404,8 @@ sessionStorage.setItem("billing-serial", newSerial);
                       </td>
 
                       {/* PRODUCT INPUT */}
-                      <td className="border px-2 py-1 align-top">
+                      <td className="border px-2 py-1 align-top relative">
                         <input
-                          suppressHydrationWarning
-                          list="product-suggestions"
                           value={it.productName}
                           disabled={!editable}
                           ref={(el) => {
@@ -1404,41 +1413,36 @@ sessionStorage.setItem("billing-serial", newSerial);
                           }}
                           onChange={(e) => {
                             const value = e.target.value;
-                            updateItem(idx, {
-                              productName: value,
+                            updateItem(idx, { productName: value });
+                            setActiveProductRow(idx);
+                            setProductSuggestionIndex((prev) => {
+                              const copy = [...prev];
+                              copy[idx] = 0;
+                              return copy;
                             });
-
-                            // ✅ As soon as a real product is selected/typed, jump to quantity
-                            if (editable) {
-                              const m = findProductByName(value);
-                              if (m) {
-                                setTimeout(() => {
-                                  focusQuantity(idx);
-                                }, 0);
-                              }
+                          }}
+                          onFocus={() => {
+                            if (!canEditRow(idx)) {
+                              toast.error("Please complete previous product line first");
+                              focusProduct(firstIncompleteRow());
+                              return;
                             }
+                            setActiveProductRow(idx);
+                          }}
+                          onBlur={() => {
+                            setTimeout(() => setActiveProductRow(null), 150);
                           }}
                           onKeyDown={(e) => {
                             if (!editable) return;
 
-                            if (!it.productName.trim()) return;
-
-                            const matches = products.filter((p) =>
-                              p.name
-                                .toLowerCase()
-                                .startsWith(it.productName.toLowerCase())
-                            );
-
+                            const matches = getFilteredProducts(it.productName);
                             if (!matches.length) return;
 
                             if (e.key === "ArrowDown") {
                               e.preventDefault();
                               setProductSuggestionIndex((prev) => {
                                 const copy = [...prev];
-                                copy[idx] = Math.min(
-                                  (copy[idx] || 0) + 1,
-                                  matches.length - 1
-                                );
+                                copy[idx] = Math.min((copy[idx] || 0) + 1, matches.length - 1);
                                 return copy;
                               });
                             }
@@ -1447,10 +1451,7 @@ sessionStorage.setItem("billing-serial", newSerial);
                               e.preventDefault();
                               setProductSuggestionIndex((prev) => {
                                 const copy = [...prev];
-                                copy[idx] = Math.max(
-                                  (copy[idx] || 0) - 1,
-                                  0
-                                );
+                                copy[idx] = Math.max((copy[idx] || 0) - 1, 0);
                                 return copy;
                               });
                             }
@@ -1460,14 +1461,9 @@ sessionStorage.setItem("billing-serial", newSerial);
                               const selected = matches[productSuggestionIndex[idx] || 0];
                               if (selected) {
                                 updateItem(idx, { productName: selected.name });
+                                setActiveProductRow(null);
                                 setTimeout(() => focusQuantity(idx), 0);
                               }
-                            }
-                          }}
-                          onFocus={() => {
-                            if (!canEditRow(idx)) {
-                              toast.error("Please complete previous product line first");
-                              focusProduct(firstIncompleteRow());
                             }
                           }}
                           className="w-full border rounded px-2 py-1 text-gray-900 focus:ring-2 focus:ring-blue-500"
@@ -1492,6 +1488,31 @@ sessionStorage.setItem("billing-serial", newSerial);
                               </>
                             )}
                           </div>
+                        )}
+
+                        {activeProductRow === idx &&
+                          it.productName &&
+                          getFilteredProducts(it.productName).length > 0 && (
+                            <div className="absolute z-30 mt-1 w-full bg-white border rounded-md shadow-lg max-h-56 overflow-auto">
+                              {getFilteredProducts(it.productName).map((p, i) => (
+                                <div
+                                  key={p._id}
+                                  onMouseDown={() => {
+                                    updateItem(idx, { productName: p.name });
+                                    setActiveProductRow(null);
+                                    setTimeout(() => focusQuantity(idx), 0);
+                                  }}
+                                  className={`px-3 py-2 cursor-pointer text-sm flex justify-between ${
+                                    (productSuggestionIndex[idx] || 0) === i
+                                      ? "bg-blue-600 text-white"
+                                      : "hover:bg-blue-50"
+                                  }`}
+                                >
+                                  <span>{p.name}</span>
+                                  <span className="text-xs opacity-70">{p.unit}</span>
+                                </div>
+                              ))}
+                            </div>
                         )}
                       </td>
 
@@ -1639,12 +1660,6 @@ sessionStorage.setItem("billing-serial", newSerial);
               <span className="font-semibold">box/boxes</span>. Units like ml /
               litre / piece are not included.
             </p>
-
-            <datalist id="product-suggestions">
-              {products.map((p) => (
-                <option key={p._id} value={p.name} />
-              ))}
-            </datalist>
 
             <div className="mt-3 flex items-center gap-3">
               <button
