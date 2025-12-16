@@ -91,6 +91,20 @@ type RangePreset =
   | "all"
   | "custom";
 
+type LedgerSortMode =
+  | "date-desc"
+  | "date-asc"
+  | "debit-desc"
+  | "credit-desc"
+  | "type";
+
+type CustomerSortMode =
+  | "net-desc"
+  | "net-asc"
+  | "name-asc"
+  | "name-desc"
+  | "sales-desc";
+
 function formatINR(v: number) {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -138,7 +152,14 @@ export default function SalesPage() {
   const [customerLedger, setCustomerLedger] =
     useState<CustomerLedgerResponse | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
-   const handleClearFilters = () => {
+
+  // Sort modes
+  const [ledgerSortMode, setLedgerSortMode] =
+    useState<LedgerSortMode>("date-desc");
+  const [customerSortMode, setCustomerSortMode] =
+    useState<CustomerSortMode>("net-desc");
+
+  const handleClearFilters = () => {
     setRangePreset("all");  // go back to default preset
     setFrom("");            // clear date inputs
     setTo("");              // clear date inputs
@@ -276,7 +297,7 @@ export default function SalesPage() {
         return res.json();
       })
       .then((data: any[]) => {
-        const mapped: CustomerItem[] = data.map((c) => ({
+        const mapped: CustomerItem[] = data.map((c: any) => ({
           _id: String(c._id),
           name: c.name,
           shopName: c.shopName,
@@ -294,7 +315,7 @@ export default function SalesPage() {
       })
       .finally(() => setCustomersLoading(false));
     // 🔧 only depend on userId so we don't reset selection repeatedly
-  }, [userId]); 
+  }, [userId]);
 
   // Fetch customer ledger whenever selection / range changes
   useEffect(() => {
@@ -326,11 +347,54 @@ export default function SalesPage() {
       .finally(() => setLedgerLoading(false));
   }, [userId, selectedCustomerId, from, to]);
 
+  // Sorted ledger
+  const sortedLedger = useMemo(() => {
+    if (!customerLedger) return [];
+
+    const list = [...customerLedger.ledger];
+
+    return list.sort((a, b) => {
+      switch (ledgerSortMode) {
+        case "date-asc":
+          return new Date(a.at).getTime() - new Date(b.at).getTime();
+        case "date-desc":
+          return new Date(b.at).getTime() - new Date(a.at).getTime();
+        case "debit-desc":
+          return (b.debit || 0) - (a.debit || 0);
+        case "credit-desc":
+          return (b.credit || 0) - (a.credit || 0);
+        case "type":
+          return a.type.localeCompare(b.type);
+        default:
+          return 0;
+      }
+    });
+  }, [customerLedger, ledgerSortMode]);
+
+  // Sorted customers
   const sortedCustomers = useMemo(() => {
-    return [...customers].sort(
-      (a, b) => b.debit - b.credit - (a.debit - a.credit)
-    );
-  }, [customers]);
+    const list = [...customers];
+
+    return list.sort((a, b) => {
+      const netA = a.debit - a.credit;
+      const netB = b.debit - b.credit;
+
+      switch (customerSortMode) {
+        case "net-asc":
+          return netA - netB;
+        case "net-desc":
+          return netB - netA;
+        case "name-asc":
+          return a.name.localeCompare(b.name);
+        case "name-desc":
+          return b.name.localeCompare(a.name);
+        case "sales-desc":
+          return b.totalSales - a.totalSales;
+        default:
+          return 0;
+      }
+    });
+  }, [customers, customerSortMode]);
 
   const presetButtons: { key: RangePreset; label: string }[] = [
     { key: "today", label: "Today" },
@@ -382,7 +446,7 @@ export default function SalesPage() {
                 </button>
               ))}
             </div>
-                        <div className="flex gap-2 w-full sm:w-auto items-center">
+            <div className="flex gap-2 w-full sm:w-auto items-center">
               <input
                 type="date"
                 value={from}
@@ -409,9 +473,6 @@ export default function SalesPage() {
                 Clear
               </button>
             </div>
-
-
-
           </div>
         </section>
 
@@ -635,6 +696,21 @@ export default function SalesPage() {
               <Users className="w-4 h-4 text-blue-500" />
               Customers (Khata)
             </h2>
+            <div className="flex justify-end mb-2">
+              <select
+                value={customerSortMode}
+                onChange={(e) =>
+                  setCustomerSortMode(e.target.value as CustomerSortMode)
+                }
+                className="border border-gray-300 rounded-md px-2 py-1 text-xs text-gray-700 bg-white"
+              >
+                <option value="net-desc">Outstanding: High → Low</option>
+                <option value="net-asc">Outstanding: Low → High</option>
+                <option value="name-asc">Name: A → Z</option>
+                <option value="name-desc">Name: Z → A</option>
+                <option value="sales-desc">Total Sales: High → Low</option>
+              </select>
+            </div>
             <div className="border rounded-lg overflow-hidden max-h-80 flex flex-col">
               <div className="flex-1 overflow-auto text-xs">
                 {customersLoading && (
@@ -738,6 +814,21 @@ export default function SalesPage() {
                   </div>
                 </div>
 
+                {/* Sort dropdown */}
+                <div className="flex justify-end mb-2">
+                  <select
+                    value={ledgerSortMode}
+                    onChange={(e) => setLedgerSortMode(e.target.value as LedgerSortMode)}
+                    className="border border-gray-300 rounded-md px-2 py-1 text-xs text-gray-700 bg-white"
+                  >
+                    <option value="date-desc">Date: Latest first</option>
+                    <option value="date-asc">Date: Oldest first</option>
+                    <option value="debit-desc">Debit: High → Low</option>
+                    <option value="credit-desc">Credit: High → Low</option>
+                    <option value="type">Type</option>
+                  </select>
+                </div>
+
                 {/* Ledger table */}
                 <div className="overflow-auto max-h-80 text-xs border rounded-lg">
                   <table className="min-w-full text-left">
@@ -764,7 +855,7 @@ export default function SalesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {customerLedger.ledger.length === 0 && (
+                      {sortedLedger.length === 0 && (
                         <tr>
                           <td
                             colSpan={6}
@@ -774,7 +865,7 @@ export default function SalesPage() {
                           </td>
                         </tr>
                       )}
-                      {customerLedger.ledger.map((e) => (
+                      {sortedLedger.map((e) => (
                         <tr key={e.id} className="border-t text-gray-700">
                           <td className="px-3 py-2 whitespace-nowrap">
                             {formatDate(e.at)}
