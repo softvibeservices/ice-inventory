@@ -1,11 +1,8 @@
 // icecream-inventory\src\app\dashboard\stocks\restock\page.tsx
 
-
-// icecream-inventory\src\app\dashboard\stocks\restock\page.tsx
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import { useRouter } from "next/navigation";
@@ -20,15 +17,20 @@ interface Product {
   quantity: number;
 }
 
+type SortType = "name-asc" | "name-desc" | "category";
+
 export default function RestockPage() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // 🔍 Search & Sort
+  const [search, setSearch] = useState("");
+  const [sortType, setSortType] = useState<SortType>("name-asc");
+
   // Stores quantity changes
   const [restockValues, setRestockValues] = useState<Record<string, number>>({});
-  // ✅ Single note for all items
   const [globalNote, setGlobalNote] = useState("Restocking");
 
   useEffect(() => {
@@ -62,9 +64,40 @@ export default function RestockPage() {
 
   const handleQuantityChange = (id: string, value: string) => {
     const num = Number(value);
-    if (isNaN(num)) return; // allow negative too
+    if (isNaN(num)) return;
     setRestockValues((prev) => ({ ...prev, [id]: num }));
   };
+
+  // ✅ SEARCH + SORT (NO mutation of original data)
+  const filteredProducts = useMemo(() => {
+    let list = [...products];
+
+    // 🔍 Search by name or category
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.category || "").toLowerCase().includes(q)
+      );
+    }
+
+    // 🔃 Sorting
+    if (sortType === "name-asc") {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortType === "name-desc") {
+      list.sort((a, b) => b.name.localeCompare(a.name));
+    } else if (sortType === "category") {
+      list.sort((a, b) => {
+        const ca = (a.category || "").toLowerCase();
+        const cb = (b.category || "").toLowerCase();
+        if (ca === cb) return a.name.localeCompare(b.name);
+        return ca.localeCompare(cb);
+      });
+    }
+
+    return list;
+  }, [products, search, sortType]);
 
   const handleSave = async () => {
     if (!userId) return;
@@ -85,14 +118,12 @@ export default function RestockPage() {
 
         const newQty = product.quantity + qty;
 
-        // Update product stock
         await fetch("/api/products", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id, userId, quantity: newQty }),
         });
 
-        // ✅ Apply same globalNote to all
         restockedItems.push({
           productId: product._id,
           name: product.name,
@@ -103,7 +134,6 @@ export default function RestockPage() {
         });
       }
 
-      // Save to history
       await fetch("/api/restockHistory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -146,15 +176,37 @@ export default function RestockPage() {
           </button>
         </div>
 
-        {/* ✅ Single Note Input */}
+        {/* 🔍 Search & Sort */}
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by product or category"
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-600"
+          />
+
+          <select
+            value={sortType}
+            onChange={(e) => setSortType(e.target.value as SortType)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-gray-600"
+          >
+            <option value="name-asc">Name (A–Z)</option>
+            <option value="name-desc">Name (Z–A)</option>
+            <option value="category">Category (Grouped)</option>
+          </select>
+        </div>
+
+        {/* Note */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700">Restock Reason / Note</label>
+          <label className="block text-sm font-medium text-gray-700">
+            Restock Reason / Note
+          </label>
           <input
             type="text"
             value={globalNote}
             onChange={(e) => setGlobalNote(e.target.value)}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
-            placeholder="e.g. New stock arrival, adjustment, etc."
+            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-600"
           />
         </div>
 
@@ -171,15 +223,22 @@ export default function RestockPage() {
             <tbody className="text-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-6 text-gray-600">Loading...</td>
+                  <td colSpan={4} className="text-center py-6 text-gray-600">
+                    Loading...
+                  </td>
                 </tr>
-              ) : products.length === 0 ? (
+              ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-6 text-gray-500">No products found</td>
+                  <td colSpan={4} className="text-center py-6 text-gray-500">
+                    No products found
+                  </td>
                 </tr>
               ) : (
-                products.map((p, i) => (
-                  <tr key={p._id} className={`${i % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-green-50`}>
+                filteredProducts.map((p, i) => (
+                  <tr
+                    key={p._id}
+                    className={`${i % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-green-50`}
+                  >
                     <td className="px-6 py-4 font-medium">{p.name}</td>
                     <td className="px-6 py-4">{p.category || "-"}</td>
                     <td className="px-6 py-4">
