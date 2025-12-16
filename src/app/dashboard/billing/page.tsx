@@ -1,4 +1,3 @@
-// src/app/dashboard/billing/page.tsx
 "use client";
 import { useEffect, useState, useRef } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
@@ -23,19 +22,14 @@ type Product = {
   unit?: string;
   sellingPrice?: number;
   price?: number;
-
-  // OPTIONAL inventory fields (whichever your API sends)
   currentStock?: number;
   stock?: number;
   stockQty?: number;
   availableQty?: number;
   quantityInStock?: number;
-
-  // actual DB quantity field
   quantity?: number;
-
   packQuantity?: number;
-  packUnit?: string; // e.g. "1L", "90ml", "500g"
+  packUnit?: string;
 };
 
 type SellerDetails = {
@@ -48,7 +42,6 @@ type SellerDetails = {
   logoUrl?: string;
   qrCodeUrl?: string;
   signatureUrl?: string;
-
   bankName?: string;
   branchName?: string;
   accountNumber?: string;
@@ -83,6 +76,11 @@ type QuantitySummary = {
 };
 
 export default function BillingPage() {
+  // suggestion control
+  const [customerSuggestionIndex, setCustomerSuggestionIndex] = useState(0);
+  const [productSuggestionIndex, setProductSuggestionIndex] = useState<number[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
   // seller + bank
   const [seller, setSeller] = useState<SellerDetails | null>(null);
   const [bank, setBank] = useState<BankDetails | null>(null);
@@ -96,9 +94,7 @@ export default function BillingPage() {
 
   // billing/shipping customer selection
   const [billingCustomer, setBillingCustomer] = useState<Customer | null>(null);
-  const [shippingCustomer, setShippingCustomer] = useState<Customer | null>(
-    null
-  );
+  const [shippingCustomer, setShippingCustomer] = useState<Customer | null>(null);
   const [sameAsBilling, setSameAsBilling] = useState(false);
   const [customerInput, setCustomerInput] = useState<string>("");
 
@@ -160,10 +156,7 @@ export default function BillingPage() {
 
   const updateDateToToday = () => {
     const now = new Date();
-    const formatted = `${String(now.getDate()).padStart(
-      2,
-      "0"
-    )}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+    const formatted = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
     setDate(formatted);
   };
 
@@ -176,7 +169,6 @@ export default function BillingPage() {
     setItems(Array.from({ length: 15 }, blankItem));
     setDiscountPercent(0);
     setRemarks("");
-
     const newSerial = generateSerial();
     setSerialNo(newSerial);
     updateDateToToday();
@@ -365,7 +357,7 @@ export default function BillingPage() {
       anyP.stockQty ??
       anyP.availableQty ??
       anyP.quantityInStock ??
-      anyP.quantity; // ✅ include actual DB quantity
+      anyP.quantity;
     return typeof stock === "number" && !isNaN(stock) ? stock : undefined;
   };
 
@@ -465,13 +457,21 @@ export default function BillingPage() {
   const discounted = subTotal - (subTotal * (discountPercent || 0)) / 100;
 
   // For line-wise product entry: determine first empty row
-  const firstEmptyIndex = items.findIndex(
-    (it) => !it.productName || !it.productName.trim()
-  );
-  const isRowEditable = (idx: number) =>
-    firstEmptyIndex === -1 || idx <= firstEmptyIndex;
+  const firstIncompleteRow = () =>
+    items.findIndex((it) => !it.productName || it.quantity <= 0);
+
+  const canEditRow = (idx: number) => {
+    const first = firstIncompleteRow();
+    return first === -1 || idx <= first;
+  };
 
   // customer suggestion handlers (use SHOP NAME for search & suggestions)
+  const filteredCustomers = customers.filter((c) =>
+    (c.shopName || c.name || "")
+      .toLowerCase()
+      .includes(customerInput.toLowerCase())
+  );
+
   const onCustomerInputChange = (val: string) => {
     setCustomerInput(val);
     const cleaned = val.trim().toLowerCase();
@@ -497,6 +497,36 @@ export default function BillingPage() {
     } else {
       setBillingCustomer(null);
     }
+  };
+
+  const sortByUnitGroup = () => {
+    setItems((prev) => {
+      const filled = prev.filter((it) => it.productName);
+      const empty = prev.filter((it) => !it.productName);
+
+      // group strictly by PRODUCT.unit (from schema)
+      const grouped = filled.reduce((acc, it) => {
+        const key = (it.unit || "").toLowerCase();
+        if (!key) return acc;
+        acc[key] = acc[key] || [];
+        acc[key].push(it);
+        return acc;
+      }, {} as Record<string, BillItem[]>);
+
+      // preferred unit order (business-friendly)
+      const unitOrder = ["box", "litre", "kg", "gm", "ml", "piece"];
+
+      const sortedUnits = Object.keys(grouped).sort(
+        (a, b) => unitOrder.indexOf(a) - unitOrder.indexOf(b)
+      );
+
+      // sort BY QUANTITY inside each unit group
+      const sorted = sortedUnits.flatMap((unit) =>
+        grouped[unit].sort((a, b) => a.quantity - b.quantity)
+      );
+
+      return [...sorted, ...empty];
+    });
   };
 
   // ===== Helper: basic validation before we open dialog / save =====
@@ -636,15 +666,12 @@ export default function BillingPage() {
       toast.success(
         "Bill saved, stock updated & customer debit adjusted successfully."
       );
+
+      // ✅ AUTO EXPORT
+      await exportPDF();
+
       setShowConfirm(false);
-
-      // ✅ Clear everything and increment serial number
       resetBillForm();
-
-      // 🔄 Refresh page to fetch updated product quantities
-      if (typeof window !== "undefined") {
-        window.location.reload();
-      }
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Failed to save bill.");
@@ -1122,6 +1149,31 @@ export default function BillingPage() {
                   list="customer-suggestions"
                   value={customerInput}
                   onChange={(e) => onCustomerInputChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (!filteredCustomers.length) return;
+
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setCustomerSuggestionIndex((i) =>
+                        Math.min(i + 1, filteredCustomers.length - 1)
+                      );
+                    }
+
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setCustomerSuggestionIndex((i) => Math.max(i - 1, 0));
+                    }
+
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const selected = filteredCustomers[customerSuggestionIndex];
+                      if (selected) {
+                        setBillingCustomer(selected);
+                        setCustomerInput(selected.shopName || selected.name || "");
+                        focusProduct(0);
+                      }
+                    }
+                  }}
                   placeholder="Type or pick a shop name..."
                   className="w-full border p-2 rounded text-gray-900"
                 />
@@ -1265,15 +1317,32 @@ export default function BillingPage() {
                 {items.map((it, idx) => {
                   const matched = findProductByName(it.productName);
                   const stock = getProductStock(matched);
-                  const editable = isRowEditable(idx);
+                  const editable = canEditRow(idx);
 
                   return (
                     <tr
                       key={idx}
                       className="text-sm even:bg-white odd:bg-gray-50"
                     >
-                      <td className="border px-2 py-1 text-center align-middle">
-                        {idx + 1}
+                      <td
+                        draggable={!!it.productName && it.quantity > 0}
+                        onDragStart={() => setDragIndex(idx)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (dragIndex === null || dragIndex === idx) return;
+
+                          setItems((prev) => {
+                            const copy = [...prev];
+                            const [moved] = copy.splice(dragIndex, 1);
+                            copy.splice(idx, 0, moved);
+                            return copy;
+                          });
+
+                          setDragIndex(null);
+                        }}
+                        className="cursor-grab border px-2 py-1 text-center align-middle"
+                      >
+                        ≡ {idx + 1}
                       </td>
 
                       {/* PRODUCT INPUT */}
@@ -1304,19 +1373,64 @@ export default function BillingPage() {
                           }}
                           onKeyDown={(e) => {
                             if (!editable) return;
+
+                            if (!it.productName.trim()) return;
+
+                            const matches = products.filter((p) =>
+                              p.name
+                                .toLowerCase()
+                                .startsWith(it.productName.toLowerCase())
+                            );
+
+                            if (!matches.length) return;
+
+                            if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              setProductSuggestionIndex((prev) => {
+                                const copy = [...prev];
+                                copy[idx] = Math.min(
+                                  (copy[idx] || 0) + 1,
+                                  matches.length - 1
+                                );
+                                return copy;
+                              });
+                            }
+
+                            if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              setProductSuggestionIndex((prev) => {
+                                const copy = [...prev];
+                                copy[idx] = Math.max(
+                                  (copy[idx] || 0) - 1,
+                                  0
+                                );
+                                return copy;
+                              });
+                            }
+
                             if (e.key === "Enter") {
-                              const value = (
-                                e.target as HTMLInputElement
-                              ).value.trim();
-                              if (value) {
-                                e.preventDefault();
-                                focusQuantity(idx);
+                              e.preventDefault();
+                              const selected = matches[productSuggestionIndex[idx] || 0];
+                              if (selected) {
+                                updateItem(idx, { productName: selected.name });
+                                setTimeout(() => focusQuantity(idx), 0);
                               }
                             }
                           }}
-                          className="w-full border rounded px-2 py-1 text-gray-900"
+                          onFocus={() => {
+                            if (!canEditRow(idx)) {
+                              toast.error("Please complete previous product line first");
+                              focusProduct(firstIncompleteRow());
+                            }
+                          }}
+                          className="w-full border rounded px-2 py-1 text-gray-900 focus:ring-2 focus:ring-blue-500"
                           placeholder="Start typing product..."
                         />
+                        {it.productName && (
+                          <div className="text-[10px] text-gray-400 mt-0.5">
+                            Start typing product name to see suggestions
+                          </div>
+                        )}
                         {matched && typeof stock === "number" && (
                           <div className="mt-1 text-[10px] text-gray-500">
                             In stock:{" "}
@@ -1325,12 +1439,13 @@ export default function BillingPage() {
                               <>
                                 {" "}
                                 | Pack:{" "}
-                                <span className="font-semibold">{matched.packUnit}</span>
+                                <span className="font-semibold">
+                                  {matched.packUnit}
+                                </span>
                               </>
                             )}
                           </div>
                         )}
-
                       </td>
 
                       {/* QUANTITY INPUT */}
@@ -1354,8 +1469,7 @@ export default function BillingPage() {
                             onFocus={(e) => {
                               if (
                                 editable &&
-                                (!it.productName ||
-                                  !it.productName.trim())
+                                (!it.productName || !it.productName.trim())
                               ) {
                                 // force product first
                                 e.target.blur();
@@ -1368,6 +1482,13 @@ export default function BillingPage() {
                             onKeyDown={(e) => {
                               if (!editable) return;
                               // move to next product when Tab in quantity
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const nextIndex = idx + 1;
+                                if (nextIndex < items.length) {
+                                  focusProduct(nextIndex);
+                                }
+                              }
                               if (e.key === "Tab" && !e.shiftKey) {
                                 e.preventDefault();
                                 const nextIndex = idx + 1;
@@ -1387,12 +1508,13 @@ export default function BillingPage() {
                                 <>
                                   {" "}
                                   | Pack:{" "}
-                                  <span className="font-semibold">{matched.packUnit}</span>
+                                  <span className="font-semibold">
+                                    {matched.packUnit}
+                                  </span>
                                 </>
                               )}
                             </span>
                           )}
-
                         </div>
                       </td>
 
@@ -1444,9 +1566,7 @@ export default function BillingPage() {
                           type="checkbox"
                           disabled={!editable}
                           checked={it.free}
-                          onChange={(e) =>
-                            toggleFree(idx, e.target.checked)
-                          }
+                          onChange={(e) => toggleFree(idx, e.target.checked)}
                         />
                       </td>
                     </tr>
@@ -1485,6 +1605,12 @@ export default function BillingPage() {
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
                 + Add Line
+              </button>
+              <button
+                onClick={sortByUnitGroup}
+                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+              >
+                Sort by Unit
               </button>
               <p className="text-xs text-gray-500">
                 Selecting a suggested product will auto-fill price/unit (you can
