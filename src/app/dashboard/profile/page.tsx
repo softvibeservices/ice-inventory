@@ -1,4 +1,3 @@
-// src/app/dashboard/profile/page.tsx
 "use client";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -6,10 +5,10 @@ import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
 import { User, Lock, LogOut, FileText, Edit3, Check } from "lucide-react";
-// import the delivery partners component
 import DeliveryPartnersTable from "@/app/dashboard/profile/delivery-partners/page";
+import ManagerComponent from "@/app/dashboard/profile/ManagerComponent";
 
-type ActiveTab = "basic" | "password" | "billing" | "bank" | "logout" | "delivery";
+type ActiveTab = "basic" | "password" | "billing" | "bank" | "logout" | "delivery" | "managers";
 
 type SellerDetails = {
   _id?: string;
@@ -38,22 +37,16 @@ type BankDetails = {
 
 export default function ProfilePage() {
   const router = useRouter();
-
-  // user/profile
   const [user, setUser] = useState<any>(null);
   const [originalUser, setOriginalUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("basic");
-
-  // password + otp
   const [passwordForm, setPasswordForm] = useState({
     oldPassword: "",
     newPassword: "",
     otp: "",
   });
   const [otpSent, setOtpSent] = useState(false);
-
-  // billing / seller details
   const emptyBill: SellerDetails = {
     sellerName: "",
     gstNumber: "",
@@ -74,8 +67,6 @@ export default function ProfilePage() {
   const [billSaved, setBillSaved] = useState<boolean>(false);
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
   const [isBillDirty, setIsBillDirty] = useState<boolean>(false);
-
-  // bank details
   const emptyBank: BankDetails = {
     bankName: "",
     ifscCode: "",
@@ -89,8 +80,6 @@ export default function ProfilePage() {
   const [bankEditMode, setBankEditMode] = useState(true);
   const [bankLoading, setBankLoading] = useState(false);
   const [isBankDirty, setIsBankDirty] = useState(false);
-
-  // Serial reset confirmation
   const [showResetSerialConfirm, setShowResetSerialConfirm] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState("");
 
@@ -106,12 +95,10 @@ export default function ProfilePage() {
   // ===== Fetch logged user profile =====
   useEffect(() => {
     const stored = localStorage.getItem("user");
-
     if (!stored) {
       router.push("/login");
       return;
     }
-
     let parsed: any = null;
     try {
       parsed = JSON.parse(stored);
@@ -121,21 +108,18 @@ export default function ProfilePage() {
       router.push("/login");
       return;
     }
-
     if (!parsed?._id) {
       localStorage.removeItem("user");
       localStorage.removeItem("rememberMe");
       router.push("/login");
       return;
     }
-
     const loadProfile = async () => {
       try {
         const res = await fetch(
           `/api/profile?userId=${encodeURIComponent(parsed._id)}`
         );
         const data = await res.json().catch(() => null);
-
         if (!res.ok || !data || data.error) {
           toast.error(data?.error || "Failed to load profile ❌");
           localStorage.removeItem("user");
@@ -143,7 +127,6 @@ export default function ProfilePage() {
           router.push("/login");
           return;
         }
-
         setUser(data);
         setOriginalUser(data);
       } catch {
@@ -153,7 +136,6 @@ export default function ProfilePage() {
         router.push("/login");
       }
     };
-
     loadProfile();
   }, [router]);
 
@@ -283,13 +265,10 @@ export default function ProfilePage() {
       toast.error("User not loaded");
       return;
     }
-
     if (!passwordForm.oldPassword || !passwordForm.newPassword) {
       toast.error("Please fill old and new password");
       return;
     }
-
-    // STEP 1: Send OTP
     if (!otpSent) {
       setLoading(true);
       try {
@@ -304,15 +283,12 @@ export default function ProfilePage() {
             }),
           }
         );
-
         const data = await res.json();
         setLoading(false);
-
         if (!res.ok) {
           toast.error(data.error || "Failed to send OTP ❌");
           return;
         }
-
         setOtpSent(true);
         toast.success(
           "OTP sent to your registered email. Please check your inbox 📧"
@@ -323,13 +299,10 @@ export default function ProfilePage() {
       }
       return;
     }
-
-    // STEP 2: Verify OTP and change password
     if (!passwordForm.otp) {
       toast.error("Please enter the OTP sent to your email");
       return;
     }
-
     setLoading(true);
     try {
       const res = await fetch("/api/profile/change-password/verify", {
@@ -341,15 +314,12 @@ export default function ProfilePage() {
           otp: passwordForm.otp,
         }),
       });
-
       const data = await res.json();
       setLoading(false);
-
       if (!res.ok) {
         toast.error(data.error || "Failed to change password ❌");
         return;
       }
-
       toast.success("Password changed successfully 🔑");
       setPasswordForm({ oldPassword: "", newPassword: "", otp: "" });
       setOtpSent(false);
@@ -607,8 +577,6 @@ export default function ProfilePage() {
           >
             🏦 Bank Details
           </button>
-
-          {/* NEW: Delivery Partners */}
           <button
             onClick={() => setActiveTab("delivery")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
@@ -619,7 +587,16 @@ export default function ProfilePage() {
           >
             🚚 Delivery Partners
           </button>
-
+          <button
+            onClick={() => setActiveTab("managers")}
+            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
+              activeTab === "managers"
+                ? "bg-orange-600 text-white"
+                : "hover:bg-gray-100 text-gray-700"
+            }`}
+          >
+            👤 Managers
+          </button>
           <button
             onClick={() => setActiveTab("password")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
@@ -630,8 +607,6 @@ export default function ProfilePage() {
           >
             <Lock size={18} /> Change Password
           </button>
-
-          {/* NEW: Reset Serial Number */}
           <button
             onClick={() => {
               setResetConfirmText("");
@@ -641,7 +616,6 @@ export default function ProfilePage() {
           >
             🔁 Reset Bill Serial Number
           </button>
-
           <button
             onClick={() => setActiveTab("logout")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium ${
@@ -1145,12 +1119,15 @@ export default function ProfilePage() {
                 <h2 className="text-xl font-semibold text-gray-800">🚚 Delivery Partners</h2>
                 <div className="text-sm text-gray-500">Manage delivery partners linked to your account</div>
               </div>
-
               <div>
-                {/* Pass userId so the delivery table can fetch the list */}
                 <DeliveryPartnersTable userId={user._id} />
               </div>
             </div>
+          )}
+
+          {/* MANAGERS */}
+          {activeTab === "managers" && (
+            <ManagerComponent adminId={user._id} />
           )}
 
           {/* PASSWORD */}
@@ -1159,7 +1136,6 @@ export default function ProfilePage() {
               <h2 className="text-xl font-semibold flex items-center gap-2 text-gray-800">
                 <Lock className="w-5 h-5" /> Change Password
               </h2>
-
               <div className="grid md:grid-cols-2 gap-4">
                 <label className="text-sm text-gray-600">
                   Old Password
@@ -1191,8 +1167,6 @@ export default function ProfilePage() {
                     placeholder="New Password"
                   />
                 </label>
-
-                {/* OTP field appears only after OTP is sent */}
                 {otpSent && (
                   <label className="text-sm text-gray-600 md:col-span-2">
                     OTP (sent to your registered email)
@@ -1211,7 +1185,6 @@ export default function ProfilePage() {
                   </label>
                 )}
               </div>
-
               <div className="space-y-1">
                 <button
                   onClick={changePassword}
@@ -1258,7 +1231,6 @@ export default function ProfilePage() {
             <h2 className="text-lg font-semibold text-gray-900 mb-2">
               Reset Bill Serial Number
             </h2>
-
             <p className="text-sm text-gray-700 mb-3">
               This will <strong>completely reset</strong> the bill serial number.
               The next bill will start from <strong>1</strong>.
@@ -1266,7 +1238,6 @@ export default function ProfilePage() {
               <br />
               To confirm, type <strong>CONFIRM</strong> below and press Enter.
             </p>
-
             <input
               autoFocus
               value={resetConfirmText}
@@ -1282,7 +1253,6 @@ export default function ProfilePage() {
               placeholder="Type CONFIRM"
               className="w-full border rounded-lg p-2 text-gray-900 mb-4"
             />
-
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setShowResetSerialConfirm(false)}
@@ -1290,7 +1260,6 @@ export default function ProfilePage() {
               >
                 Cancel
               </button>
-
               <button
                 disabled={resetConfirmText !== "CONFIRM"}
                 onClick={() => {

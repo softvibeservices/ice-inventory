@@ -1,8 +1,7 @@
-// icecream-inventory\src\app\layout.tsx
-
-
+// icecream-inventory/src/app/layout.tsx
 
 import "./globals.css";
+import { Toaster } from "react-hot-toast";
 
 export const metadata = {
   title: "IceCream Inventory",
@@ -16,7 +15,19 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 2000,
+            style: {
+              background: "#333",
+              color: "#fff",
+            },
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

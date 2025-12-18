@@ -27,6 +27,7 @@ const UserSchema: Schema = new Schema({
   otp: { type: String, default: null },
   otpExpires: { type: Date, default: null },
   isVerified: { type: Boolean, default: false },
+  role: { type: String, enum: ["admin", "manager"], default: "admin" }
 });
 
 export default mongoose.models.User ||
