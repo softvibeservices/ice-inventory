@@ -1,3 +1,5 @@
+// src\app\dashboard\profile\page.tsx
+
 "use client";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -114,6 +116,11 @@ export default function ProfilePage() {
       router.push("/login");
       return;
     }
+    if (parsed?.role === "manager") {
+      router.push("/dashboard");
+      return;
+    }
+    
     const loadProfile = async () => {
       try {
         const res = await fetch(

@@ -1,7 +1,9 @@
+// src\app\api\sales\customer-ledger\route.ts
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Customer, { ICustomer } from "@/models/Customer";
+import User from "@/models/User"; // 🔒 security import
 
 type LedgerType = "Sale" | "Payment" | "Adjustment";
 
@@ -57,10 +59,22 @@ export async function GET(req: Request) {
       );
     }
 
+    await connectDB();
+
+    // 🔒 SECURITY CHECK — BLOCK MANAGER ACCESS
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    if (user.role === "manager") {
+      return NextResponse.json(
+        { error: "Access denied: Managers are not allowed" },
+        { status: 403 }
+      );
+    }
+
     const from = parseDateParam(fromParam);
     const to = parseDateParam(toParam);
-
-    await connectDB();
 
     const customerDoc = (await Customer.findOne({
       _id: customerId,

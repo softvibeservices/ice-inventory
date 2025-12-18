@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import { Check, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+
 
 type Partner = {
   _id: string;
@@ -19,6 +22,7 @@ type Partner = {
 };
 
 export default function DeliveryRequestsPage() {
+  const router = useRouter();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
@@ -53,6 +57,19 @@ export default function DeliveryRequestsPage() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("user");
+    if (!stored) {
+      router.push("/login");
+      return;
+    }
+    const parsed = JSON.parse(stored || "{}");
+    if (parsed?.role === "manager") {
+      router.push("/dashboard");
+    }
+  }, []);
+  
 
   // load pending partners when admin identity is known
   useEffect(() => {

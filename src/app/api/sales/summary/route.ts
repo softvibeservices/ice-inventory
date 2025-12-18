@@ -1,7 +1,11 @@
+// src\app\api\sales\summary\route.ts
+
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Customer from "@/models/Customer";
+import User from "@/models/User";
+
 
 interface QuantityTotals {
   piece: number;
@@ -61,6 +65,19 @@ export async function GET(req: Request) {
     const userId = searchParams.get("userId");
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
+    
+    // 🚫 Prevent manager access
+const user = await User.findById(userId).select("role");
+if (!user) {
+  return NextResponse.json({ error: "User not found" }, { status: 404 });
+}
+if (user.role === "manager") {
+  return NextResponse.json(
+    { error: "Access denied: Managers not allowed" },
+    { status: 403 }
+  );
+}
+
 
     if (!userId) {
       return NextResponse.json(

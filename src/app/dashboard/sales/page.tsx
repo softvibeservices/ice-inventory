@@ -12,6 +12,9 @@ import {
   Users,
   CalendarRange,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+
 
 type QuantityTotals = {
   piece: number;
@@ -132,6 +135,7 @@ function toDateInputValue(date: Date): string {
 }
 
 export default function SalesPage() {
+  const router = useRouter();  
   const [userId, setUserId] = useState<string | null>(null);
 
   // Range filters
@@ -165,6 +169,19 @@ export default function SalesPage() {
     setTo("");              // clear date inputs
   };
 
+  useEffect(() => {
+   
+    const stored = localStorage.getItem("user");
+    if (!stored) {
+      router.push("/login");
+      return;
+    }
+    const parsed = JSON.parse(stored || "{}");
+    if (parsed?.role === "manager") {
+      router.push("/dashboard");
+    }
+  }, []);
+  
   // Read userId from localStorage (adjust if your app stores it differently)
   useEffect(() => {
     if (typeof window === "undefined") return;

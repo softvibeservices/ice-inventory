@@ -1,5 +1,4 @@
 // icecream-inventory/src/app/login/page.tsx
-
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -15,7 +14,6 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const router = useRouter();
 
-  // ✅ If user already logged in (with rememberMe), redirect
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     const remember = localStorage.getItem("rememberMe");
@@ -39,14 +37,25 @@ export default function LoginPage() {
 
     const data = await res.json();
     if (res.ok) {
-      // ✅ Save user session in localStorage
-      localStorage.setItem("user", JSON.stringify(data.user));
 
-      // ✅ Save rememberMe flag
+      // ⬇ STORE USER WITH SUPPORT FOR MANAGER ADMIN-ID
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          _id: data.user._id,             // admin id for admin OR manager
+          managerId: data.user.managerId || null, 
+          email: data.user.email,
+          name: data.user.name,
+          role: data.user.role,
+        })
+      );
+
+      // ⬇ keep rememberMe working
       localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
 
       toast.success("Login successful! Redirecting...");
       setTimeout(() => router.push("/dashboard"), 2000);
+
     } else {
       toast.error(data.error || "Invalid credentials!");
     }
@@ -58,7 +67,7 @@ export default function LoginPage() {
 
       <main className="flex-grow flex items-center justify-center px-4 py-10">
         <div className="flex w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-fadeIn">
-          {/* Left Side */}
+
           <div className="hidden md:flex flex-col justify-center items-center bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-10 w-1/2">
             <h2 className="text-4xl font-extrabold mb-4">Welcome Back!</h2>
             <p className="text-lg text-center opacity-90 leading-relaxed">
@@ -67,7 +76,6 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Right Side (Form) */}
           <div className="flex-1 p-8 md:p-12">
             <h2 className="text-3xl font-bold text-center text-blue-700 mb-2">
               Login
@@ -77,7 +85,7 @@ export default function LoginPage() {
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Email */}
+
               <div className="relative">
                 <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
                 <input
@@ -92,7 +100,6 @@ export default function LoginPage() {
                 />
               </div>
 
-              {/* Password */}
               <div className="relative">
                 <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
                 <input
@@ -107,7 +114,6 @@ export default function LoginPage() {
                 />
               </div>
 
-              {/* Remember Me */}
               <div className="flex items-center gap-2 text-sm text-gray-700">
                 <input
                   type="checkbox"
@@ -119,7 +125,6 @@ export default function LoginPage() {
                 <label htmlFor="rememberMe">Remember Me</label>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition transform hover:scale-[1.02] duration-300 shadow-md"
@@ -128,25 +133,23 @@ export default function LoginPage() {
               </button>
             </form>
 
-            {/* Extra Links */}
-            {/* Extra Links */}
-<div className="mt-4 text-center text-sm text-gray-600">
-  <p>
-    <button
-      onClick={() => router.push("/forgot-password")}
-      className="text-blue-600 font-semibold hover:underline mr-4"
-      type="button"
-    >
-      Forgot password?
-    </button>
-    <br/>
+            <div className="mt-4 text-center text-sm text-gray-600">
+              <p>
+                <button
+                  onClick={() => router.push("/forgot-password")}
+                  className="text-blue-600 font-semibold hover:underline mr-4"
+                  type="button"
+                >
+                  Forgot password?
+                </button>
+                <br/>
 
-    Don’t have an account?{" "}
-    <Link href="/register" className="text-blue-600 font-semibold hover:underline">
-      Register
-    </Link>
-  </p>
-</div>
+                Don’t have an account?{" "}
+                <Link href="/register" className="text-blue-600 font-semibold hover:underline">
+                  Register
+                </Link>
+              </p>
+            </div>
 
           </div>
         </div>
