@@ -40,16 +40,20 @@ export default function DashboardNavbar({ userId }: { userId?: string }) {
   }, []);
 
   const navLinks = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/dashboard/products", label: "Products", icon: Package },
-    { href: "/dashboard/stocks", label: "Stocks", icon: Boxes },
-    { href: "/dashboard/customers", label: "Customers", icon: Users },
-    { href: "/dashboard/billing", label: "Billing", icon: FileText },
-    { href: "/dashboard/orders", label: "Orders", icon: ClipboardList },
-    ...(role === "manager"
-      ? []
-      : [{ href: "/dashboard/sales", label: "Sales", icon: BarChart3 }]),
-  ];
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/products", label: "Products", icon: Package },
+  { href: "/dashboard/stocks", label: "Stocks", icon: Boxes },
+  { href: "/dashboard/customers", label: "Customers", icon: Users },
+  { href: "/dashboard/billing", label: "Billing", icon: FileText },
+  { href: "/dashboard/orders", label: "Orders", icon: ClipboardList },
+  ...(role === "manager"
+    ? []
+    : [
+        { href: "/dashboard/sales", label: "Sales", icon: BarChart3 },
+        { href: "/dashboard/delivery/live-map", label: "Live Map", icon: LayoutDashboard },
+      ]),
+];
+
 
   // Discover admin email
   useEffect(() => {
