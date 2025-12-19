@@ -1,5 +1,3 @@
-// src/app/api/delivery/verify-otp/route.ts
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
@@ -31,9 +29,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Partner not found" }, { status: 404 });
     }
 
+    // NEW STATUS CHECK
     if (partner.status !== "approved") {
       return NextResponse.json(
-        { error: "Partner not approved" },
+        { error: "Partner not approved anymore" },
         { status: 403 }
       );
     }
@@ -46,17 +45,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
     }
 
-    // clear OTP + issue session token
     partner.otp = null;
     partner.otpExpires = null;
-    await partner.save();
 
     const token = makeSessionToken();
+    partner.sessionToken = token;        // SAVE TOKEN
+
+    await partner.save();
 
     return NextResponse.json({
       message: "Login successful",
       partnerId: partner._id,
       token,
+      email: partner.email,
     });
   } catch (err) {
     console.error("VERIFY ERROR:", err);

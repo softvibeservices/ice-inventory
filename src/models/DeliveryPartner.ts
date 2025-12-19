@@ -4,15 +4,15 @@ export interface IDeliveryPartner extends Document {
   name: string;
   email: string;
   phone: string;
-  password: string;                 // NEW FIELD
+  password: string;
   status: "pending" | "approved" | "rejected";
   otp: string | null;
   otpExpires: Date | null;
   createdByUser: string | null;
   adminEmail: string | null;
   notifiedAt: Date | null;
+  sessionToken: string | null;       // NEW SESSION TOKEN FIELD
 
-  // For real-time tracking (will be used in later steps)
   lastLocation?: {
     latitude: number;
     longitude: number;
@@ -25,8 +25,6 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     name: { type: String, required: true },
     email: { type: String, required: true },
     phone: { type: String, default: "" },
-
-    // NEW PASSWORD FIELD
     password: { type: String, required: true },
 
     status: {
@@ -43,7 +41,8 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
 
     notifiedAt: { type: Date, default: null },
 
-    // FOR FUTURE REAL-TIME LOCATION
+    sessionToken: { type: String, default: null },   // NEW FIELD
+
     lastLocation: {
       latitude: Number,
       longitude: Number,

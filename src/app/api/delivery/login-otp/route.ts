@@ -1,5 +1,3 @@
-// src/app/api/delivery/login-otp/route.ts
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
@@ -41,20 +39,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // CHECK PASSWORD
     const match = await bcrypt.compare(password, partner.password);
     if (!match) {
       return NextResponse.json({ error: "Invalid password" }, { status: 403 });
     }
 
-    // generate OTP
     const otp = generateOtp();
     partner.otp = otp;
     partner.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
 
     await partner.save();
 
-    // send OTP
     try {
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
@@ -64,7 +59,11 @@ export async function POST(req: Request) {
       });
     } catch {}
 
-    return NextResponse.json({ message: "OTP sent" });
+    return NextResponse.json({
+      message: "OTP sent",
+      partnerId: partner._id,
+      email: partner.email,
+    });
   } catch (err) {
     console.error("LOGIN ERROR:", err);
     return NextResponse.json({ error: "Failed to send OTP" }, { status: 500 });
