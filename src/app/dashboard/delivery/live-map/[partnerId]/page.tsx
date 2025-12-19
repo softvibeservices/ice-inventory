@@ -10,12 +10,6 @@ import DashboardNavbar from "@/app/components/DashboardNavbar";
 // fix leaflet type conflicts
 type LatLngType = [number, number];
 
-interface PageProps {
-  params: {
-    partnerId: string;
-  };
-}
-
 // dynamic imports
 const MapContainer: any = dynamic(
   () => import("react-leaflet").then((m) => m.MapContainer),
@@ -45,8 +39,9 @@ const partnerIcon = L.icon({
   popupAnchor: [0, -40],
 });
 
-export default function LiveMapPage({ params }: PageProps) {
-  const partnerId = params.partnerId;
+export default async function LiveMapPage(props: { params: Promise<{ partnerId: string }> }) {
+  const { partnerId } = await props.params;
+
   const [location, setLocation] = useState<any>(null);
   const [error, setError] = useState("");
 

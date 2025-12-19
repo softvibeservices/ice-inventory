@@ -1127,7 +1127,7 @@ export default function ProfilePage() {
                 <div className="text-sm text-gray-500">Manage delivery partners linked to your account</div>
               </div>
               <div>
-                <DeliveryPartnersTable userId={user._id} />
+                <DeliveryPartnersTable />
               </div>
             </div>
           )}
