@@ -7,82 +7,90 @@ import User from "@/models/User";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import mongoose from "mongoose";
 
-/**
- * GET /api/delivery/orders?userId=...&partnerId=...&onlyUnsettled=true
- *
- * Behavior:
- *  - By default onlyUnsettled=true (returns orders.status === "Unsettled")
- *  - Always exclude deliveryStatus === "Delivered"
- *  - If partnerId provided -> validate partner exists & is approved & belongs to shop (if userId provided)
- *    then return orders assigned to that partner OR unassigned (deliveryPartnerId === partnerId OR deliveryPartnerId == null)
- *  - If only userId provided -> return all (unsettled) orders for that shop (userId)
- *
- * Response: array of orders with compact fields used by the delivery app
- * Additionally: if an order has a customerId, and the corresponding Customer document
- * has location.latitude / location.longitude, those values will be copied into
- * order.customerLat and order.customerLng (only when those fields are null/undefined).
- *
- * Also enrich orders with shopName from User collection when available.
- */
+interface LeanPartner {
+  _id?: any;
+  status?: string;
+  createdByUser?: string;
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const partnerId = searchParams.get("partnerId"); // optional: delivery partner _id
-    const userId = searchParams.get("userId"); // shop owner userId (recommended)
-    const onlyUnsettled = (searchParams.get("onlyUnsettled") ?? "true").toLowerCase() === "true";
+    const partnerId = searchParams.get("partnerId");
+    const userId = searchParams.get("userId");
+    const onlyUnsettled =
+      (searchParams.get("onlyUnsettled") ?? "true").toLowerCase() === "true";
 
-    // basic validation: require at least userId OR partnerId so we can scope results to a shop
     if (!userId && !partnerId) {
-      return NextResponse.json({ error: "userId or partnerId required (at least one)" }, { status: 400 });
+      return NextResponse.json(
+        { error: "userId or partnerId required (at least one)" },
+        { status: 400 }
+      );
     }
 
     await connectDB();
 
-    // If partnerId is provided, ensure partner exists and is allowed to access data
+    // -----------------------------
+    // PARTNER VALIDATION
+    // -----------------------------
     if (partnerId) {
-      const partner = await DeliveryPartner.findById(String(partnerId)).lean();
+      const partner = (await DeliveryPartner.findById(
+        String(partnerId)
+      )
+        .lean()
+        .exec()) as LeanPartner | null;
+
       if (!partner) {
-        // Partner was deleted or never existed — do not give access
-        return NextResponse.json({ error: "Partner not found (deleted?)" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Partner not found (deleted?)" },
+          { status: 404 }
+        );
       }
 
-      // If partner is not approved, deny access (deleted/pending/rejected should not access)
       const status = String(partner.status ?? "").toLowerCase();
       if (status !== "approved") {
-        return NextResponse.json({ error: "Partner not authorized (not approved)" }, { status: 403 });
+        return NextResponse.json(
+          { error: "Partner not authorized (not approved)" },
+          { status: 403 }
+        );
       }
 
-      // If a shop userId is provided, ensure the partner belongs to that shop (defense-in-depth)
       if (userId) {
-        // partner.createdByUser may be null (global partner) — if present, must match
-        if (partner.createdByUser && String(partner.createdByUser) !== String(userId)) {
-          return NextResponse.json({ error: "Partner not associated with this shop" }, { status: 403 });
+        if (
+          partner.createdByUser &&
+          String(partner.createdByUser) !== String(userId)
+        ) {
+          return NextResponse.json(
+            { error: "Partner not associated with this shop" },
+            { status: 403 }
+          );
         }
       }
     }
 
+    // -----------------------------
+    // BUILD QUERY
+    // -----------------------------
     const filter: any = {};
 
-    // restrict to the shop when userId provided
     if (userId) filter.userId = userId;
 
-    // only unsettled orders if requested (default true)
     if (onlyUnsettled) {
       filter.status = "Unsettled";
     }
 
-    // always exclude delivered items (defense-in-depth)
     filter.deliveryStatus = { $ne: "Delivered" };
 
-    // partner-specific behavior:
     if (partnerId) {
-      // show orders assigned to this partner OR unassigned ones (available to claim)
-      filter.$or = [{ deliveryPartnerId: partnerId }, { deliveryPartnerId: null }];
-      // If you want partners to see ONLY their assigned orders (not available ones), change above to:
-      // filter.deliveryPartnerId = partnerId;
+      filter.$or = [
+        { deliveryPartnerId: partnerId },
+        { deliveryPartnerId: null },
+      ];
     }
 
-    // projection: return only fields needed by delivery app (reduces payload)
+    // -----------------------------
+    // PROJECTION
+    // -----------------------------
     const projection = {
       orderId: 1,
       userId: 1,
@@ -101,21 +109,25 @@ export async function GET(req: Request) {
       createdAt: 1,
     };
 
-    // fetch orders
-    const orders: any[] = await Order.find(filter, projection).sort({ createdAt: -1 }).lean();
+    // -----------------------------
+    // FETCH ORDERS
+    // -----------------------------
+    const orders: any[] = await Order.find(filter, projection)
+      .sort({ createdAt: -1 })
+      .lean();
 
     if (!orders || orders.length === 0) {
       return NextResponse.json([], { status: 200 });
     }
 
-    // --------------------------
-    // Enrich with customers' location
-    // --------------------------
+    // -----------------------------
+    // ENRICH CUSTOMER LOCATION
+    // -----------------------------
     const customerIds = Array.from(
       new Set(
         orders
           .map((o) => o.customerId)
-          .filter((id) => id) // remove null/undefined
+          .filter((id) => id)
       )
     );
 
@@ -126,76 +138,114 @@ export async function GET(req: Request) {
       ).lean();
 
       const custMap: Record<string, any> = {};
+
       for (const c of customers) {
-        if (c && c._id) {
-          custMap[String(c._id)] = c;
-        }
+        if (c._id) custMap[String(c._id)] = c;
       }
 
       for (const order of orders) {
         try {
-          if ((!order.customerLat && order.customerLat !== 0) || order.customerLng == null) {
-            const c = order.customerId ? custMap[String(order.customerId)] : null;
-            if (c && c.location) {
-              const lat = typeof c.location.latitude === "number" ? c.location.latitude : null;
-              const lng = typeof c.location.longitude === "number" ? c.location.longitude : null;
-              if (lat != null) order.customerLat = lat;
-              if (lng != null) order.customerLng = lng;
+          if (
+            (!order.customerLat && order.customerLat !== 0) ||
+            order.customerLng == null
+          ) {
+            const c = order.customerId
+              ? custMap[String(order.customerId)]
+              : null;
+            if (c?.location) {
+              if (typeof c.location.latitude === "number")
+                order.customerLat = c.location.latitude;
+              if (typeof c.location.longitude === "number")
+                order.customerLng = c.location.longitude;
             }
           }
         } catch (e) {
-          console.warn("Failed to enrich order with customer location", order._id, e);
+          console.warn(
+            "Failed to enrich order with customer location",
+            order._id,
+            e
+          );
         }
       }
     }
 
-    // --------------------------
-    // Enrich with shopName from User collection
-    // --------------------------
+    // -----------------------------
+    // ENRICH SHOP NAME
+    // -----------------------------
     const orderUserIds = Array.from(
       new Set(
         orders
           .map((o) => o.userId)
-          .filter((id) => id) // remove null/undefined
+          .filter((id) => id)
       )
     );
 
     if (orderUserIds.length > 0) {
       const idsForQuery: any[] = [];
+
       for (const id of orderUserIds) {
-        if (mongoose.Types.ObjectId.isValid(id)) idsForQuery.push(new mongoose.Types.ObjectId(id));
-        else idsForQuery.push(String(id));
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          idsForQuery.push(new mongoose.Types.ObjectId(id));
+        } else {
+          idsForQuery.push(String(id));
+        }
       }
 
       try {
-        const users = await User.find({ _id: { $in: idsForQuery } }, { shopName: 1 }).lean();
+        const users = await User.find(
+          { _id: { $in: idsForQuery } },
+          { shopName: 1 }
+        ).lean();
+
         const userMap: Record<string, any> = {};
+
         for (const u of users) {
-          if (u && u._id) userMap[String(u._id)] = u;
+          if (u?._id) userMap[String(u._id)] = u;
         }
 
         for (const order of orders) {
           try {
-            if ((!order.shopName || String(order.shopName).trim().length === 0) && order.userId) {
+            if (
+              (!order.shopName ||
+                String(order.shopName).trim().length === 0) &&
+              order.userId
+            ) {
               const u = userMap[String(order.userId)];
-              if (u && typeof u.shopName === "string" && u.shopName.trim().length > 0) {
+              if (
+                u &&
+                typeof u.shopName === "string" &&
+                u.shopName.trim().length > 0
+              ) {
                 order.shopName = u.shopName;
               } else {
                 order.shopName = order.shopName ?? null;
               }
             }
           } catch (e) {
-            console.warn("Failed to enrich order with shopName", order._id, e);
+            console.warn(
+              "Failed to enrich order with shopName",
+              order._id,
+              e
+            );
           }
         }
       } catch (uErr) {
-        console.warn("Failed to lookup users for shopName enrichment", uErr);
+        console.warn(
+          "Failed to lookup users for shopName enrichment",
+          uErr
+        );
       }
     }
 
+    // -----------------------------
+    // RETURN FINAL ORDERS
+    // -----------------------------
     return NextResponse.json(orders, { status: 200 });
   } catch (err: any) {
     console.error("/api/delivery/orders error:", err);
-    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch orders" },
+      { status: 500 }
+    );
   }
 }
