@@ -1,3 +1,7 @@
+
+// src\models\DeliveryPartner.ts
+
+
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IDeliveryPartner extends Document {
@@ -5,13 +9,18 @@ export interface IDeliveryPartner extends Document {
   email: string;
   phone: string;
   password: string;
+
   status: "pending" | "approved" | "rejected";
+
   otp: string | null;
   otpExpires: Date | null;
-  createdByUser: string | null;
+
+  createdByUser: string | null;   // shop owner
+  adminId: string | null;         // ✅ NEW FIELD (ADMIN ID)
   adminEmail: string | null;
+
   notifiedAt: Date | null;
-  sessionToken: string | null;       // NEW SESSION TOKEN FIELD
+  sessionToken: string | null;
 
   lastLocation?: {
     latitude: number;
@@ -37,11 +46,12 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     otpExpires: { type: Date, default: null },
 
     createdByUser: { type: String, default: null },
+
+    adminId: { type: String, default: null },   // ✅ NEW FIELD
     adminEmail: { type: String, default: null },
 
     notifiedAt: { type: Date, default: null },
-
-    sessionToken: { type: String, default: null },   // NEW FIELD
+    sessionToken: { type: String, default: null },
 
     lastLocation: {
       latitude: Number,

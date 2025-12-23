@@ -1,5 +1,7 @@
 // src/app/api/delivery/register/route.ts
 
+
+
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
@@ -20,9 +22,11 @@ export async function POST(req: Request) {
       name,
       email,
       phone,
+      password,
+
       createdByUser,
+      adminId,                      // ✅ NEW FIELD
       adminEmail: adminEmailFromClient,
-      password,                      // NEW FIELD
     } = body ?? {};
 
     if (!name || !email || !password) {
@@ -34,9 +38,10 @@ export async function POST(req: Request) {
 
     await connectDB();
 
-    // normalize
+    // normalize values
     const partnerEmail = String(email).toLowerCase();
     const createdByUserNormalized = createdByUser ? String(createdByUser) : null;
+    const adminIdNormalized = adminId ? String(adminId) : null;
 
     // determine admin email
     let adminEmail = adminEmailFromClient
@@ -48,35 +53,37 @@ export async function POST(req: Request) {
       if (owner) adminEmail = owner.email.toLowerCase();
     }
 
-    // check existing partner
+    // check existing partner (same shop + email)
     let partner = await DeliveryPartner.findOne({
       email: partnerEmail,
       createdByUser: createdByUserNormalized,
     });
 
-    // CASE 1 — existing and pending/approved/rejected handling
+    // CASE 1 — existing partner
     if (partner) {
       const s = String(partner.status).toLowerCase();
-      if (s === "pending")
+
+      if (s === "pending") {
         return NextResponse.json(
           { error: "Request already pending", partnerId: partner._id },
           { status: 409 }
         );
+      }
 
-      if (s === "approved")
+      if (s === "approved") {
         return NextResponse.json(
           { error: "Partner already approved", partnerId: partner._id },
           { status: 409 }
         );
+      }
 
       if (s === "rejected") {
-        // allow re-request
         partner.name = name;
         partner.phone = phone ?? partner.phone;
         partner.adminEmail = adminEmail ?? partner.adminEmail;
+        partner.adminId = adminIdNormalized ?? partner.adminId;   // ✅ STORE adminId
         partner.status = "pending";
 
-        // hash password
         partner.password = await bcrypt.hash(password, 10);
 
         const otp = generateOtp();
@@ -85,7 +92,6 @@ export async function POST(req: Request) {
 
         await partner.save();
 
-        // send partner OTP
         try {
           await transporter.sendMail({
             from: process.env.EMAIL_USER,
@@ -102,7 +108,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // CASE 2 — create new partner
+    // CASE 2 — new partner
     const hashedPassword = await bcrypt.hash(password, 10);
 
     partner = new DeliveryPartner({
@@ -110,8 +116,11 @@ export async function POST(req: Request) {
       email: partnerEmail,
       phone,
       password: hashedPassword,
+
       createdByUser: createdByUserNormalized,
+      adminId: adminIdNormalized,        // ✅ STORE adminId
       adminEmail: adminEmail ?? null,
+
       status: "pending",
     });
 
@@ -121,7 +130,6 @@ export async function POST(req: Request) {
 
     await partner.save();
 
-    // partner email
     try {
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
