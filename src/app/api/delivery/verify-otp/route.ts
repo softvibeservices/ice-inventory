@@ -4,63 +4,85 @@ import DeliveryPartner from "@/models/DeliveryPartner";
 import crypto from "crypto";
 
 function makeSessionToken() {
-  return crypto.randomBytes(24).toString("hex");
+  return crypto.randomBytes(32).toString("hex");
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, otp } = body ?? {};
+    const { partnerId, otp } = body ?? {};
 
-    if (!email || !otp) {
+    // ✅ Correct validation
+    if (!partnerId || !otp) {
       return NextResponse.json(
-        { error: "Email and OTP required" },
+        { error: "partnerId and otp are required" },
         { status: 400 }
       );
     }
 
     await connectDB();
 
-    const partner = await DeliveryPartner.findOne({
-      email: String(email).toLowerCase(),
-    });
+    const partner = await DeliveryPartner.findById(partnerId);
 
     if (!partner) {
-      return NextResponse.json({ error: "Partner not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Partner not found" },
+        { status: 404 }
+      );
     }
 
-    // NEW STATUS CHECK
+    // ✅ STATUS CHECK (auto-logout safety)
     if (partner.status !== "approved") {
       return NextResponse.json(
-        { error: "Partner not approved anymore" },
+        { error: "Partner not approved" },
         { status: 403 }
       );
     }
 
-    if (!partner.otp || partner.otpExpires < new Date()) {
-      return NextResponse.json({ error: "OTP expired" }, { status: 400 });
+    // ✅ OTP validity
+    if (!partner.otp || !partner.otpExpires) {
+      return NextResponse.json(
+        { error: "OTP not generated" },
+        { status: 400 }
+      );
     }
 
-    if (partner.otp !== otp) {
-      return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
+    if (partner.otpExpires < new Date()) {
+      return NextResponse.json(
+        { error: "OTP expired" },
+        { status: 400 }
+      );
     }
 
+    if (partner.otp !== String(otp)) {
+      return NextResponse.json(
+        { error: "Invalid OTP" },
+        { status: 400 }
+      );
+    }
+
+    // ✅ SUCCESS → clear OTP
     partner.otp = null;
     partner.otpExpires = null;
 
+    // ✅ CREATE SESSION TOKEN
     const token = makeSessionToken();
-    partner.sessionToken = token;        // SAVE TOKEN
+    partner.sessionToken = token;
 
     await partner.save();
 
     return NextResponse.json({
       message: "Login successful",
-      partnerId: partner._id,
+      partnerId: String(partner._id),
       token,
+      name: partner.name,
       email: partner.email,
     });
   } catch (err) {
-    console.error("VERIFY ERROR:", err);
-    return NextResponse.json({ error: "Verification failed" }, { status: 500 });
+    console.error("VERIFY OTP ERROR:", err);
+    return NextResponse.json(
+      { error: "OTP verification failed" },
+      { status: 500 }
+    );
   }
 }
