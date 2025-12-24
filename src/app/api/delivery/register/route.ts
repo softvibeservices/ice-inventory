@@ -1,19 +1,10 @@
 // src/app/api/delivery/register/route.ts
 
-
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import User from "@/models/User";
-import { transporter } from "@/lib/nodemailer";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
-
-function generateOtp(len = 6) {
-  const max = 10 ** len;
-  return crypto.randomInt(0, max).toString().padStart(len, "0");
-}
 
 export async function POST(req: Request) {
   try {
@@ -23,9 +14,8 @@ export async function POST(req: Request) {
       email,
       phone,
       password,
-
       createdByUser,
-      adminId,                      // ✅ NEW FIELD
+      adminId,
       adminEmail: adminEmailFromClient,
     } = body ?? {};
 
@@ -38,8 +28,7 @@ export async function POST(req: Request) {
 
     await connectDB();
 
-    // normalize values
-    const partnerEmail = String(email).toLowerCase();
+    const partnerEmail = String(email).toLowerCase().trim();
     const createdByUserNormalized = createdByUser ? String(createdByUser) : null;
     const adminIdNormalized = adminId ? String(adminId) : null;
 
@@ -48,101 +37,81 @@ export async function POST(req: Request) {
       ? String(adminEmailFromClient).toLowerCase()
       : null;
 
-    if (!adminEmail && createdByUser) {
-      const owner = await User.findById(String(createdByUser)).select("email");
-      if (owner) adminEmail = owner.email.toLowerCase();
+    if (!adminEmail && createdByUserNormalized) {
+      const owner = await User.findById(createdByUserNormalized).select("email");
+      if (owner?.email) adminEmail = owner.email.toLowerCase();
     }
 
-    // check existing partner (same shop + email)
-    let partner = await DeliveryPartner.findOne({
+    // 🔒 STRONG DUPLICATE CHECK (email + shop)
+    const existingPartner = await DeliveryPartner.findOne({
       email: partnerEmail,
       createdByUser: createdByUserNormalized,
     });
 
-    // CASE 1 — existing partner
-    if (partner) {
-      const s = String(partner.status).toLowerCase();
+    // -------------------------------
+    // CASE 1 — PARTNER ALREADY EXISTS
+    // -------------------------------
+    if (existingPartner) {
+      const status = String(existingPartner.status).toLowerCase();
 
-      if (s === "pending") {
+      if (status === "pending") {
         return NextResponse.json(
-          { error: "Request already pending", partnerId: partner._id },
+          { error: "Registration already pending approval" },
           { status: 409 }
         );
       }
 
-      if (s === "approved") {
+      if (status === "approved") {
         return NextResponse.json(
-          { error: "Partner already approved", partnerId: partner._id },
+          { error: "Delivery partner already approved" },
           { status: 409 }
         );
       }
 
-      if (s === "rejected") {
-        partner.name = name;
-        partner.phone = phone ?? partner.phone;
-        partner.adminEmail = adminEmail ?? partner.adminEmail;
-        partner.adminId = adminIdNormalized ?? partner.adminId;   // ✅ STORE adminId
-        partner.status = "pending";
+      if (status === "rejected") {
+        // ♻️ Re-request using SAME RECORD
+        existingPartner.name = name;
+        existingPartner.phone = phone ?? existingPartner.phone;
+        existingPartner.password = await bcrypt.hash(password, 10);
+        existingPartner.adminId = adminIdNormalized ?? existingPartner.adminId;
+        existingPartner.adminEmail = adminEmail ?? existingPartner.adminEmail;
+        existingPartner.status = "pending";
 
-        partner.password = await bcrypt.hash(password, 10);
-
-        const otp = generateOtp();
-        partner.otp = otp;
-        partner.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
-
-        await partner.save();
-
-        try {
-          await transporter.sendMail({
-            from: process.env.EMAIL_USER,
-            to: partner.email,
-            subject: "Delivery Partner Verification Code",
-            text: `Your verification OTP is ${otp}`,
-          });
-        } catch {}
+        await existingPartner.save();
 
         return NextResponse.json(
-          { message: "Re-request submitted", partnerId: partner._id },
+          {
+            message: "Re-registration request submitted",
+            partnerId: existingPartner._id,
+          },
           { status: 200 }
         );
       }
     }
 
-    // CASE 2 — new partner
+    // -------------------------------
+    // CASE 2 — NEW PARTNER
+    // -------------------------------
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    partner = new DeliveryPartner({
+    const partner = new DeliveryPartner({
       name,
       email: partnerEmail,
       phone,
       password: hashedPassword,
-
       createdByUser: createdByUserNormalized,
-      adminId: adminIdNormalized,        // ✅ STORE adminId
-      adminEmail: adminEmail ?? null,
-
+      adminId: adminIdNormalized,
+      adminEmail,
       status: "pending",
     });
 
-    const otp = generateOtp();
-    partner.otp = otp;
-    partner.otpExpires = new Date(Date.now() + 10 * 60 * 1000);
-
     await partner.save();
-
-    try {
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER,
-        to: partner.email,
-        subject: "Delivery Partner Verification Code",
-        text: `Your verification OTP is ${otp}`,
-      });
-    } catch {}
 
     return NextResponse.json(
       {
-        message: "Delivery partner registered",
+        message: "Delivery partner registered successfully",
         partnerId: partner._id,
+        status: "pending",
       },
       { status: 201 }
     );
