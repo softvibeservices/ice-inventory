@@ -4,81 +4,36 @@ import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Customer from "@/models/Customer";
 import User from "@/models/User";
-import DeliveryPartner from "@/models/DeliveryPartner";
 import mongoose from "mongoose";
-
-interface LeanPartner {
-  _id?: any;
-  status?: string;
-  createdByUser?: string;
-}
+import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
 export async function GET(req: Request) {
+  // 🔐 DELIVERY AUTH (OPTIONAL)
+  const auth = await verifyDeliveryAuth(req);
+  const partnerId = auth instanceof NextResponse ? null : auth.partnerId;
+
   try {
     const { searchParams } = new URL(req.url);
-    const partnerId = searchParams.get("partnerId");
     const userId = searchParams.get("userId");
     const onlyUnsettled =
       (searchParams.get("onlyUnsettled") ?? "true").toLowerCase() === "true";
 
     if (!userId && !partnerId) {
       return NextResponse.json(
-        { error: "userId or partnerId required (at least one)" },
+        { error: "userId or authenticated partner required" },
         { status: 400 }
       );
     }
 
     await connectDB();
 
-    // -----------------------------
-    // PARTNER VALIDATION
-    // -----------------------------
-    if (partnerId) {
-      const partner = (await DeliveryPartner.findById(
-        String(partnerId)
-      )
-        .lean()
-        .exec()) as LeanPartner | null;
-
-      if (!partner) {
-        return NextResponse.json(
-          { error: "Partner not found (deleted?)" },
-          { status: 404 }
-        );
-      }
-
-      const status = String(partner.status ?? "").toLowerCase();
-      if (status !== "approved") {
-        return NextResponse.json(
-          { error: "Partner not authorized (not approved)" },
-          { status: 403 }
-        );
-      }
-
-      if (userId) {
-        if (
-          partner.createdByUser &&
-          String(partner.createdByUser) !== String(userId)
-        ) {
-          return NextResponse.json(
-            { error: "Partner not associated with this shop" },
-            { status: 403 }
-          );
-        }
-      }
-    }
-
-    // -----------------------------
-    // BUILD QUERY
-    // -----------------------------
+    /* -----------------------------
+       BUILD QUERY
+    ----------------------------- */
     const filter: any = {};
 
     if (userId) filter.userId = userId;
-
-    if (onlyUnsettled) {
-      filter.status = "Unsettled";
-    }
-
+    if (onlyUnsettled) filter.status = "Unsettled";
     filter.deliveryStatus = { $ne: "Delivered" };
 
     if (partnerId) {
@@ -88,160 +43,59 @@ export async function GET(req: Request) {
       ];
     }
 
-    // -----------------------------
-    // PROJECTION
-    // -----------------------------
-    const projection = {
-      orderId: 1,
-      userId: 1,
-      shopName: 1,
-      customerId: 1,
-      customerName: 1,
-      customerContact: 1,
-      customerAddress: 1,
-      customerLat: 1,
-      customerLng: 1,
-      items: 1,
-      total: 1,
-      deliveryStatus: 1,
-      deliveryPartnerId: 1,
-      deliveryAssignedAt: 1,
-      createdAt: 1,
-    };
-
-    // -----------------------------
-    // FETCH ORDERS
-    // -----------------------------
-    const orders: any[] = await Order.find(filter, projection)
+    /* -----------------------------
+       FETCH ORDERS
+    ----------------------------- */
+    const orders: any[] = await Order.find(filter)
       .sort({ createdAt: -1 })
       .lean();
 
-    if (!orders || orders.length === 0) {
-      return NextResponse.json([], { status: 200 });
-    }
+    if (!orders.length) return NextResponse.json([], { status: 200 });
 
-    // -----------------------------
-    // ENRICH CUSTOMER LOCATION
-    // -----------------------------
-    const customerIds = Array.from(
-      new Set(
-        orders
-          .map((o) => o.customerId)
-          .filter((id) => id)
-      )
-    );
+    /* -----------------------------
+       ENRICH CUSTOMER LOCATION
+    ----------------------------- */
+    const customerIds = [...new Set(orders.map(o => o.customerId).filter(Boolean))];
 
-    if (customerIds.length > 0) {
+    if (customerIds.length) {
       const customers = await Customer.find(
         { _id: { $in: customerIds } },
         { location: 1 }
       ).lean();
 
       const custMap: Record<string, any> = {};
+      customers.forEach(c => (custMap[String(c._id)] = c));
 
-      for (const c of customers) {
-        if (c._id) custMap[String(c._id)] = c;
-      }
-
-      for (const order of orders) {
-        try {
-          if (
-            (!order.customerLat && order.customerLat !== 0) ||
-            order.customerLng == null
-          ) {
-            const c = order.customerId
-              ? custMap[String(order.customerId)]
-              : null;
-            if (c?.location) {
-              if (typeof c.location.latitude === "number")
-                order.customerLat = c.location.latitude;
-              if (typeof c.location.longitude === "number")
-                order.customerLng = c.location.longitude;
-            }
-          }
-        } catch (e) {
-          console.warn(
-            "Failed to enrich order with customer location",
-            order._id,
-            e
-          );
+      orders.forEach(o => {
+        if (!o.customerLat && custMap[o.customerId]?.location) {
+          o.customerLat = custMap[o.customerId].location.latitude;
+          o.customerLng = custMap[o.customerId].location.longitude;
         }
-      }
+      });
     }
 
-    // -----------------------------
-    // ENRICH SHOP NAME
-    // -----------------------------
-    const orderUserIds = Array.from(
-      new Set(
-        orders
-          .map((o) => o.userId)
-          .filter((id) => id)
-      )
-    );
+    /* -----------------------------
+       ENRICH SHOP NAME
+    ----------------------------- */
+    const userIds = [...new Set(orders.map(o => o.userId).filter(Boolean))];
+    if (userIds.length) {
+      const users = await User.find(
+        { _id: { $in: userIds } },
+        { shopName: 1 }
+      ).lean();
 
-    if (orderUserIds.length > 0) {
-      const idsForQuery: any[] = [];
+      const userMap: Record<string, any> = {};
+      users.forEach(u => (userMap[String(u._id)] = u));
 
-      for (const id of orderUserIds) {
-        if (mongoose.Types.ObjectId.isValid(id)) {
-          idsForQuery.push(new mongoose.Types.ObjectId(id));
-        } else {
-          idsForQuery.push(String(id));
+      orders.forEach(o => {
+        if (!o.shopName && userMap[o.userId]) {
+          o.shopName = userMap[o.userId].shopName;
         }
-      }
-
-      try {
-        const users = await User.find(
-          { _id: { $in: idsForQuery } },
-          { shopName: 1 }
-        ).lean();
-
-        const userMap: Record<string, any> = {};
-
-        for (const u of users) {
-          if (u?._id) userMap[String(u._id)] = u;
-        }
-
-        for (const order of orders) {
-          try {
-            if (
-              (!order.shopName ||
-                String(order.shopName).trim().length === 0) &&
-              order.userId
-            ) {
-              const u = userMap[String(order.userId)];
-              if (
-                u &&
-                typeof u.shopName === "string" &&
-                u.shopName.trim().length > 0
-              ) {
-                order.shopName = u.shopName;
-              } else {
-                order.shopName = order.shopName ?? null;
-              }
-            }
-          } catch (e) {
-            console.warn(
-              "Failed to enrich order with shopName",
-              order._id,
-              e
-            );
-          }
-        }
-      } catch (uErr) {
-        console.warn(
-          "Failed to lookup users for shopName enrichment",
-          uErr
-        );
-      }
+      });
     }
 
-    // -----------------------------
-    // RETURN FINAL ORDERS
-    // -----------------------------
     return NextResponse.json(orders, { status: 200 });
-  } catch (err: any) {
+  } catch (err) {
     console.error("/api/delivery/orders error:", err);
     return NextResponse.json(
       { error: "Failed to fetch orders" },

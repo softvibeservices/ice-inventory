@@ -1,9 +1,8 @@
 // src/app/api/delivery/delivered-orders/route.ts
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
-import DeliveryPartner from "@/models/DeliveryPartner";
+import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
 function getDateCategory(date: Date): string {
   const today = new Date();
@@ -36,42 +35,30 @@ function getDateCategory(date: Date): string {
 }
 
 export async function GET(req: Request) {
+  // 🔐 AUTH FIRST
+  const auth = await verifyDeliveryAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { partnerId } = auth;
+
   try {
-    const { searchParams } = new URL(req.url);
-    const partnerId = searchParams.get("partnerId");
-
-    if (!partnerId) {
-      return NextResponse.json(
-        { error: "partnerId required" },
-        { status: 400 }
-      );
-    }
-
     await connectDB();
 
-    const partner = await DeliveryPartner.findById(partnerId);
-    if (!partner || partner.status !== "approved") {
-      return NextResponse.json(
-        { error: "Partner invalid or not approved" },
-        { status: 403 }
-      );
-    }
-
-    const orders: any[] = await Order.find({
+    const orders = await Order.find({
       deliveryPartnerId: partnerId,
       deliveryStatus: "Delivered",
     })
       .sort({ deliveryCompletedAt: -1 })
       .lean();
 
-    const groups: any = {
+    const groups: Record<string, any[]> = {
       today: [],
       yesterday: [],
       this_week: [],
       older: [],
     };
 
-    orders.forEach((o) => {
+    orders.forEach((o: any) => {
       const category = getDateCategory(o.deliveryCompletedAt);
       groups[category].push(o);
     });
@@ -83,7 +70,7 @@ export async function GET(req: Request) {
       },
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err) {
     console.error("GET /api/delivery/delivered-orders error:", err);
     return NextResponse.json(
       { error: "Failed to fetch delivered orders" },

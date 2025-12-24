@@ -1,35 +1,45 @@
 // src/app/api/delivery/customer-details/route.ts
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Customer from "@/models/Customer";
-import DeliveryPartner from "@/models/DeliveryPartner";
+import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
+
+/* ----------------------------------------
+   Local type for TS safety
+---------------------------------------- */
+interface LeanCustomer {
+  _id: string;
+  name: string;
+  shopName: string;
+  shopAddress: string;
+  contacts: string[];
+  location?: {
+    latitude?: number;
+    longitude?: number;
+  };
+}
 
 export async function GET(req: Request) {
+  // 🔐 DELIVERY AUTH
+  const auth = await verifyDeliveryAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(req.url);
-
-    const partnerId = searchParams.get("partnerId");
     const customerId = searchParams.get("customerId");
 
-    if (!partnerId || !customerId) {
+    if (!customerId) {
       return NextResponse.json(
-        { error: "partnerId and customerId required" },
+        { error: "customerId required" },
         { status: 400 }
       );
     }
 
     await connectDB();
 
-    const partner = await DeliveryPartner.findById(partnerId);
-    if (!partner || partner.status !== "approved") {
-      return NextResponse.json(
-        { error: "Partner invalid or not approved" },
-        { status: 403 }
-      );
-    }
-
-    const customer: any = await Customer.findById(customerId).lean();
+    const customer = await Customer.findById(customerId)
+      .select("name shopName shopAddress contacts location")
+      .lean<LeanCustomer | null>();
 
     if (!customer) {
       return NextResponse.json(
@@ -48,15 +58,15 @@ export async function GET(req: Request) {
           contacts: customer.contacts,
           location: customer.location
             ? {
-                latitude: customer.location.latitude,
-                longitude: customer.location.longitude,
+                latitude: customer.location.latitude ?? null,
+                longitude: customer.location.longitude ?? null,
               }
             : null,
         },
       },
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err) {
     console.error("GET /delivery/customer-details error:", err);
     return NextResponse.json(
       { error: "Failed to fetch customer details" },

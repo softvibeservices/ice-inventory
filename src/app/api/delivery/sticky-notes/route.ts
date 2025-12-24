@@ -3,84 +3,100 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import StickyNote from "@/models/StickyNote";
-import DeliveryPartner from "@/models/DeliveryPartner";
-import User from "@/models/User";
+import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
+/* ----------------------------------------
+   GET: Sticky notes assigned to delivery partner
+---------------------------------------- */
 export async function GET(req: Request) {
+  const auth = await verifyDeliveryAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { partnerId } = auth;
+
   try {
-    const { searchParams } = new URL(req.url);
-    const partnerId = searchParams.get("partnerId");
-
-    if (!partnerId) {
-      return NextResponse.json(
-        { error: "partnerId required" },
-        { status: 400 }
-      );
-    }
-
     await connectDB();
 
-    const notes = await StickyNote.find({ deliveryPartnerId: partnerId })
+    const notes = await StickyNote.find({
+      deliveryPartnerId: partnerId, // ✅ additive filter
+    })
       .sort({ createdAt: -1 })
       .lean();
 
     return NextResponse.json({ notes }, { status: 200 });
   } catch (err) {
-    console.error("GET sticky notes error:", err);
+    console.error("GET delivery sticky notes error:", err);
     return NextResponse.json(
-      { error: "Failed to fetch sticky notes" },
+      { error: "Failed to fetch delivery sticky notes" },
       { status: 500 }
     );
   }
 }
 
+/* ----------------------------------------
+   POST: Create sticky note from delivery app
+---------------------------------------- */
 export async function POST(req: Request) {
+  const auth = await verifyDeliveryAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { partnerId } = auth;
+
   try {
     const body = await req.json();
-
     const {
-      partnerId,
-      userId,          // shop owner id
-      productName,
+      userId,
+      customerId,
       customerName,
-      quantity,
-      notes,
+      shopName,
+      items,
     } = body ?? {};
 
-    if (!partnerId || !userId || !customerName) {
+    if (!userId || !customerName || !shopName || !Array.isArray(items)) {
       return NextResponse.json(
-        { error: "partnerId, userId and customerName required" },
+        { error: "userId, customerName, shopName and items required" },
         { status: 400 }
       );
     }
 
+    const cleanedItems = items
+      .filter(
+        (it: any) =>
+          it &&
+          typeof it.productName === "string" &&
+          it.productName.trim() &&
+          typeof it.quantity === "number" &&
+          it.quantity > 0
+      )
+      .map((it: any) => ({
+        productId: it.productId || undefined,
+        productName: it.productName.trim(),
+        quantity: it.quantity,
+        unit: it.unit || undefined,
+      }));
+
+    const totalQuantity = cleanedItems.reduce(
+      (sum: number, it: any) => sum + it.quantity,
+      0
+    );
+
     await connectDB();
 
-    const partner = await DeliveryPartner.findById(partnerId);
-    if (!partner || partner.status !== "approved") {
-      return NextResponse.json(
-        { error: "Partner invalid or not approved" },
-        { status: 403 }
-      );
-    }
-
-    const sticky = await StickyNote.create({
-      deliveryPartnerId: partnerId,
-      userId,
-      customerName,
-      productName: productName || "",
-      quantity: quantity || "",
-      notes: notes || "",
+    const note = await StickyNote.create({
+      userId,                         // ✅ dashboard compatibility
+      deliveryPartnerId: partnerId,   // ✅ delivery link
+      customerId,
+      customerName: customerName.trim(),
+      shopName: shopName.trim(),
+      items: cleanedItems,
+      totalQuantity,
     });
 
-    return NextResponse.json(
-      { message: "Sticky note created", sticky },
-      { status: 201 }
-    );
+    return NextResponse.json(note, { status: 201 });
   } catch (err) {
-    console.error("POST sticky notes error:", err);
+    console.error("POST delivery sticky notes error:", err);
     return NextResponse.json(
-      { error: "Failed to create sticky note" },
+      { error: "Failed to create delivery sticky note" },
       { status: 500 }
     );
   }

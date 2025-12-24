@@ -1,18 +1,46 @@
-// src/app/api/delivery/update-order-status/route.ts
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
-import DeliveryPartner from "@/models/DeliveryPartner";
+import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
+
+/* ----------------------------------------
+   Local Types (keep TS happy & strict)
+---------------------------------------- */
+type DeliveryStatus = "Pending" | "On the Way" | "Delivered";
+
+interface LeanOrder {
+  _id: string;
+  deliveryStatus: DeliveryStatus;
+  deliveryPartnerId?: string | null;
+  deliveryOnTheWayAt?: Date | null;
+  deliveryCompletedAt?: Date | null;
+}
+
+/* ----------------------------------------
+   Allowed transitions
+---------------------------------------- */
+const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
+  Pending: ["On the Way"],
+  "On the Way": ["Delivered"],
+  Delivered: [],
+};
 
 export async function PATCH(req: Request) {
+  /* ----------------------------------------
+     🔐 AUTH FIRST (SESSION TOKEN)
+  ---------------------------------------- */
+  const auth = await verifyDeliveryAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { partnerId } = auth;
+
   try {
     const body = await req.json();
-    const { orderId, partnerId, status, note } = body ?? {};
+    const { orderId, status, note } = body ?? {};
 
-    if (!orderId || !partnerId || !status) {
+    if (!orderId || !status) {
       return NextResponse.json(
-        { error: "orderId, partnerId and status required" },
+        { error: "orderId and status required" },
         { status: 400 }
       );
     }
@@ -26,88 +54,114 @@ export async function PATCH(req: Request) {
 
     await connectDB();
 
-    const order: any = await Order.findById(orderId);
-    if (!order) {
+    /* ----------------------------------------
+       Fetch order (typed)
+    ---------------------------------------- */
+    const existingOrder = await Order.findById(orderId)
+      .select("deliveryStatus deliveryPartnerId")
+      .lean<LeanOrder | null>();
+
+    if (!existingOrder) {
       return NextResponse.json(
         { error: "Order not found" },
         { status: 404 }
       );
     }
 
-    const partner = await DeliveryPartner.findById(partnerId);
-    if (!partner || partner.status !== "approved") {
+    // 🚫 Delivered orders are immutable
+    if (existingOrder.deliveryStatus === "Delivered") {
       return NextResponse.json(
-        { error: "Partner invalid or not approved" },
-        { status: 403 }
-      );
-    }
-
-    // partner assignment check
-    if (!order.deliveryPartnerId) {
-      // allow assignment if unclaimed
-      order.deliveryPartnerId = partnerId;
-      order.deliveryAssignedAt = new Date();
-
-      partner.assignedOrders = partner.assignedOrders || [];
-      if (!partner.assignedOrders.includes(String(order._id))) {
-        partner.assignedOrders.push(String(order._id));
-        await partner.save();
-      }
-    } else if (String(order.deliveryPartnerId) !== String(partnerId)) {
-      return NextResponse.json(
-        { error: "You are not assigned to this order" },
-        { status: 403 }
-      );
-    }
-
-    // VALID STATUS FLOW ENFORCED HERE
-    const current = order.deliveryStatus;
-    const next = status;
-
-    const allowedFlow: any = {
-      "Pending": "On the Way",
-      "On the Way": "Delivered",
-    };
-
-    if (allowedFlow[current] !== next) {
-      return NextResponse.json(
-        { error: "Invalid status transition" },
+        { error: "Order already delivered" },
         { status: 409 }
       );
     }
 
-    // APPLY STATUS + TIMESTAMP LOGIC
-    order.deliveryStatus = next;
+    /* ----------------------------------------
+       Validate transition
+    ---------------------------------------- */
+    const allowedNext = VALID_TRANSITIONS[existingOrder.deliveryStatus];
 
-    if (next === "On the Way" && !order.deliveryOnTheWayAt) {
-      order.deliveryOnTheWayAt = new Date();
+    if (!allowedNext.includes(status)) {
+      return NextResponse.json(
+        {
+          error: `Invalid status transition from ${existingOrder.deliveryStatus} to ${status}`,
+        },
+        { status: 409 }
+      );
     }
 
-    if (next === "Delivered" && !order.deliveryCompletedAt) {
-      order.deliveryCompletedAt = new Date();
+    /* ----------------------------------------
+       Prevent order hijacking
+    ---------------------------------------- */
+    if (
+      existingOrder.deliveryPartnerId &&
+      String(existingOrder.deliveryPartnerId) !== partnerId
+    ) {
+      return NextResponse.json(
+        { error: "Order is already assigned to another partner" },
+        { status: 403 }
+      );
     }
+
+    /* ----------------------------------------
+       Atomic update (race-condition safe)
+    ---------------------------------------- */
+    const now = new Date();
+
+    const update: Partial<LeanOrder> & { deliveryStatus: DeliveryStatus } = {
+      deliveryStatus: status,
+    };
 
     if (note) {
-      order.deliveryNotes = note;
+      (update as any).deliveryNotes = note;
     }
 
-    await order.save();
+    if (status === "On the Way") {
+      update.deliveryPartnerId = partnerId;
+      update.deliveryOnTheWayAt = now;
+    }
+
+    if (status === "Delivered") {
+      update.deliveryCompletedAt = now;
+    }
+
+    const updatedOrder = await Order.findOneAndUpdate(
+      {
+        _id: orderId,
+        deliveryStatus: existingOrder.deliveryStatus,
+        $or: [
+          { deliveryPartnerId: null },
+          { deliveryPartnerId: partnerId },
+        ],
+      },
+      { $set: update },
+      { new: true }
+    ).lean<LeanOrder | null>();
+
+    if (!updatedOrder) {
+      return NextResponse.json(
+        {
+          error:
+            "Order update failed due to concurrent modification. Please refresh.",
+        },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json(
       {
         message: "Order updated successfully",
         order: {
-          _id: order._id,
-          deliveryStatus: order.deliveryStatus,
-          deliveryOnTheWayAt: order.deliveryOnTheWayAt,
-          deliveryCompletedAt: order.deliveryCompletedAt,
+          _id: updatedOrder._id,
+          deliveryStatus: updatedOrder.deliveryStatus,
+          deliveryOnTheWayAt: updatedOrder.deliveryOnTheWayAt ?? null,
+          deliveryCompletedAt: updatedOrder.deliveryCompletedAt ?? null,
         },
       },
       { status: 200 }
     );
-
-  } catch (err: any) {
-    console.error(err);
+  } catch (err) {
+    console.error("UPDATE ORDER STATUS ERROR:", err);
     return NextResponse.json(
       { error: "Failed to update order" },
       { status: 500 }

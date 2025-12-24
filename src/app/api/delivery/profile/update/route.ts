@@ -3,18 +3,17 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
+import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
 export async function PATCH(req: Request) {
+  const auth = await verifyDeliveryAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { partnerId } = auth;
+
   try {
     const body = await req.json();
-    const { partnerId, name, phone } = body ?? {};
-
-    if (!partnerId) {
-      return NextResponse.json(
-        { error: "partnerId required" },
-        { status: 400 }
-      );
-    }
+    const { name, phone } = body ?? {};
 
     await connectDB();
 
@@ -35,7 +34,7 @@ export async function PATCH(req: Request) {
       { message: "Profile updated successfully" },
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err) {
     console.error("PATCH /api/delivery/profile/update:", err);
     return NextResponse.json(
       { error: "Failed to update profile" },

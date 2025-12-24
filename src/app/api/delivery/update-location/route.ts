@@ -3,43 +3,50 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
+import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
 export async function POST(req: Request) {
+  // 🔐 DELIVERY AUTH
+  const auth = await verifyDeliveryAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const { partnerId } = auth;
+
   try {
     const body = await req.json();
-    const { partnerId, latitude, longitude } = body ?? {};
+    const { latitude, longitude } = body ?? {};
 
-    if (!partnerId || !latitude || !longitude) {
+    if (
+      typeof latitude !== "number" ||
+      typeof longitude !== "number"
+    ) {
       return NextResponse.json(
-        { error: "partnerId, latitude, and longitude required" },
+        { error: "latitude and longitude required" },
         { status: 400 }
       );
     }
 
     await connectDB();
 
-    const partner = await DeliveryPartner.findById(partnerId);
-    if (!partner || partner.status !== "approved") {
-      return NextResponse.json(
-        { error: "Partner invalid or not approved" },
-        { status: 403 }
-      );
-    }
-
-    partner.lastLocation = {
-      latitude,
-      longitude,
-      updatedAt: new Date(),
-    };
-
-    await partner.save();
+    await DeliveryPartner.updateOne(
+      { _id: partnerId },
+      {
+        $set: {
+          lastLocation: {
+            latitude,
+            longitude,
+            updatedAt: new Date(),
+          },
+        },
+      }
+    );
 
     return NextResponse.json(
       { message: "Location updated" },
       { status: 200 }
     );
   } catch (err) {
-    console.error("POST /update-location error:", err);
+    console.error("POST /delivery/update-location error:", err);
     return NextResponse.json(
       { error: "Failed to update location" },
       { status: 500 }
