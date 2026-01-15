@@ -1,6 +1,7 @@
-// icecream-inventory\src\app\verify-otp\page.tsx
+// ice-inventory\src\app\verify-otp\page.tsx
 
 "use client";
+
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../components/Navbar";
@@ -13,6 +14,8 @@ function VerifyOtpContent() {
   const router = useRouter();
   const email = params.get("email") || "";
   const [otp, setOtp] = useState("");
+
+  /* ===== LOGIC UNCHANGED ===== */
 
   const handleVerify = async () => {
     const res = await fetch("/api/verify", {
@@ -31,46 +34,49 @@ function VerifyOtpContent() {
   };
 
   const handleResend = async () => {
-  try {
-    const res = await fetch("/api/register/resend", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      if (res.status === 429 && data.waitSeconds) {
-        toast.error(`Please wait ${data.waitSeconds}s before resending.`);
-      } else {
-        toast.error(data.error || "Unable to resend OTP");
-      }
-      return;
-    }
-    toast.success("OTP resent to your email.");
-  } catch (err) {
-    console.error(err);
-    toast.error("Network error while resending OTP");
-  }
-};
+    try {
+      const res = await fetch("/api/register/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
 
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 429 && data.waitSeconds) {
+          toast.error(`Please wait ${data.waitSeconds}s before resending.`);
+        } else {
+          toast.error(data.error || "Unable to resend OTP");
+        }
+        return;
+      }
+      toast.success("OTP resent to your email.");
+    } catch {
+      toast.error("Network error while resending OTP");
+    }
+  };
+
+  /* ===== UI FIX ONLY ===== */
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#020617] via-[#020b2c] to-[#031136] text-white">
       <Navbar />
-      <main className="flex-grow flex items-center justify-center bg-gradient-to-r from-blue-50 to-indigo-100 p-6">
-        <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-md">
-          <h2 className="text-3xl font-bold text-center text-indigo-600 mb-2">
+
+      <main className="flex flex-1 items-center justify-center px-4 py-10">
+        <div className="w-full max-w-lg rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-2xl p-8 sm:p-10">
+          <h2 className="text-2xl sm:text-3xl font-bold text-center text-cyan-400 mb-2">
             Verify Your Email
           </h2>
-          <p className="text-center text-gray-600 mb-6 text-sm">
+
+          <p className="text-center text-slate-300 text-sm sm:text-base mb-6">
             We’ve sent a 6-digit OTP to{" "}
-            <span className="font-semibold">{email}</span>.
+            <span className="font-semibold text-white break-all">{email}</span>
           </p>
 
           <div className="space-y-5">
-            {/* OTP Input */}
+            {/* OTP INPUT */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm text-slate-300 mb-1 text-center">
                 Enter OTP
               </label>
               <input
@@ -79,24 +85,25 @@ function VerifyOtpContent() {
                 onChange={(e) => setOtp(e.target.value)}
                 placeholder="123456"
                 maxLength={6}
-                className="border border-gray-300 rounded-lg px-4 py-3 w-full text-center tracking-widest text-lg font-bold text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                inputMode="numeric"
+                className="w-full rounded-md bg-white/10 border border-white/20 px-4 py-3 text-center tracking-widest text-lg font-semibold text-white placeholder-slate-400 outline-none focus:border-cyan-400"
               />
             </div>
 
-            {/* Verify Button */}
+            {/* VERIFY BUTTON */}
             <button
               onClick={handleVerify}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg w-full transition-all duration-200"
+              className="w-full rounded-md py-3 font-semibold bg-gradient-to-r from-cyan-500 to-blue-600 hover:opacity-90 transition"
             >
               Verify OTP
             </button>
 
-            {/* Resend OTP */}
-            <p className="text-center text-sm text-gray-600">
+            {/* RESEND */}
+            <p className="text-center text-sm text-slate-300">
               Didn’t receive the code?{" "}
               <button
                 onClick={handleResend}
-                className="text-indigo-600 font-semibold hover:underline"
+                className="font-semibold text-cyan-400 hover:underline"
               >
                 Resend OTP
               </button>
@@ -104,15 +111,22 @@ function VerifyOtpContent() {
           </div>
         </div>
       </main>
+
       <Footer />
-      <ToastContainer />
+      <ToastContainer position="top-right" theme="dark" />
     </div>
   );
 }
 
 export default function VerifyOtpPage() {
   return (
-    <Suspense fallback={<div className="text-center mt-10 text-gray-500">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-slate-400">
+          Loading…
+        </div>
+      }
+    >
       <VerifyOtpContent />
     </Suspense>
   );

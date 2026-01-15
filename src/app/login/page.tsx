@@ -1,19 +1,30 @@
 // icecream-inventory/src/app/login/page.tsx
+
+
+
+
 "use client";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import { Mail, Lock } from "lucide-react";
+import { Mail, Lock, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 export default function LoginPage() {
-  const [form, setForm] = useState({ email: "", password: "" });
-  const [rememberMe, setRememberMe] = useState(false);
   const router = useRouter();
 
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+  });
+  const [rememberMe, setRememberMe] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  /* ===== AUTO LOGIN (UNCHANGED LOGIC) ===== */
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     const remember = localStorage.getItem("rememberMe");
@@ -23,140 +34,169 @@ export default function LoginPage() {
   }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
+  /* ===== SUBMIT (LOGIC SAME, UI STATE ADDED) ===== */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
 
-    const res = await fetch("/api/login", {
-      method: "POST",
-      body: JSON.stringify(form),
-      headers: { "Content-Type": "application/json" },
-    });
+    try {
+      setLoading(true);
 
-    const data = await res.json();
-    if (res.ok) {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        body: JSON.stringify(form),
+        headers: { "Content-Type": "application/json" },
+      });
 
-      // ⬇ STORE USER WITH SUPPORT FOR MANAGER ADMIN-ID
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          _id: data.user._id,             // admin id for admin OR manager
-          managerId: data.user.managerId || null, 
-          email: data.user.email,
-          name: data.user.name,
-          role: data.user.role,
-        })
-      );
+      const data = await res.json();
 
-      // ⬇ keep rememberMe working
-      localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
+      if (res.ok) {
+        // ⬇ STORE USER (ADMIN / MANAGER SAFE)
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            _id: data.user._id,
+            managerId: data.user.managerId || null,
+            email: data.user.email,
+            name: data.user.name,
+            role: data.user.role,
+          })
+        );
 
-      toast.success("Login successful! Redirecting...");
-      setTimeout(() => router.push("/dashboard"), 2000);
+        localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
 
-    } else {
-      toast.error(data.error || "Invalid credentials!");
+        toast.success("Login successful! Redirecting...");
+        setTimeout(() => router.push("/dashboard"), 1800);
+      } else {
+        toast.error(data.error || "Invalid credentials!");
+        setLoading(false);
+      }
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-blue-100 via-blue-200 to-indigo-200">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#020617] via-[#020b2c] to-[#031136] text-white">
       <Navbar />
 
-      <main className="flex-grow flex items-center justify-center px-4 py-10">
-        <div className="flex w-full max-w-5xl bg-white rounded-2xl shadow-2xl overflow-hidden animate-fadeIn">
-
-          <div className="hidden md:flex flex-col justify-center items-center bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-10 w-1/2">
-            <h2 className="text-4xl font-extrabold mb-4">Welcome Back!</h2>
-            <p className="text-lg text-center opacity-90 leading-relaxed">
-              Manage your ice cream stock, check expiry alerts, 
-              and keep your business running smoothly.
+      <main className="flex flex-1 items-center justify-center px-4 py-10">
+        <div className="w-full max-w-5xl rounded-2xl overflow-hidden shadow-2xl bg-white/5 backdrop-blur-xl border border-white/10 flex flex-col md:flex-row">
+          
+          {/* LEFT PANEL */}
+          <div className="hidden md:flex md:w-1/2 flex-col justify-center px-10 bg-gradient-to-br from-cyan-600/20 to-blue-700/20 border-r border-white/10">
+            <h2 className="text-3xl font-extrabold mb-4 text-cyan-400">
+              Welcome Back
+            </h2>
+            <p className="text-slate-300 leading-relaxed">
+              Manage inventory, billing, delivery partners and analytics —  
+              all from one powerful dashboard.
             </p>
+
+            <ul className="mt-6 space-y-3 text-slate-300 text-sm">
+              <li>✓ Real-time stock updates</li>
+              <li>✓ Expiry & delivery alerts</li>
+              <li>✓ Sales & performance insights</li>
+            </ul>
           </div>
 
-          <div className="flex-1 p-8 md:p-12">
-            <h2 className="text-3xl font-bold text-center text-blue-700 mb-2">
+          {/* RIGHT PANEL */}
+          <div className="flex-1 px-6 sm:px-10 py-10">
+            <h2 className="text-2xl sm:text-3xl font-bold text-center text-cyan-400 mb-2">
               Login
             </h2>
-            <p className="text-center text-gray-600 mb-8">
-              Access your account securely
+            <p className="text-center text-slate-300 mb-8 text-sm sm:text-base">
+              Secure access to your account
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-
+              {/* EMAIL */}
               <div className="relative">
-                <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   name="email"
                   type="email"
+                  value={form.email}
                   onChange={handleChange}
                   placeholder="Enter your email"
-                  className="w-full border border-gray-300 pl-10 pr-3 py-3 rounded-lg 
-                    focus:ring-2 focus:ring-blue-400 outline-none 
-                    placeholder-gray-500 text-gray-900 text-base transition"
                   required
+                  className="w-full rounded-md bg-white/10 border border-white/20 py-3 pl-10 pr-3 text-white placeholder-slate-400 outline-none focus:border-cyan-400"
                 />
               </div>
 
+              {/* PASSWORD */}
               <div className="relative">
-                <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   name="password"
                   type="password"
+                  value={form.password}
                   onChange={handleChange}
                   placeholder="Enter your password"
-                  className="w-full border border-gray-300 pl-10 pr-3 py-3 rounded-lg 
-                    focus:ring-2 focus:ring-blue-400 outline-none 
-                    placeholder-gray-500 text-gray-900 text-base transition"
                   required
+                  className="w-full rounded-md bg-white/10 border border-white/20 py-3 pl-10 pr-3 text-white placeholder-slate-400 outline-none focus:border-cyan-400"
                 />
               </div>
 
-              <div className="flex items-center gap-2 text-sm text-gray-700">
+              {/* REMEMBER ME */}
+              <div className="flex items-center gap-2 text-sm text-slate-300">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
                   id="rememberMe"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                  className="accent-cyan-500"
                 />
                 <label htmlFor="rememberMe">Remember Me</label>
               </div>
 
+              {/* BUTTON */}
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition transform hover:scale-[1.02] duration-300 shadow-md"
+                disabled={loading}
+                className={`w-full flex items-center justify-center gap-2 rounded-md py-3 font-semibold transition
+                  ${
+                    loading
+                      ? "bg-cyan-600/70 cursor-not-allowed"
+                      : "bg-gradient-to-r from-cyan-500 to-blue-600 hover:opacity-90"
+                  }`}
               >
-                Login
+                {loading ? (
+                  <>
+                    <Loader2 className="animate-spin" size={18} />
+                    Verifying…
+                  </>
+                ) : (
+                  "Login"
+                )}
               </button>
             </form>
 
-            <div className="mt-4 text-center text-sm text-gray-600">
-              <p>
-                <button
-                  onClick={() => router.push("/forgot-password")}
-                  className="text-blue-600 font-semibold hover:underline mr-4"
-                  type="button"
-                >
-                  Forgot password?
-                </button>
-                <br/>
-
-                Don’t have an account?{" "}
-                <Link href="/register" className="text-blue-600 font-semibold hover:underline">
-                  Register
-                </Link>
-              </p>
+            {/* LINKS */}
+            <div className="mt-6 text-center text-sm text-slate-300">
+              <button
+                onClick={() => router.push("/forgot-password")}
+                className="text-cyan-400 hover:underline mr-3"
+                type="button"
+              >
+                Forgot password?
+              </button>
+              <br />
+              Don’t have an account?{" "}
+              <Link href="/register" className="text-cyan-400 font-semibold hover:underline">
+                Register
+              </Link>
             </div>
-
           </div>
         </div>
       </main>
 
       <Footer />
-      <ToastContainer />
+      <ToastContainer position="top-right" theme="dark" />
     </div>
   );
 }

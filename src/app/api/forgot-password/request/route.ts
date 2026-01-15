@@ -142,7 +142,7 @@ export async function POST(req: Request) {
     const otpExpires = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
     // update fields on user document (ensure schema allows these keys)
-    user.otpHash = otpHash;
+    user.otp = hashOtp(otp);   // store HASH here
     user.otpExpires = otpExpires;
     user.otpRequestedAt = now;
     // optional: reset failed attempts counter
