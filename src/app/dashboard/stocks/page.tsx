@@ -1,5 +1,4 @@
 // src/app/dashboard/stocks/page.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -9,18 +8,10 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-
-interface Product {
-  _id: string;
-  userId: string;
-  name: string;
-  category?: string;
-  unit: "piece" | "box" | "kg" | "litre" | "gm" | "ml";
-  quantity: number;
-  minStock?: number;
-  packQuantity?: number;
-  packUnit?: string;
-}
+import { Product } from "@/types/stocks.types";
+import StockHeader from "./StockHeader";
+import StockTable from "./StockTable";
+import EmptyStockModal from "./EmptyStockModal";
 
 export default function StockPage() {
   const router = useRouter();
@@ -106,14 +97,6 @@ export default function StockPage() {
       return 0;
     });
 
-  // Group by category for display
-  const groupedProducts = filteredProducts.reduce((acc, product) => {
-    const key = product.category || "Uncategorized";
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(product);
-    return acc;
-  }, {} as Record<string, Product[]>);
-
   // Format date/time for filename
   const getDateTimeString = () => {
     const now = new Date();
@@ -131,53 +114,155 @@ export default function StockPage() {
       toast.error("No stock records to download");
       return;
     }
-
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text("Stock Report", 14, 15);
-
-    const now = new Date();
-    const dateTime = `${String(now.getDate()).padStart(2, "0")}/${String(
-      now.getMonth() + 1
-    ).padStart(2, "0")}/${now.getFullYear()} ${String(
-      now.getHours()
-    ).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-
-    doc.setFontSize(11);
-    doc.text(`Generated on: ${dateTime}`, 14, 22);
-
-    const tableData = filteredProducts.map((p) => [
-      p.name,
-      p.category || "-",
-      String(p.quantity),
-      p.packUnit || "-",
-      p.minStock !== undefined ? p.minStock : "-",
-    ]);
-
-    autoTable(doc, {
-      head: [["Name", "Category", "Quantity", "Pack Unit", "Min Stock"]],
-      body: tableData,
-      startY: 30,
-      didParseCell: function (data) {
-        if (data.section === "body") {
-          const rowIndex = data.row.index;
-          const product = filteredProducts[rowIndex];
-          const isLow =
-            product.minStock !== undefined &&
-            product.quantity < product.minStock;
-
-          if (isLow) {
-            data.cell.styles.fillColor = [255, 200, 200];
-            data.cell.styles.textColor = [180, 0, 0];
-            data.cell.styles.fontStyle = "bold";
+  
+    toast.loading("Generating stock report...");
+  
+    try {
+      const doc = new jsPDF("p", "pt", "a4");
+  
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 40;
+  
+      /* ================= DATE / TIME ================= */
+      const now = new Date();
+      const date = now.toLocaleDateString("en-IN");
+      const time = now.toLocaleTimeString("en-IN");
+  
+      /* ================= HEADER ================= */
+      doc.setFillColor(37, 99, 235); // blue-600
+      doc.rect(0, 0, pageWidth, 70, "F");
+  
+      doc.setTextColor(255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.text("STOCK REPORT", marginX, 42);
+  
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("IceCream Inventory System", marginX, 58);
+  
+      /* ================= META ================= */
+      doc.setTextColor(0);
+      doc.setFontSize(10);
+  
+      doc.text(`Generated Date : ${date}`, marginX, 100);
+      doc.text(`Generated Time : ${time}`, marginX, 115);
+      doc.text(`Total Products : ${filteredProducts.length}`, marginX, 130);
+  
+      /* ================= SUMMARY ================= */
+      const lowStockCount = filteredProducts.filter(
+        (p) => p.minStock !== undefined && p.quantity < p.minStock
+      ).length;
+  
+      doc.setFont("helvetica", "bold");
+      doc.text("Summary", marginX, 160);
+  
+      doc.setFont("helvetica", "normal");
+      doc.text(`• Total Items        : ${filteredProducts.length}`, marginX, 180);
+      doc.text(`• Low Stock Items    : ${lowStockCount}`, marginX, 195);
+  
+      /* ================= TABLE ================= */
+      const tableBody = filteredProducts.map((p, i) => [
+        i + 1,
+        p.name,
+        p.category || "-",
+        String(p.quantity),
+        p.packUnit || "-",
+        p.minStock !== undefined ? String(p.minStock) : "-",
+      ]);
+  
+      autoTable(doc, {
+        startY: 225,
+        head: [[
+          "#",
+          "Product Name",
+          "Category",
+          "Quantity",
+          "Pack Unit",
+          "Min Stock",
+        ]],
+        body: tableBody,
+  
+        theme: "grid", // ✅ vertical + horizontal lines
+  
+        styles: {
+          fontSize: 10,
+          cellPadding: 6,
+          valign: "middle",
+          textColor: 20,
+        },
+  
+        headStyles: {
+          fillColor: [37, 99, 235],
+          textColor: 255,
+          fontStyle: "bold",
+          halign: "center",
+        },
+  
+        bodyStyles: {
+          halign: "center",
+        },
+  
+        columnStyles: {
+          0: { cellWidth: 30, halign: "center" },
+          1: { cellWidth: 160, halign: "left" },
+          2: { cellWidth: 90, halign: "left" },
+          3: { cellWidth: 70 },
+          4: { cellWidth: 80 },
+          5: { cellWidth: 70 },
+        },
+  
+        didParseCell: (data) => {
+          if (data.section === "body") {
+            const product = filteredProducts[data.row.index];
+            const isLow =
+              product.minStock !== undefined &&
+              product.quantity < product.minStock;
+  
+            if (isLow) {
+              data.cell.styles.fillColor = [255, 230, 230];
+              data.cell.styles.textColor = [180, 0, 0];
+              data.cell.styles.fontStyle = "bold";
+            }
           }
-        }
-      },
-    });
-
-    const fileName = `STOCK-${getDateTimeString()}.pdf`;
-    doc.save(fileName);
+        },
+  
+        didDrawPage: (data) => {
+          doc.setFontSize(9);
+          doc.setTextColor(120);
+          doc.text(
+            `Page ${data.pageNumber}`,
+            pageWidth / 2,
+            pageHeight - 20,
+            { align: "center" }
+          );
+        },
+      });
+  
+      /* ================= FOOTER ================= */
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(
+        "Generated by IceCream Inventory System",
+        pageWidth / 2,
+        pageHeight - 8,
+        { align: "center" }
+      );
+  
+      /* ================= SAVE ================= */
+      const fileName = `STOCK-REPORT-${getDateTimeString()}.pdf`;
+      doc.save(fileName);
+  
+      toast.dismiss();
+      toast.success("Stock report downloaded successfully");
+    } catch (err) {
+      console.error(err);
+      toast.dismiss();
+      toast.error("Failed to generate stock report");
+    }
   };
+  
 
   // Empty stock API call
   const emptyStock = async () => {
@@ -251,241 +336,86 @@ export default function StockPage() {
       <DashboardNavbar />
 
       <main className="flex-grow container mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Stock Management
-          </h1>
-          <div className="flex gap-3">
-            {filteredProducts.length === 0 ? (
-              <button
-                disabled
-                className="flex items-center gap-2 bg-gray-300 text-gray-600 font-medium px-4 py-2 rounded-lg shadow cursor-not-allowed"
-              >
-                No Stock to Export
-              </button>
-            ) : (
-              <button
-                onClick={downloadStockReport}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg shadow transition-all duration-300"
-              >
-                Download Stock Report
-              </button>
-            )}
+        <StockHeader
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          showLowStock={showLowStock}
+          setShowLowStock={setShowLowStock}
+          filteredProducts={filteredProducts}
+          downloadStockReport={downloadStockReport}
+          setShowEmptyModal={setShowEmptyModal}
+          products={products}
+        />
 
-            {/* EMPTY STOCK button — placed near Download Stock Report */}
-            <button
-              onClick={() => setShowEmptyModal(true)}
-              disabled={products.length === 0}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg shadow font-medium transition-all duration-300 ${
-                products.length === 0
-                  ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                  : "bg-red-600 hover:bg-red-700 text-white"
-              }`}
-            >
-              Empty Stock
-            </button>
+<div className="flex flex-wrap items-center gap-3 mb-4 mt-4">
 
-            <button
-              onClick={() => router.push("/dashboard/stocks/history")}
-              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg shadow"
-            >
-              View History
-            </button>
-            <button
-              onClick={() => router.push("/dashboard/stocks/restock")}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow"
-            >
-              Restock
-            </button>
-          </div>
-        </div>
+<button
+  onClick={() => toggleSort("name")}
+  className={`px-3 py-1.5 rounded text-sm font-semibold ${
+    sortBy === "name"
+      ? "bg-blue-600 text-white"
+      : "bg-gray-200 text-gray-900 hover:bg-gray-300"
+  }`}
+>
+  Sort by Name {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+</button>
 
-        {/* Search & Filters */}
-        <div className="bg-gray-100 border border-gray-300 p-4 rounded-lg shadow mb-6 flex flex-wrap gap-4 items-center">
-          <input
-            type="text"
-            placeholder="Search by Name or Category"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="border border-gray-400 rounded px-3 py-2 w-64 text-sm text-gray-800 focus:ring-2 focus:ring-blue-500"
-          />
-          <label className="flex items-center gap-2 text-sm text-gray-800">
-            <input
-              type="checkbox"
-              checked={showLowStock}
-              onChange={(e) => setShowLowStock(e.target.checked)}
-            />
-            Show Low Stock Items
-          </label>
-          <button
-            onClick={() => {
-              setSearchTerm("");
-              setShowLowStock(false);
-              setSortBy(null);
-            }}
-            className="bg-gray-300 hover:bg-gray-400 text-sm px-3 py-2 rounded text-gray-900 font-medium"
-          >
-            Reset
-          </button>
-        </div>
+<button
+  onClick={() => toggleSort("category")}
+  className={`px-3 py-1.5 rounded text-sm font-semibold ${
+    sortBy === "category"
+      ? "bg-blue-600 text-white"
+      : "bg-gray-200 text-gray-900 hover:bg-gray-300"
+  }`}
+>
+  Sort by Category {sortBy === "category" && (sortOrder === "asc" ? "↑" : "↓")}
+</button>
 
-        {/* Sorting Controls */}
-        <div className="flex gap-3 mb-4">
-          <button
-            onClick={() => toggleSort("name")}
-            className={`px-3 py-1.5 rounded text-sm font-medium ${
-              sortBy === "name"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-            }`}
-          >
-            Sort by Name {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
-          </button>
-          <button
-            onClick={() => toggleSort("category")}
-            className={`px-3 py-1.5 rounded text-sm font-medium ${
-              sortBy === "category"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-            }`}
-          >
-            Sort by Category {sortBy === "category" && (sortOrder === "asc" ? "↑" : "↓")}
-          </button>
-          <button
-            onClick={() => toggleSort("quantity")}
-            className={`px-3 py-1.5 rounded text-sm font-medium ${
-              sortBy === "quantity"
-                ? "bg-blue-600 text-white"
-                : "bg-gray-200 text-gray-800 hover:bg-gray-300"
-            }`}
-          >
-            Sort by Quantity {sortBy === "quantity" && (sortOrder === "asc" ? "↑" : "↓")}
-          </button>
-        </div>
+<button
+  onClick={() => toggleSort("quantity")}
+  className={`px-3 py-1.5 rounded text-sm font-semibold ${
+    sortBy === "quantity"
+      ? "bg-blue-600 text-white"
+      : "bg-gray-200 text-gray-900 hover:bg-gray-300"
+  }`}
+>
+  Sort by Quantity {sortBy === "quantity" && (sortOrder === "asc" ? "↑" : "↓")}
+</button>
 
-        {/* Table */}
-        <div className="overflow-x-auto bg-white rounded-2xl shadow-lg">
-          <table className="w-full border-collapse">
-            <thead className="bg-gradient-to-r from-blue-600 to-blue-500 text-white">
-              <tr>
-                <th
-                  className="px-6 py-4 text-left font-semibold text-sm uppercase tracking-wider cursor-pointer"
-                  onClick={() => toggleSort("name")}
-                >
-                  Name {sortBy === "name" && (sortOrder === "asc" ? "↑" : "↓")}
-                </th>
-                <th
-                  className="px-6 py-4 text-left font-semibold text-sm uppercase tracking-wider cursor-pointer"
-                  onClick={() => toggleSort("category")}
-                >
-                  Category {sortBy === "category" && (sortOrder === "asc" ? "↑" : "↓")}
-                </th>
-                <th
-                  className="px-6 py-4 text-left font-semibold text-sm uppercase tracking-wider cursor-pointer"
-                  onClick={() => toggleSort("quantity")}
-                >
-                  Quantity {sortBy === "quantity" && (sortOrder === "asc" ? "↑" : "↓")}
-                </th>
-                <th className="px-6 py-4 text-left font-semibold text-sm uppercase tracking-wider">
-                  Pack Unit
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={4} className="text-center py-6 text-gray-600">
-                    Loading...
-                  </td>
-                </tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="text-center py-6 text-gray-500">
-                    No products found
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map((p, i) => {
-                  const isLow =
-                    p.minStock !== undefined && p.quantity < p.minStock;
-                  return (
-                    <tr
-                      key={p._id}
-                      className={`text-gray-700 transition ${
-                        isLow
-                          ? "bg-red-50 text-red-700"
-                          : i % 2 === 0
-                          ? "bg-gray-50"
-                          : "bg-white"
-                      } hover:shadow-md`}
-                    >
-                      <td className="px-6 py-4 font-medium">{p.name}</td>
-                      <td className="px-6 py-4">{p.category || "-"}</td>
-                      <td className="px-6 py-4">{p.quantity}</td>
-                      <td className="px-6 py-4">{p.packUnit || "-"}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+{/* CLEAR SORT */}
+{sortBy && (
+  <button
+    onClick={() => {
+      setSortBy(null);
+      setSortOrder("asc");
+    }}
+    className="px-3 py-1.5 rounded text-sm font-semibold bg-red-600 hover:bg-red-700 text-white"
+  >
+    Clear Sort
+  </button>
+)}
+</div>
+
+
+        <StockTable
+          filteredProducts={filteredProducts}
+          loading={loading}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          toggleSort={toggleSort}
+        />
       </main>
 
       <Footer />
 
-      {/* Empty Stock Confirmation Modal */}
-      {showEmptyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Are you sure you want to empty the stock?
-            </h3>
-            <p className="text-sm text-gray-700 mb-4">
-              This action will set <strong>all product quantities to 0</strong>.
-              This cannot be undone.
-            </p>
-
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Write <span className="font-bold">"CONFIRM"</span> if you want to
-              continue
-            </label>
-            <input
-              type="text"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 text-gray-700"
-              placeholder="Type CONFIRM to enable"
-              autoFocus
-            />
-
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowEmptyModal(false);
-                  setConfirmText("");
-                }}
-                className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-600"
-                disabled={emptying}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={emptyStock}
-                className={`px-4 py-2 rounded-lg font-medium ${
-                  confirmText === "CONFIRM"
-                    ? "bg-red-600 hover:bg-red-700 text-white"
-                    : "bg-red-300 text-white cursor-not-allowed"
-                }`}
-                disabled={confirmText !== "CONFIRM" || emptying}
-              >
-                {emptying ? "Emptying..." : "OK"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <EmptyStockModal
+        showEmptyModal={showEmptyModal}
+        setShowEmptyModal={setShowEmptyModal}
+        confirmText={confirmText}
+        setConfirmText={setConfirmText}
+        emptying={emptying}
+        emptyStock={emptyStock}
+      />
     </div>
   );
 }

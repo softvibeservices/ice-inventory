@@ -1,5 +1,5 @@
 // icecream-inventory\src\app\dashboard\stocks\restock\page.tsx
-
+// src/app/dashboard/stocks/restock/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -7,15 +7,8 @@ import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-
-interface Product {
-  _id: string;
-  userId: string;
-  name: string;
-  category?: string;
-  unit: "piece" | "box" | "kg" | "litre" | "gm" | "ml";
-  quantity: number;
-}
+import { Product, RestockItem } from "@/types/stocks.types";
+import RestockPdfGenerator from "./RestockPdfGenerator";
 
 type SortType = "name-asc" | "name-desc" | "category";
 
@@ -110,7 +103,7 @@ export default function RestockPage() {
         return;
       }
 
-      const restockedItems: any[] = [];
+      const restockedItems: RestockItem[] = [];
 
       for (const [id, qty] of updates) {
         const product = products.find((p) => p._id === id);
@@ -164,72 +157,144 @@ export default function RestockPage() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <DashboardNavbar />
-
+  
       <main className="flex-grow container mx-auto px-4 py-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Restock Products</h1>
+  
+        {/* ================= HEADER ================= */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+            Restock Products
+          </h1>
+  
           <button
             onClick={() => router.push("/dashboard/stocks")}
-            className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg shadow"
+            className="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-semibold"
           >
             Back
           </button>
         </div>
-
-        {/* 🔍 Search & Sort */}
+  
+        {/* ================= SEARCH & SORT ================= */}
         <div className="flex flex-col md:flex-row gap-4 mb-6">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by product or category"
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-600"
+            placeholder="Search by product name or category"
+            className="
+              w-full md:flex-1
+              border border-gray-400
+              rounded-lg px-3 py-2
+              text-gray-900 placeholder-gray-500
+              focus:ring-2 focus:ring-green-600 outline-none
+            "
           />
-
+  
           <select
             value={sortType}
             onChange={(e) => setSortType(e.target.value as SortType)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-gray-600"
+            className="
+              w-full md:w-56
+              border border-gray-400
+              rounded-lg px-3 py-2
+              text-gray-900
+              focus:ring-2 focus:ring-green-600 outline-none
+            "
           >
             <option value="name-asc">Name (A–Z)</option>
             <option value="name-desc">Name (Z–A)</option>
             <option value="category">Category (Grouped)</option>
           </select>
         </div>
-
-        {/* Note */}
+  
+        {/* ================= NOTE ================= */}
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-semibold text-gray-900 mb-1">
             Restock Reason / Note
           </label>
           <input
             type="text"
             value={globalNote}
             onChange={(e) => setGlobalNote(e.target.value)}
-            className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-600"
+            className="
+              w-full
+              border border-gray-400
+              rounded-lg px-3 py-2
+              text-gray-900
+              focus:ring-2 focus:ring-green-600 outline-none
+            "
           />
         </div>
-
-        <div className="overflow-x-auto bg-white rounded-2xl shadow-lg border border-gray-200">
-          <table className="w-full border-collapse">
-            <thead className="bg-gradient-to-r from-green-600 to-green-500 text-white">
+  
+        {/* ================= MOBILE VIEW ================= */}
+        <div className="grid grid-cols-1 gap-4 sm:hidden">
+          {loading ? (
+            <div className="text-center py-6 text-gray-900 font-medium">
+              Loading...
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="text-center py-6 text-gray-900 font-medium">
+              No products found
+            </div>
+          ) : (
+            filteredProducts.map((p) => (
+              <div
+                key={p._id}
+                className="border border-gray-300 rounded-xl p-4 bg-white shadow-sm"
+              >
+                <h3 className="text-base font-semibold text-gray-900">
+                  {p.name}
+                </h3>
+                <p className="text-sm text-gray-800 mb-2">
+                  {p.category || "Uncategorized"}
+                </p>
+  
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    value={restockValues[p._id] ?? ""}
+                    onChange={(e) => handleQuantityChange(p._id, e.target.value)}
+                    placeholder="0"
+                    className="
+                      w-24
+                      border border-gray-400
+                      rounded-lg px-2 py-1
+                      text-gray-900
+                    "
+                  />
+                  <span className="text-sm font-medium text-gray-900">
+                    {p.unit}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+  
+        {/* ================= TABLET / DESKTOP VIEW ================= */}
+        <div className="hidden sm:block overflow-x-auto bg-white rounded-2xl shadow-md border border-gray-300">
+          <table className="w-full border-collapse text-sm md:text-base">
+            <thead className="bg-green-600 text-white">
               <tr>
-                <th className="px-6 py-4 text-left">Name</th>
-                <th className="px-6 py-4 text-left">Category</th>
-                <th className="px-6 py-4 text-left">Quantity (+/-)</th>
-                <th className="px-6 py-4 text-left">Unit</th>
+                <th className="px-4 py-3 text-left font-semibold">Product Name</th>
+                <th className="px-4 py-3 text-left font-semibold">Category</th>
+                <th className="px-4 py-3 text-left font-semibold">
+                  Quantity (+ / -)
+                </th>
+                <th className="px-4 py-3 text-left font-semibold">Unit</th>
               </tr>
             </thead>
-            <tbody className="text-gray-800">
+  
+            <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-6 text-gray-600">
+                  <td colSpan={4} className="py-6 text-center text-gray-900 font-medium">
                     Loading...
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-6 text-gray-500">
+                  <td colSpan={4} className="py-6 text-center text-gray-900 font-medium">
                     No products found
                   </td>
                 </tr>
@@ -237,38 +302,75 @@ export default function RestockPage() {
                 filteredProducts.map((p, i) => (
                   <tr
                     key={p._id}
-                    className={`${i % 2 === 0 ? "bg-gray-50" : "bg-white"} hover:bg-green-50`}
+                    className={`border-t ${
+                      i % 2 === 0 ? "bg-gray-50" : "bg-white"
+                    } hover:bg-green-50`}
                   >
-                    <td className="px-6 py-4 font-medium">{p.name}</td>
-                    <td className="px-6 py-4">{p.category || "-"}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      {p.name}
+                    </td>
+                    <td className="px-4 py-3 text-gray-900">
+                      {p.category || "-"}
+                    </td>
+                    <td className="px-4 py-3">
                       <input
                         type="number"
                         value={restockValues[p._id] ?? ""}
-                        onChange={(e) => handleQuantityChange(p._id, e.target.value)}
-                        className="w-28 border border-gray-300 rounded-lg px-3 py-2"
+                        onChange={(e) =>
+                          handleQuantityChange(p._id, e.target.value)
+                        }
                         placeholder="0"
+                        className="
+                          w-28
+                          border border-gray-400
+                          rounded-lg px-2 py-1
+                          text-gray-900
+                        "
                       />
                     </td>
-                    <td className="px-6 py-4">{p.unit}</td>
+                    <td className="px-4 py-3 text-gray-900">
+                      {p.unit}
+                    </td>
                   </tr>
                 ))
               )}
             </tbody>
           </table>
         </div>
-
-        <div className="flex justify-end mt-6">
+  
+        {/* ================= ACTIONS ================= */}
+        <div className="flex flex-col sm:flex-row justify-end gap-4 mt-6">
+          <RestockPdfGenerator
+            items={Object.entries(restockValues)
+              .filter(([_, qty]) => qty !== 0)
+              .map(([id, qty]) => {
+                const product = products.find((p) => p._id === id);
+                return {
+                  productId: id,
+                  name: product?.name || "",
+                  category: product?.category,
+                  unit: product?.unit || "",
+                  quantity: qty,
+                  note: globalNote,
+                };
+              })}
+            dateTime={new Date().toLocaleString()}
+            note={globalNote}
+            fileName={`RESTOCK-${new Date().toISOString().slice(0, 10)}.pdf`}
+          />
+  
           <button
             onClick={handleSave}
-            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg shadow-lg"
+            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-semibold shadow-lg"
           >
-            Save
+            Save Restock
           </button>
         </div>
       </main>
-
+  
       <Footer />
     </div>
   );
+  
+  
 }
