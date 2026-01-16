@@ -1,10 +1,12 @@
+//ice-inventory\src\app\dashboard\billing\page.tsx 
+
 "use client";
 import { useEffect, useState, useRef } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import PdfExportComponent from "./PdfExportComponent";
+
 
 type Customer = {
   _id: string;
@@ -134,6 +136,9 @@ export default function BillingPage() {
   // refs for keyboard navigation (product -> quantity -> next product)
   const productRefs = useRef<(HTMLInputElement | null)[]>([]);
   const quantityRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const pdfExportRef = useRef<any>(null);
+
 
   // ===== Helpers =====
   const safeJson = async (res: Response) => {
@@ -725,8 +730,9 @@ export default function BillingPage() {
         "Bill saved, stock updated & customer debit adjusted successfully."
       );
 
-      // ✅ AUTO EXPORT
-      await exportPDF();
+      if (pdfExportRef.current) {
+        await pdfExportRef.current.exportPDF();
+      }
 
       setShowConfirm(false);
       resetBillForm();
@@ -738,467 +744,60 @@ export default function BillingPage() {
     }
   };
 
-  // ===== PDF Export with consistent formatting on ALL pages =====
-  const exportPDF = async () => {
-    if (!billingCustomer || !billingCustomer.name?.trim()) {
-      toast.error("Please select a Billing customer before generating PDF.");
-      return;
-    }
-    const billAddr =
-      billingCustomer.address || billingCustomer.shopAddress || "";
-    if (!billAddr.trim()) {
-      toast.error("Billing address is required to generate PDF.");
-      return;
-    }
-
-    const shName = sameAsBilling
-      ? billingCustomer.name
-      : shippingCustomer?.name;
-    const shAddress = sameAsBilling
-      ? billAddr
-      : shippingCustomer?.address || shippingCustomer?.shopAddress;
-
-    if (!shName?.trim() || !shAddress?.trim()) {
-      toast.error("Shipping customer name and address are required.");
-      return;
-    }
-
-    if (!seller) {
-      toast.error("Seller/Bill profile is missing.");
-      return;
-    }
-
-    if (!seller.sellerName || !seller.fullAddress) {
-      toast.error("Seller name and address required.");
-      return;
-    }
-
-    if (!seller.logoUrl || !seller.qrCodeUrl || !seller.signatureUrl) {
-      toast.error("Logo, QR and Signature are required.");
-      return;
-    }
-
-    const bankNameText = bank?.bankName || seller.bankName;
-    const accNoText =
-      bank?.accountNumber ||
-      (seller as any)?.accountNumber ||
-      (seller as any)?.accountNo;
-    const ifscText = bank?.ifscCode || (seller as any)?.ifscCode;
-    const inFavorText = bank?.bankingName || seller.bankingName;
-
-    if (!bankNameText || !accNoText || !ifscText || !inFavorText) {
-      toast.error("Complete bank details required.");
-      return;
-    }
-
-    const filledItems = items.filter(
-      (it) =>
-        it.productName &&
-        it.productName.trim() !== "" &&
-        it.quantity &&
-        it.quantity > 0
-    );
-    if (!filledItems.length) {
-      toast.error("Add at least one product with quantity.");
-      return;
-    }
-
-    const fetchImageAsDataURL = async (url?: string | null) => {
-      if (!url) return null;
-      try {
-        if (url.startsWith("data:")) return url;
-        const resp = await fetch(url);
-        if (!resp.ok) return null;
-        const blob = await resp.blob();
-        return await new Promise<string | null>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () =>
-            resolve(typeof reader.result === "string" ? reader.result : null);
-          reader.readAsDataURL(blob);
-        });
-      } catch {
-        return null;
-      }
-    };
-
-    const logoDataUrl = await fetchImageAsDataURL(seller.logoUrl);
-    const qrDataUrl = await fetchImageAsDataURL(seller.qrCodeUrl);
-    const sigDataUrl = await fetchImageAsDataURL(seller.signatureUrl);
-
-    const doc = new jsPDF("p", "pt", "a4");
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-
-    const margin = {
-      top: 190,
-      bottom: 140,
-      left: 40,
-      right: 40,
-    };
-
-    const tableTop = margin.top + 18;
-
-    const drawHeader = (pageNumber: number, totalPages: number) => {
-      const topY = 30;
-
-      if (logoDataUrl) {
-        try {
-          doc.addImage(logoDataUrl, "PNG", margin.left, topY - 10, 60, 60);
-        } catch { }
-      }
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(18);
-      doc.text(
-        (seller?.sellerName || "SELLER").toUpperCase(),
-        pageWidth / 2,
-        topY + 5,
-        { align: "center" }
-      );
-
-      doc.setFont("helvetica", "normal").setFontSize(10);
-      doc.text(seller?.fullAddress || "-", pageWidth / 2, topY + 22, {
-        align: "center",
-        maxWidth: pageWidth - 80,
-      });
-
-      if (seller?.contact) {
-        doc.text(`Contact: ${seller.contact}`, pageWidth / 2, topY + 36, {
-          align: "center",
-        });
-      }
-
-      if (seller?.gstNumber) {
-        doc.text(`GSTIN: ${seller.gstNumber}`, pageWidth / 2, topY + 50, {
-          align: "center",
-        });
-      }
-
-      const compLine =
-        fixedLine ||
-        "composition taxable person not eligible to collect taxes on supplies";
-
-      doc.setFont("helvetica", "italic").setFontSize(9);
-      doc.text(compLine, pageWidth / 2, topY + 66, {
-        align: "center",
-        maxWidth: pageWidth - 100,
-      });
-
-      doc.setFont("helvetica", "bold").setFontSize(14);
-      doc.text("BILL OF SUPPLY", pageWidth / 2, topY + 82, {
-        align: "center",
-      });
-
-      doc.setFont("helvetica", "normal").setFontSize(9);
-      doc.text(`Serial: ${serialNo}`, pageWidth - margin.right, topY, {
-        align: "right",
-      });
-      doc.text(`Date: ${date}`, pageWidth - margin.right, topY + 12, {
-        align: "right",
-      });
-
-      doc.text(
-        `Page ${pageNumber} / ${totalPages}`,
-        pageWidth - margin.right,
-        topY + 24,
-        { align: "right" }
-      );
-
-      const boxTop = margin.top - 70;
-      const boxHeight = 70;
-      const gap = 12;
-      const boxWidth = (pageWidth - margin.left - margin.right - gap) / 2;
-
-      doc.setDrawColor(0);
-      doc.setLineWidth(0.7);
-
-      doc.rect(margin.left, boxTop, boxWidth, boxHeight);
-      doc.rect(margin.left + boxWidth + gap, boxTop, boxWidth, boxHeight);
-
-      doc.setFont("helvetica", "bold").setFontSize(10);
-      doc.text("Billing Details", margin.left + 6, boxTop + 14);
-      doc.text(
-        "Shipping Details",
-        margin.left + boxWidth + gap + 6,
-        boxTop + 14
-      );
-
-      doc.setFont("helvetica", "normal").setFontSize(9);
-
-      const billShop = billingCustomer?.shopName || "-";
-      const billName = billingCustomer?.name || "-";
-      const billAddr =
-        billingCustomer?.address || billingCustomer?.shopAddress || "-";
-      const billContact = billingCustomer?.contact || "-";
-
-      const shipShop = sameAsBilling ? billShop : shippingCustomer?.shopName || "-";
-      const shipName = sameAsBilling ? billName : shippingCustomer?.name || "-";
-      const shipAddr = sameAsBilling
-        ? billAddr
-        : shippingCustomer?.address || shippingCustomer?.shopAddress || "-";
-      const shipContact = sameAsBilling
-        ? billContact
-        : shippingCustomer?.contact || "-";
-
-      let y = boxTop + 28;
-
-      doc.text(`Shop: ${billShop}`, margin.left + 6, y);
-      y += 12;
-      doc.text(`Customer: ${billName}`, margin.left + 6, y);
-      y += 12;
-      doc.text(`Address: ${billAddr}`, margin.left + 6, y);
-      y += 12;
-      doc.text(`Contact: ${billContact}`, margin.left + 6, y);
-
-      let y2 = boxTop + 28;
-      const sx = margin.left + boxWidth + gap + 6;
-      doc.text(`Shop: ${shipShop}`, sx, y2);
-      y2 += 12;
-      doc.text(`Customer: ${shipName}`, sx, y2);
-      y2 += 12;
-      doc.text(`Address: ${shipAddr}`, sx, y2);
-      y2 += 12;
-      doc.text(`Contact: ${shipContact}`, sx, y2);
-
-      doc.line(
-        margin.left,
-        tableTop - 10,
-        pageWidth - margin.right,
-        tableTop - 10
-      );
-    };
-
-    const drawFooter = () => {
-      const footerTop = pageHeight - margin.bottom + 10;
-
-      doc.setDrawColor(0);
-      doc.setLineWidth(0.6);
-      doc.line(margin.left, footerTop, pageWidth - margin.right, footerTop);
-
-      doc.setFont("helvetica", "bold").setFontSize(11);
-      doc.text("Payment & Banking Details", margin.left, footerTop + 16);
-
-      const bankNameText2 = bank?.bankName || seller.bankName || "-";
-      const branchText2 = bank?.branchName || seller.branchName || "-";
-      const accNoText2 =
-        bank?.accountNumber ||
-        (seller as any)?.accountNumber ||
-        (seller as any)?.accountNo ||
-        "-";
-      const ifscText2 = bank?.ifscCode || (seller as any)?.ifscCode || "-";
-      const inFavorText2 = bank?.bankingName || seller.bankingName || "-";
-
-      let lineY = footerTop + 32;
-      const lineGap = 12;
-      doc.setFont("helvetica", "normal").setFontSize(9);
-      doc.text(`Bank: ${bankNameText2}`, margin.left, lineY);
-      lineY += lineGap;
-      doc.text(`Branch: ${branchText2}`, margin.left, lineY);
-      lineY += lineGap;
-      doc.text(`Account No.: ${accNoText2}`, margin.left, lineY);
-      lineY += lineGap;
-      doc.text(`IFSC: ${ifscText2}`, margin.left, lineY);
-      lineY += lineGap;
-      doc.text(`In favour of: ${inFavorText2}`, margin.left, lineY);
-
-      if (qrDataUrl) {
-        doc.addImage(
-          qrDataUrl,
-          "PNG",
-          pageWidth / 2 - 35,
-          footerTop + 20,
-          70,
-          70
-        );
-      }
-
-      if (sigDataUrl) {
-        const sigW = 110;
-        const sigH = 50;
-        const sigX = pageWidth - margin.right - sigW;
-        const sigY = footerTop + 26;
-
-        doc.addImage(sigDataUrl, "PNG", sigX, sigY, sigW, sigH);
-        doc.setFont("helvetica", "italic").setFontSize(8);
-        doc.text("Signature of the Supplier", sigX + sigW / 2, sigY - 4, {
-          align: "center",
-        });
-      }
-
-      doc.setFont("helvetica", "normal").setFontSize(9);
-      doc.text(
-        seller?.slogan || "Thank you for your business!",
-        pageWidth / 2,
-        pageHeight - 22,
-        { align: "center" }
-      );
-    };
-
-    const tableBody = filledItems.map((it, idx) => [
-      `${idx + 1}`,
-      it.productName,
-      String(it.quantity),
-      it.unit || "-",
-      it.free ? "FREE" : Number(it.price).toFixed(2),
-      it.free ? "FREE" : Number(it.total).toFixed(2),
-    ]);
-
-    const subtotal = filledItems.reduce(
-      (acc, it) => acc + (it.free ? 0 : it.total),
-      0
-    );
-    const discountAmount = (subtotal * (discountPercent || 0)) / 100;
-    const grandTotal = subtotal - discountAmount;
-
-    autoTable(doc, {
-      head: [["#", "Particulars", "Qty", "Unit", "Price (Rs.)", "Total (Rs.)"]],
-      body: tableBody,
-      foot: [
-        [
-          {
-            content: `Total Boxes: ${totalQty}`,
-            colSpan: 6,
-            styles: { halign: "left" },
-          },
-        ],
-        [
-          { content: "Subtotal", colSpan: 5, styles: { halign: "right" } },
-          { content: subtotal.toFixed(2), styles: { halign: "center" } },
-        ],
-        [
-          {
-            content: `Discount (${discountPercent}%)`,
-            colSpan: 5,
-            styles: { halign: "right" },
-          },
-          { content: discountAmount.toFixed(2), styles: { halign: "center" } },
-        ],
-        [
-          { content: "Total", colSpan: 5, styles: { halign: "right" } },
-          {
-            content: grandTotal.toFixed(2),
-            styles: { halign: "center", fontStyle: "bold" },
-          },
-        ],
-      ],
-      margin: {
-        top: tableTop,
-        bottom: margin.bottom,
-        left: margin.left,
-        right: margin.right,
-      },
-      theme: "grid",
-      styles: {
-        fontSize: 10,
-        cellPadding: 6,
-        halign: "center",
-        valign: "middle",
-        lineColor: [0, 0, 0],
-        lineWidth: 0.7,
-      },
-      headStyles: {
-        fillColor: [240, 240, 240],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-        lineColor: [0, 0, 0],
-        lineWidth: 0.7,
-      },
-      bodyStyles: {
-        lineColor: [0, 0, 0],
-        lineWidth: 0.7,
-      },
-      footStyles: {
-        fillColor: [255, 255, 255],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-        lineColor: [0, 0, 0],
-        lineWidth: 0.7,
-      },
-      columnStyles: { 1: { halign: "left" } },
-      didDrawPage: () => {
-        const pageInfo = (doc.internal as any).getCurrentPageInfo();
-        drawHeader(
-          pageInfo.pageNumber,
-          (doc.internal as any).getNumberOfPages()
-        );
-        drawFooter();
-      },
-    });
-
-    const pages = (doc.internal as any).getNumberOfPages();
-    doc.setPage(pages);
-
-    if (remarks.trim()) {
-      const y = pageHeight - margin.bottom - 40;
-      doc.setFont("helvetica", "bold").setFontSize(10);
-      doc.text("Remarks:", margin.left, y);
-      doc.setFont("helvetica", "normal").setFontSize(9);
-      doc.text(remarks, margin.left, y + 14, {
-        maxWidth: pageWidth - margin.left - margin.right,
-      });
-    }
-
-    doc.save(`Bill_${serialNo}.pdf`);
-  };
-
   // ===== UI =====
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <DashboardNavbar />
 
       <header className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-start justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
             <div className="flex items-center gap-4">
               {seller?.logoUrl ? (
                 <img
                   src={seller.logoUrl}
                   alt="logo"
-                  className="h-20 w-auto object-contain"
+                  className="h-16 w-auto object-contain"
                 />
               ) : (
-                <div className="h-20 w-20 rounded-md bg-gray-100 flex items-center justify-center text-sm text-gray-500">
+                <div className="h-16 w-16 rounded-md bg-gray-100 flex items-center justify-center text-sm text-gray-500">
                   No Logo
                 </div>
               )}
             </div>
-            <div className="flex-1 text-right">
-              <h2 className="text-xl font-bold text-gray-700">
+            <div className="flex-1 text-right text-sm sm:text-base">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-700">
                 {seller?.sellerName || "Seller Name"}
               </h2>
-              <p className="text-sm text-gray-700">{seller?.contact || "-"}</p>
-              <p className="text-sm text-gray-700">
-                {seller?.fullAddress || "-"}
-              </p>
-              <p className="text-sm text-gray-800">
-                GST: {seller?.gstNumber || "-"}
-              </p>
+              <p className="text-gray-700">{seller?.contact || "-"}</p>
+              <p className="text-gray-700">{seller?.fullAddress || "-"}</p>
+              <p className="text-gray-800">GST: {seller?.gstNumber || "-"}</p>
               <div className="mt-1">
                 <textarea
                   value={fixedLine}
                   onChange={(e) => setFixedLine(e.target.value)}
-                  className="mt-2 w-full max-w-md text-sm border rounded p-2 text-gray-900"
+                  className="mt-2 w-full max-w-md text-xs sm:text-sm border rounded p-2 text-gray-900"
                   rows={1}
                 />
               </div>
             </div>
           </div>
           {seller?.slogan && (
-            <p className="text-gray-700 text-center text-sm font-medium mt-3">
+            <p className="text-gray-700 text-center text-xs sm:text-sm font-medium mt-3">
               {seller.slogan}
             </p>
           )}
         </div>
       </header>
 
-      <main className="flex-grow container mx-auto px-6 py-8">
-        <div className="bg-white rounded-lg shadow p-6 text-gray-900">
-          <h1 className="text-3xl font-bold text-center mb-6">
+      <main className="flex-grow container mx-auto px-4 sm:px-6 py-4 sm:py-8">
+        <div className="bg-white rounded-lg shadow p-4 sm:p-6 text-gray-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-center mb-4 sm:mb-6">
             BILL OF SUPPLY
           </h1>
 
           {/* BILLING / SHIPPING */}
-          <div className="grid grid-cols-2 gap-6 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
             <div>
               <h3 className="text-sm font-semibold mb-1">Billing Details</h3>
               <div className="flex gap-2">
@@ -1209,19 +808,16 @@ export default function BillingPage() {
                   onChange={(e) => onCustomerInputChange(e.target.value)}
                   onKeyDown={(e) => {
                     if (!filteredCustomers.length) return;
-
                     if (e.key === "ArrowDown") {
                       e.preventDefault();
                       setCustomerSuggestionIndex((i) =>
                         Math.min(i + 1, filteredCustomers.length - 1)
                       );
                     }
-
                     if (e.key === "ArrowUp") {
                       e.preventDefault();
                       setCustomerSuggestionIndex((i) => Math.max(i - 1, 0));
                     }
-
                     if (e.key === "Enter") {
                       e.preventDefault();
                       const selected = filteredCustomers[customerSuggestionIndex];
@@ -1233,14 +829,14 @@ export default function BillingPage() {
                     }
                   }}
                   placeholder="Type or pick a shop name..."
-                  className="w-full border p-2 rounded text-gray-900"
+                  className="w-full border p-2 rounded text-xs sm:text-sm text-gray-900"
                 />
                 <button
                   onClick={() => {
                     setCustomerInput("");
                     setBillingCustomer(null);
                   }}
-                  className="px-3 py-2 bg-gray-200 rounded text-sm"
+                  className="px-2 sm:px-3 py-1 sm:py-2 bg-gray-200 rounded text-xs sm:text-sm"
                 >
                   Clear
                 </button>
@@ -1262,7 +858,7 @@ export default function BillingPage() {
                 })}
               </datalist>
 
-              <div className="mt-2 text-sm text-gray-800">
+              <div className="mt-2 text-xs sm:text-sm text-gray-800">
                 <div>
                   <strong>Shop Name:</strong>{" "}
                   {billingCustomer?.shopName || "-"}
@@ -1285,7 +881,7 @@ export default function BillingPage() {
 
             <div>
               <h3 className="text-sm font-semibold mb-1">Shipping Details</h3>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2 text-xs sm:text-sm">
                 <input
                   type="checkbox"
                   checked={sameAsBilling}
@@ -1299,7 +895,7 @@ export default function BillingPage() {
                   suppressHydrationWarning
                   list="customer-suggestions"
                   placeholder="Type or pick shipping customer (optional)"
-                  className="w-full border p-2 rounded text-gray-900 mt-2"
+                  className="w-full border p-2 rounded text-xs sm:text-sm text-gray-900 mt-2"
                   onBlur={(e) => {
                     const val = e.currentTarget.value.trim().toLowerCase();
                     if (!val) return;
@@ -1315,7 +911,7 @@ export default function BillingPage() {
                 />
               )}
 
-              <div className="mt-2 text-sm text-gray-800">
+              <div className="mt-2 text-xs sm:text-sm text-gray-800">
                 <div>
                   <strong>Shop Name:</strong>{" "}
                   {sameAsBilling
@@ -1338,18 +934,18 @@ export default function BillingPage() {
                   <strong>Address:</strong>{" "}
                   {sameAsBilling
                     ? billingCustomer?.address ||
-                    billingCustomer?.shopAddress ||
-                    "-"
+                      billingCustomer?.shopAddress ||
+                      "-"
                     : shippingCustomer?.address ||
-                    shippingCustomer?.shopAddress ||
-                    "-"}
+                      shippingCustomer?.shopAddress ||
+                      "-"}
                 </div>
               </div>
             </div>
           </div>
 
           {/* SERIAL + DATE */}
-          <div className="flex justify-between items-center mb-4 text-sm">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 text-xs sm:text-sm">
             <div>
               <strong>Serial No:</strong> {serialNo}
             </div>
@@ -1360,15 +956,15 @@ export default function BillingPage() {
 
           {/* PRODUCT TABLE */}
           <div className="overflow-x-auto mb-4">
-            <table className="w-full table-auto border-collapse">
+            <table className="w-full table-auto border-collapse text-xs sm:text-sm">
               <thead>
-                <tr className="bg-gray-100 text-sm">
-                  <th className="border px-2 py-2">#</th>
-                  <th className="border px-2 py-2">Product (suggestions)</th>
-                  <th className="border px-2 py-2">Quantity</th>
-                  <th className="border px-2 py-2">Price</th>
-                  <th className="border px-2 py-2">Total</th>
-                  <th className="border px-2 py-2">Free</th>
+                <tr className="bg-gray-100">
+                  <th className="border px-2 py-1 sm:px-3 sm:py-2">#</th>
+                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Product</th>
+                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Qty</th>
+                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Price</th>
+                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Total</th>
+                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Free</th>
                 </tr>
               </thead>
               <tbody>
@@ -1380,7 +976,7 @@ export default function BillingPage() {
                   return (
                     <tr
                       key={idx}
-                      className="text-sm even:bg-white odd:bg-gray-50"
+                      className="even:bg-white odd:bg-gray-50"
                     >
                       <td
                         draggable={!!it.productName && it.quantity > 0}
@@ -1388,23 +984,20 @@ export default function BillingPage() {
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={() => {
                           if (dragIndex === null || dragIndex === idx) return;
-
                           setItems((prev) => {
                             const copy = [...prev];
                             const [moved] = copy.splice(dragIndex, 1);
                             copy.splice(idx, 0, moved);
                             return copy;
                           });
-
                           setDragIndex(null);
                         }}
-                        className="cursor-grab border px-2 py-1 text-center align-middle"
+                        className="cursor-grab border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-middle"
                       >
                         ≡ {idx + 1}
                       </td>
 
-                      {/* PRODUCT INPUT */}
-                      <td className="border px-2 py-1 align-top relative">
+                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 align-top relative">
                         <input
                           value={it.productName}
                           disabled={!editable}
@@ -1434,10 +1027,8 @@ export default function BillingPage() {
                           }}
                           onKeyDown={(e) => {
                             if (!editable) return;
-
                             const matches = getFilteredProducts(it.productName);
                             if (!matches.length) return;
-
                             if (e.key === "ArrowDown") {
                               e.preventDefault();
                               setProductSuggestionIndex((prev) => {
@@ -1446,7 +1037,6 @@ export default function BillingPage() {
                                 return copy;
                               });
                             }
-
                             if (e.key === "ArrowUp") {
                               e.preventDefault();
                               setProductSuggestionIndex((prev) => {
@@ -1455,7 +1045,6 @@ export default function BillingPage() {
                                 return copy;
                               });
                             }
-
                             if (e.key === "Enter") {
                               e.preventDefault();
                               const selected = matches[productSuggestionIndex[idx] || 0];
@@ -1466,7 +1055,7 @@ export default function BillingPage() {
                               }
                             }
                           }}
-                          className="w-full border rounded px-2 py-1 text-gray-900 focus:ring-2 focus:ring-blue-500"
+                          className="w-full border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-xs sm:text-sm text-gray-900 focus:ring-2 focus:ring-blue-500"
                           placeholder="Start typing product..."
                         />
                         {it.productName && (
@@ -1502,22 +1091,20 @@ export default function BillingPage() {
                                     setActiveProductRow(null);
                                     setTimeout(() => focusQuantity(idx), 0);
                                   }}
-                                  className={`px-3 py-2 cursor-pointer text-sm flex justify-between ${
-                                    (productSuggestionIndex[idx] || 0) === i
+                                  className={`px-2 py-1 sm:px-3 sm:py-2 cursor-pointer text-xs sm:text-sm flex justify-between ${(productSuggestionIndex[idx] || 0) === i
                                       ? "bg-blue-600 text-white"
                                       : "hover:bg-blue-50"
-                                  }`}
+                                    }`}
                                 >
                                   <span>{p.name}</span>
                                   <span className="text-xs opacity-70">{p.unit}</span>
                                 </div>
                               ))}
                             </div>
-                        )}
+                          )}
                       </td>
 
-                      {/* QUANTITY INPUT */}
-                      <td className="border px-2 py-1 text-center align-top">
+                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-top">
                         <div className="flex flex-col items-center">
                           <input
                             suppressHydrationWarning
@@ -1539,7 +1126,6 @@ export default function BillingPage() {
                                 editable &&
                                 (!it.productName || !it.productName.trim())
                               ) {
-                                // force product first
                                 e.target.blur();
                                 toast.error(
                                   "Please select product name first for this line."
@@ -1549,7 +1135,6 @@ export default function BillingPage() {
                             }}
                             onKeyDown={(e) => {
                               if (!editable) return;
-                              // move to next product when Tab in quantity
                               if (e.key === "Enter") {
                                 e.preventDefault();
                                 const nextIndex = idx + 1;
@@ -1565,12 +1150,12 @@ export default function BillingPage() {
                                 }
                               }
                             }}
-                            className="w-20 border rounded px-2 py-1 text-center text-gray-900"
+                            className="w-16 sm:w-20 border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-center text-xs sm:text-sm text-gray-900"
                             placeholder="0"
                           />
                           {matched && typeof stock === "number" && (
-                            <span className="mt-1 text-[10px] text-gray-500">
-                              Currently in stock:{" "}
+                            <span className="mt-1 text-[10px] text-gray-500 block">
+                              In stock:{" "}
                               <span className="font-semibold">{stock}</span>
                               {matched.packUnit && (
                                 <>
@@ -1586,14 +1171,13 @@ export default function BillingPage() {
                         </div>
                       </td>
 
-                      {/* PRICE */}
-                      <td className="border px-2 py-1 text-center align-top">
+                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-top">
                         {it.free ? (
-                          <span className="font-semibold text-red-600">
+                          <span className="font-semibold text-red-600 text-xs sm:text-sm">
                             FREE
                           </span>
                         ) : (
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-1 sm:gap-2">
                             <input
                               suppressHydrationWarning
                               type="number"
@@ -1606,10 +1190,10 @@ export default function BillingPage() {
                                   price: Number(e.target.value || 0),
                                 })
                               }
-                              className="w-24 border rounded px-2 py-1 text-center text-gray-900"
+                              className="w-16 sm:w-24 border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-center text-xs sm:text-sm text-gray-900"
                             />
                             {it.unit ? (
-                              <span className="text-xs text-gray-600">
+                              <span className="text-[10px] sm:text-xs text-gray-600">
                                 /{it.unit}
                               </span>
                             ) : null}
@@ -1617,64 +1201,63 @@ export default function BillingPage() {
                         )}
                       </td>
 
-                      {/* TOTAL */}
-                      <td className="border px-2 py-1 text-center align-top">
+                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-top">
                         {it.free ? (
-                          <span className="font-semibold text-red-600">
+                          <span className="font-semibold text-red-600 text-xs sm:text-sm">
                             FREE
                           </span>
                         ) : (
-                          <span>{fmt(it.total)}</span>
+                          <span className="text-xs sm:text-sm">{fmt(it.total)}</span>
                         )}
                       </td>
 
-                      {/* FREE CHECKBOX */}
-                      <td className="border px-2 py-1 text-center align-top">
+                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-top">
                         <input
                           type="checkbox"
                           disabled={!editable}
                           checked={it.free}
                           onChange={(e) => toggleFree(idx, e.target.checked)}
+                          className="h-3.5 w-3.5 sm:h-4 sm:w-4"
                         />
                       </td>
                     </tr>
                   );
                 })}
 
-                <tr className="bg-gray-100 font-semibold">
-                  <td className="border px-2 py-2 text-right" colSpan={2}>
+                <tr className="bg-gray-100 font-semibold text-xs sm:text-sm">
+                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-right" colSpan={2}>
                     Total Boxes
                   </td>
-                  <td className="border px-2 py-2 text-center">{totalQty}</td>
-                  <td className="border px-2 py-2"></td>
-                  <td className="border px-2 py-2 text-center">
+                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center">{totalQty}</td>
+                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1"></td>
+                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center">
                     {fmt(subTotal)}
                   </td>
-                  <td className="border px-2 py-2"></td>
+                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1"></td>
                 </tr>
               </tbody>
             </table>
 
-            <p className="mt-1 text-[11px] text-gray-500">
+            <p className="mt-1 text-[10px] sm:text-[11px] text-gray-500">
               * Total Quantity counts only items whose unit is{" "}
               <span className="font-semibold">box/boxes</span>. Units like ml /
               litre / piece are not included.
             </p>
 
-            <div className="mt-3 flex items-center gap-3">
+            <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
               <button
                 onClick={addLine}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                className="px-3 sm:px-4 py-1 sm:py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm"
               >
                 + Add Line
               </button>
               <button
                 onClick={sortByUnitGroup}
-                className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                className="px-3 sm:px-4 py-1 sm:py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs sm:text-sm"
               >
                 Sort by Unit
               </button>
-              <p className="text-xs text-gray-500">
+              <p className="text-[10px] sm:text-xs text-gray-500">
                 Selecting a suggested product will auto-fill price/unit (you can
                 still edit manually). Quantity is limited to available stock and
                 you must fill products line by line (no skipping rows).
@@ -1683,9 +1266,9 @@ export default function BillingPage() {
           </div>
 
           {/* DISCOUNT / TOTAL */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3">
-              <label className="text-sm font-medium">Discount (%)</label>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-4 sm:mb-6">
+            <div className="flex items-center gap-2">
+              <label className="text-xs sm:text-sm font-medium">Discount (%)</label>
               <input
                 suppressHydrationWarning
                 type="number"
@@ -1696,25 +1279,25 @@ export default function BillingPage() {
                 onChange={(e) =>
                   setDiscountPercent(Number(e.target.value || 0))
                 }
-                className="w-28 border rounded px-2 py-1 text-gray-900"
+                className="w-20 sm:w-28 border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-xs sm:text-sm text-gray-900"
               />
             </div>
 
-            <div className="text-right">
-              <div className="text-sm">
+            <div className="text-right text-xs sm:text-sm">
+              <div>
                 Subtotal: <strong>{fmt(subTotal)}</strong>
               </div>
-              <div className="text-lg font-bold">
+              <div className="text-base sm:text-lg font-bold">
                 Total after Discount: {fmt(discounted)}
               </div>
             </div>
           </div>
 
-          {/* FOOTER - Payment & Banking (screen view) */}
-          <div className="border-t pt-4">
-            <h3 className="text-sm font-semibold mb-2">Payment & Banking</h3>
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="text-sm">
+          {/* FOOTER - Payment & Banking */}
+          <div className="border-t pt-3 sm:pt-4">
+            <h3 className="text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Payment & Banking</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+              <div className="text-[10px] sm:text-xs">
                 <div>
                   <strong>Bank:</strong>{" "}
                   {bank?.bankName || seller?.bankName || "-"}
@@ -1745,10 +1328,10 @@ export default function BillingPage() {
                   <img
                     src={seller.qrCodeUrl}
                     alt="Payment QR"
-                    className="h-32 object-contain"
+                    className="h-24 sm:h-32 object-contain"
                   />
                 ) : (
-                  <div className="text-xs text-gray-500">
+                  <div className="text-[10px] sm:text-xs text-gray-500">
                     No payment QR available
                   </div>
                 )}
@@ -1759,45 +1342,53 @@ export default function BillingPage() {
                   <img
                     src={seller.signatureUrl}
                     alt="Signature"
-                    className="h-16 object-contain mx-auto"
+                    className="h-12 sm:h-16 object-contain mx-auto"
                   />
                 ) : (
-                  <div className="text-xs text-gray-500">
+                  <div className="text-[10px] sm:text-xs text-gray-500">
                     No signature uploaded
                   </div>
                 )}
-                <div className="mt-2 text-sm text-center">
+                <div className="mt-1 sm:mt-2 text-[10px] sm:text-xs text-center">
                   {seller?.slogan || ""}
                 </div>
               </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-2 sm:mt-3">
               <textarea
                 suppressHydrationWarning
                 placeholder="Remarks / Note (optional)"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
-                className="w-full border rounded p-2 text-gray-900"
+                className="w-full border rounded p-1 sm:p-2 text-[10px] sm:text-xs text-gray-900"
                 rows={2}
               />
             </div>
           </div>
 
           {/* ACTIONS */}
-          <div className="mt-4 flex items-center justify-end gap-3">
+          <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-end gap-2 sm:gap-3">
             <button
               onClick={handlePrepareBillClick}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+              className="px-3 sm:px-4 py-1 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm"
             >
               ✅ Prepare Bill
             </button>
-            <button
-              onClick={exportPDF}
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-            >
-              📄 Export PDF
-            </button>
+            <PdfExportComponent
+              ref={pdfExportRef}
+              items={items}
+              billingCustomer={billingCustomer}
+              shippingCustomer={shippingCustomer}
+              sameAsBilling={sameAsBilling}
+              seller={seller}
+              bank={bank}
+              serialNo={serialNo}
+              date={date}
+              fixedLine={fixedLine}
+              discountPercent={discountPercent}
+              remarks={remarks}
+            />
           </div>
         </div>
       </main>
@@ -1806,21 +1397,21 @@ export default function BillingPage() {
 
       {/* CONFIRM DIALOG */}
       {showConfirm && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold mb-2 text-gray-900">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-xs sm:max-w-md w-full p-4 sm:p-6">
+            <h2 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 text-gray-900">
               Are you sure you want to save this bill?
             </h2>
-            <p className="text-sm text-gray-700 mb-4">
+            <p className="text-[10px] sm:text-sm text-gray-700 mb-3 sm:mb-4">
               On clicking <strong>OK</strong>, this bill will be saved, product
               stock will be reduced according to the quantities in this bill,
               and the total will be added to this customer&apos;s debit. After
               saving, the form will reset and the serial number will increment.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-2 sm:gap-3">
               <button
                 onClick={() => setShowConfirm(false)}
-                className="px-4 py-2 rounded border border-gray-300 text-gray-700"
+                className="px-3 sm:px-4 py-1 sm:py-2 rounded border border-gray-300 text-[10px] sm:text-sm text-gray-700"
                 disabled={isSaving}
               >
                 Cancel
@@ -1828,7 +1419,7 @@ export default function BillingPage() {
               <button
                 onClick={confirmSaveBill}
                 disabled={isSaving}
-                className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                className="px-3 sm:px-4 py-1 sm:py-2 rounded bg-green-600 text-[10px] sm:text-sm text-white hover:bg-green-700 disabled:opacity-60"
               >
                 {isSaving ? "Saving..." : "OK"}
               </button>
@@ -1838,4 +1429,5 @@ export default function BillingPage() {
       )}
     </div>
   );
+
 }
