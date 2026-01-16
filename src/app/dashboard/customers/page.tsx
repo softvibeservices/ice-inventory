@@ -1,66 +1,22 @@
 // src/app/dashboard/customers/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
-import {
-  Plus,
-  Trash2,
-  Edit3,
-  Phone,
-  Building,
-  FileText,
-  Eye,
-} from "lucide-react";
-
+import { Plus, Trash2, Edit3, Phone, Building, FileText, Eye } from "lucide-react";
+import CustomerForm from "./CustomerForm";
+import CustomerList from "./CustomerList";
 import CustomerViewModal from "./CustomerViewModal";
-
-interface Customer {
-  _id: string;
-  name: string;
-  contacts: string[];
-  shopName: string;
-  shopAddress: string;
-  area?: string;
-  location?: { latitude?: number; longitude?: number };
-  credit: number;
-  debit: number;
-  totalSales: number;
-  remarks?: string;
-  createdAt?: string;
-}
-
-type FormState = {
-  name: string;
-  contacts: string[];
-  shopName: string;
-  shopAddress: string;
-  area: string;
-  latitude: string;
-  longitude: string;
-  remarks: string;
-  credit: string;
-  debit: string;
-  totalSales: string;
-};
-
-type SortMode =
-  | "default"
-  | "credit-asc"
-  | "credit-desc"
-  | "debit-asc"
-  | "debit-desc"
-  | "sales-asc"
-  | "sales-desc";
+import CustomerReportPDF from "./CustomerReportPDF";
+import { Customer, FormState, SortMode } from "@/types/customer.type";
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
-
   const [form, setForm] = useState<FormState>({
     name: "",
     contacts: [""],
@@ -74,23 +30,17 @@ export default function CustomersPage() {
     debit: "0",
     totalSales: "0",
   });
-
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("default");
-
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  // NEW: settlement modal state
-  const [settlementCustomer, setSettlementCustomer] = useState<Customer | null>(
-    null
-  );
+  const [settlementCustomer, setSettlementCustomer] = useState<Customer | null>(null);
   const [settling, setSettling] = useState(false);
 
-  // load user id
+  // Load user id
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) {
@@ -103,14 +53,12 @@ export default function CustomersPage() {
     }
   }, []);
 
-  // fetch customers
+  // Fetch customers
   const fetchCustomers = async () => {
     if (!userId) return;
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/customers?userId=${encodeURIComponent(userId)}`
-      );
+      const res = await fetch(`/api/customers?userId=${encodeURIComponent(userId)}`);
       if (!res.ok) throw new Error("Failed to fetch customers");
       const data = await res.json();
       setCustomers(Array.isArray(data) ? data : []);
@@ -124,46 +72,24 @@ export default function CustomersPage() {
 
   useEffect(() => {
     if (userId) fetchCustomers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  const inputBase =
-    "w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500";
+  // Validation for primary contact
+  const isPrimaryContactValid = (c: string) => /^\d{6,15}$/.test(c.replace(/\s+/g, ""));
 
-  // contact handlers
-  const addContactField = () =>
-    setForm((f) => ({ ...f, contacts: [...f.contacts, ""] }));
-  const removeContactField = (index: number) => {
-    if (index === 0) return;
-    setForm((f) => ({
-      ...f,
-      contacts: f.contacts.filter((_, i) => i !== index),
-    }));
-  };
-  const updateContact = (index: number, value: string) => {
-    const c = [...form.contacts];
-    c[index] = value;
-    setForm((f) => ({ ...f, contacts: c }));
-  };
-
-  // validation for primary contact
-  const isPrimaryContactValid = (c: string) =>
-    /^\d{6,15}$/.test(c.replace(/\s+/g, ""));
-
-  // clean numbers
+  // Clean numbers
   const toNumberSafe = (s: string) => {
     const n = Number(s);
     return Number.isFinite(n) ? n : 0;
   };
 
-  // create or update
+  // Create or update
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) {
       toast.error("You must be logged in");
       return;
     }
-
     if (!form.name.trim()) {
       toast.error("Customer name is required");
       return;
@@ -185,9 +111,6 @@ export default function CustomersPage() {
       return;
     }
 
-
-
-    // build body
     const body: any = {
       name: form.name.trim(),
       contacts: form.contacts.map((c) => c.trim()).filter(Boolean),
@@ -208,7 +131,6 @@ export default function CustomersPage() {
     try {
       setSaving(true);
       if (editingId) {
-        // UPDATE
         const res = await fetch("/api/customers", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -219,14 +141,10 @@ export default function CustomersPage() {
           throw new Error(err?.error || "Update failed");
         }
         const updated = await res.json();
-        // update local state
-        setCustomers((prev) =>
-          prev.map((c) => (c._id === updated._id ? updated : c))
-        );
+        setCustomers((prev) => prev.map((c) => (c._id === updated._id ? updated : c)));
         toast.success("Customer updated");
         setEditingId(null);
       } else {
-        // CREATE
         const res = await fetch("/api/customers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -240,8 +158,6 @@ export default function CustomersPage() {
         setCustomers((prev) => [created, ...prev]);
         toast.success("Customer added");
       }
-
-      // reset form + close
       setForm({
         name: "",
         contacts: [""],
@@ -264,7 +180,7 @@ export default function CustomersPage() {
     }
   };
 
-  // start edit flow
+  // Start edit flow
   const handleEdit = (c: Customer) => {
     setEditingId(c._id);
     setShowForm(true);
@@ -281,19 +197,17 @@ export default function CustomersPage() {
       debit: (c.debit ?? 0).toString(),
       totalSales: (c.totalSales ?? 0).toString(),
     });
-    // smooth scroll to form in case list was long
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // open view modal
+  // Open view modal
   const handleView = (c: Customer) => {
     setViewingCustomer(c);
   };
 
-  // delete modal actions
+  // Delete modal actions
   const openDeleteModal = (id: string) => setDeleteId(id);
   const cancelDelete = () => setDeleteId(null);
-
   const performDelete = async () => {
     if (!userId || !deleteId) {
       toast.error("Action not allowed");
@@ -321,33 +235,26 @@ export default function CustomersPage() {
     }
   };
 
-  // NEW: open settlement modal (with toast if no credit)
+  // Settlement modal
   const openSettlementModal = (c: Customer) => {
     const credit = Number(c.credit ?? 0);
-
     if (!credit || credit <= 0) {
       toast.error("There is no credited amount for this customer.");
       return;
     }
-
     setSettlementCustomer(c);
   };
-
   const closeSettlementModal = () => {
     setSettlementCustomer(null);
   };
-
-  // NEW: confirm settlement inside modal
   const confirmSettlement = async () => {
     if (!userId || !settlementCustomer) {
       toast.error("Missing customer info");
       return;
     }
-
     const c = settlementCustomer;
     const credit = Number(c.credit ?? 0);
     const debit = Number(c.debit ?? 0);
-
     if (!Number.isFinite(credit) || credit <= 0) {
       toast.error("This customer has no credit to settle.");
       return;
@@ -356,15 +263,11 @@ export default function CustomersPage() {
       toast.error("This customer has no debit amount.");
       return;
     }
-
-    // use as much credit as possible (don't make debit negative)
     const usedCredit = Math.min(credit, debit);
     const newDebit = debit - usedCredit;
     const newCredit = credit - usedCredit;
-
     try {
       setSettling(true);
-
       const body: any = {
         id: c._id,
         userId,
@@ -379,30 +282,18 @@ export default function CustomersPage() {
         debit: newDebit,
         totalSales: c.totalSales ?? 0,
       };
-
       const res = await fetch("/api/customers", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.error || "Settlement update failed");
       }
-
       const updated = await res.json();
-
-      setCustomers((prev) =>
-        prev.map((cust) => (cust._id === updated._id ? updated : cust))
-      );
-
-      toast.success(
-        `Settlement done. Debit reduced by ₹${usedCredit.toFixed(
-          2
-        )}. New debit: ₹${newDebit.toFixed(2)}`
-      );
-
+      setCustomers((prev) => prev.map((cust) => (cust._id === updated._id ? updated : cust)));
+      toast.success(`Settlement done. Debit reduced by ₹${usedCredit.toFixed(2)}. New debit: ₹${newDebit.toFixed(2)}`);
       closeSettlementModal();
     } catch (err: any) {
       console.error(err);
@@ -412,110 +303,61 @@ export default function CustomersPage() {
     }
   };
 
-  // search + sort
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let list = customers.filter((c) => {
-      if (!q) return true;
-      return (
-        c.name.toLowerCase().includes(q) ||
-        c.shopName.toLowerCase().includes(q) ||
-        (c.area || "").toLowerCase().includes(q) ||
-        c.contacts.join(" ").toLowerCase().includes(q)
-      );
-    });
-
-    if (sortMode === "default") return list;
-
-    const num = (v: number | undefined) =>
-      Number.isFinite(v as number) ? (v as number) : 0;
-
-    list = [...list].sort((a, b) => {
-      switch (sortMode) {
-        case "credit-asc":
-          return num(a.credit) - num(b.credit);
-        case "credit-desc":
-          return num(b.credit) - num(a.credit);
-        case "debit-asc":
-          return num(a.debit) - num(b.debit);
-        case "debit-desc":
-          return num(b.debit) - num(a.debit);
-        case "sales-asc":
-          return num(a.totalSales) - num(b.totalSales);
-        case "sales-desc":
-          return num(b.totalSales) - num(a.totalSales);
-        default:
-          return 0;
-      }
-    });
-
-    return list;
-  }, [customers, search, sortMode]);
-
-  const formatCurrency = (v?: number) => {
-    if (typeof v !== "number" || Number.isNaN(v)) return "-";
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(v);
-  };
-
   const handleClearFilters = () => {
     setSearch("");
     setSortMode("default");
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-slate-100">
       <DashboardNavbar />
-
-      <main className="flex-grow container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+  
+      {/* ================= MAIN ================= */}
+      <main className="flex-grow w-full max-w-[1400px] mx-auto px-3 sm:px-5 lg:px-8 py-6">
+  
+        {/* ===== Header ===== */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
               Customer Management
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Add, view, edit or delete customers. Edit mode allows changing
-              credit/debit/total sales.
+            <p className="mt-1 text-sm sm:text-base text-slate-700">
+              Manage customers, credits, debits and settlements easily.
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+  
+          {/* ===== Actions ===== */}
+          <div className="flex flex-wrap gap-3 w-full lg:w-auto">
             <input
               type="search"
-              placeholder="Search by name, shop or contact..."
+              placeholder="Search name / shop / contact"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full md:w-72 border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-500 outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full sm:w-72 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-600"
             />
-
-            {/* Sort dropdown */}
+  
             <select
               value={sortMode}
               onChange={(e) => setSortMode(e.target.value as SortMode)}
-              className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full sm:w-56 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
               <option value="default">Sort: Default</option>
-              <option value="credit-asc">Credit (Low → High)</option>
-              <option value="credit-desc">Credit (High → Low)</option>
-              <option value="debit-asc">Debit (Low → High)</option>
-              <option value="debit-desc">Debit (High → Low)</option>
-              <option value="sales-asc">Total Sales (Low → High)</option>
-              <option value="sales-desc">Total Sales (High → Low)</option>
+              <option value="credit-asc">Credit ↑</option>
+              <option value="credit-desc">Credit ↓</option>
+              <option value="debit-asc">Debit ↑</option>
+              <option value="debit-desc">Debit ↓</option>
+              <option value="sales-asc">Sales ↑</option>
+              <option value="sales-desc">Sales ↓</option>
             </select>
-
-            {/* Clear Filters */}
+  
             <button
-              type="button"
               onClick={handleClearFilters}
-              className="border border-gray-300 bg-white text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50 text-sm"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 hover:bg-slate-50"
             >
-              Clear Filters
+              Clear
             </button>
-
+            <CustomerReportPDF customers={customers} />
+  
             <button
               onClick={() => {
                 if (!showForm) {
@@ -537,495 +379,115 @@ export default function CustomersPage() {
                 setShowForm((s) => !s);
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-800 text-white px-4 py-2 rounded-lg shadow"
+              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-700 px-5 py-2.5 text-sm font-semibold text-white shadow hover:from-blue-700 hover:to-indigo-800"
             >
-              <Plus size={18} />{" "}
-              <span className="text-sm font-medium">
-                {showForm ? "Close Form" : "Add Customer"}
-              </span>
+              <Plus size={18} />
+              {showForm ? "Close Form" : "Add Customer"}
             </button>
           </div>
         </div>
+  
+        {/* ===== Form ===== */}
+        <div className="mb-6">
+        <CustomerForm
+  form={form}
+  setForm={setForm}
+  showForm={showForm}
+  saving={saving}
+  editingId={editingId}
+  handleSubmit={handleSubmit}
+  onCancel={() => {
+    setShowForm(false);   // ✅ CLOSE FORM
+    setEditingId(null);  // ✅ EXIT EDIT MODE
+    setForm({            // ✅ RESET FORM
+      name: "",
+      contacts: [""],
+      shopName: "",
+      shopAddress: "",
+      area: "",
+      latitude: "",
+      longitude: "",
+      remarks: "",
+      credit: "0",
+      debit: "0",
+      totalSales: "0",
+    });
+  }}
+/>
 
-        {/* Form */}
-        <div
-          className={`overflow-hidden transition-all duration-300 ${showForm ? "max-h-[1400px] mb-8" : "max-h-0"
-            }`}
-        >
-          <form
-            onSubmit={handleSubmit}
-            className="bg-white rounded-lg shadow p-6 grid grid-cols-1 md:grid-cols-2 gap-6"
-          >
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Customer Name *
-              </label>
-              <input
-                className={inputBase + " text-lg"}
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Ramesh & Sons"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Primary Contact *
-              </label>
-              <div className="flex gap-2">
-                <input
-                  className={inputBase + " text-lg"}
-                  value={form.contacts[0]}
-                  onChange={(e) => updateContact(0, e.target.value)}
-                  placeholder="e.g. 9876543210"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  required
-                />
-                <span className="inline-flex items-center px-3 rounded-lg bg-gray-100 text-gray-600">
-                  <Phone size={18} />
-                </span>
-              </div>
-              <p className="text-xs text-gray-400 mt-1">
-                Digits only (6–15). Add additional contacts below.
-              </p>
-            </div>
-
-            {/* additional contacts */}
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Additional Contacts
-              </label>
-              <div className="space-y-3">
-                {form.contacts.map((c, i) => {
-                  if (i === 0) return null;
-                  return (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        className={inputBase + " text-base"}
-                        value={c}
-                        onChange={(e) => updateContact(i, e.target.value)}
-                        placeholder="Additional contact (optional)"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeContactField(i)}
-                        className="inline-flex items-center gap-2 text-red-600 hover:text-red-800 px-3 py-2 rounded bg-red-50 border border-red-100"
-                        title="Remove"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  );
-                })}
-                <button
-                  type="button"
-                  onClick={addContactField}
-                  className="text-blue-600 hover:underline inline-flex items-center gap-2"
-                >
-                  <Plus size={14} /> Add another contact
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Shop Name *
-              </label>
-              <div className="flex gap-2">
-                <input
-                  className={inputBase + " text-lg"}
-                  value={form.shopName}
-                  onChange={(e) =>
-                    setForm({ ...form, shopName: e.target.value })
-                  }
-                  placeholder="e.g. Maa Ice Cream Store"
-                  required
-                />
-                <span className="inline-flex items-center px-3 rounded-lg bg-gray-100 text-gray-600">
-                  <Building size={18} />
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Shop Address *
-              </label>
-              <input
-                className={inputBase + " text-base"}
-                value={form.shopAddress}
-                onChange={(e) =>
-                  setForm({ ...form, shopAddress: e.target.value })
-                }
-                placeholder="Full shop address"
-                required
-              />
-            </div>
-            {/* 👉 NEW AREA FIELD */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Area *
-              </label>
-              <input
-                className={inputBase + " text-base"}
-                value={form.area}
-                onChange={(e) => setForm({ ...form, area: e.target.value })}
-                placeholder="e.g. Gandhinagar, City Center"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Latitude (optional)
-              </label>
-              <input
-                className={inputBase}
-                value={form.latitude}
-                onChange={(e) =>
-                  setForm({ ...form, latitude: e.target.value })
-                }
-                placeholder="e.g. 21.1458"
-                type="number"
-                step="any"
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Longitude (optional)
-              </label>
-              <input
-                className={inputBase}
-                value={form.longitude}
-                onChange={(e) =>
-                  setForm({ ...form, longitude: e.target.value })
-                }
-                placeholder="e.g. 72.7758"
-                type="number"
-                step="any"
-              />
-            </div>
-
-            {/* editable numeric fields when editing; read-only when creating */}
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Credit
-              </label>
-              <input
-                className={inputBase}
-                value={form.credit}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    credit: e.target.value.replace(/[^\d.-]/g, ""),
-                  })
-                }
-                placeholder="0.00"
-                type="text"
-                inputMode="decimal"
-                readOnly={!editingId}
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                {editingId
-                  ? "You can update credit value."
-                  : "Starts at 0 (editable after creation)."}
-              </p>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Debit
-              </label>
-              <input
-                className={inputBase}
-                value={form.debit}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    debit: e.target.value.replace(/[^\d.-]/g, ""),
-                  })
-                }
-                placeholder="0.00"
-                type="text"
-                inputMode="decimal"
-                readOnly={!editingId}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Total Sales
-              </label>
-              <input
-                className={inputBase}
-                value={form.totalSales}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    totalSales: e.target.value.replace(/[^\d.-]/g, ""),
-                  })
-                }
-                placeholder="0.00"
-                type="text"
-                inputMode="decimal"
-                readOnly={!editingId}
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium text-gray-700 mb-1 block">
-                Remarks
-              </label>
-              <textarea
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
-                rows={3}
-                value={form.remarks}
-                onChange={(e) =>
-                  setForm({ ...form, remarks: e.target.value })
-                }
-                placeholder="Optional remarks (e.g. moved to other supplier)"
-              />
-            </div>
-
-            <div className="md:col-span-2 flex justify-end gap-3">
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingId(null);
-                    setForm({
-                      name: "",
-                      contacts: [""],
-                      shopName: "",
-                      shopAddress: "",
-                       area: "",
-                      latitude: "",
-                      longitude: "",
-                      remarks: "",
-                      credit: "0",
-                      debit: "0",
-                      totalSales: "0",
-                    });
-                    setShowForm(false);
-                  }}
-                  className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel Edit
-                </button>
-              )}
-
-              <button
-                type="submit"
-                disabled={saving}
-                className={`inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-lg ${saving ? "opacity-70" : ""
-                  }`}
-              >
-                <FileText size={16} />{" "}
-                <span className="font-medium">
-                  {editingId ? "Update Customer" : "Save Customer"}
-                </span>
-              </button>
-            </div>
-          </form>
         </div>
-
-        {/* Customers list */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-800">
-              Customer List
-            </h2>
-            <div className="text-sm text-gray-500">
-              {filtered.length} result
-              {filtered.length !== 1 ? "s" : ""}
-            </div>
+  
+        {/* ===== Table / List Container ===== */}
+        <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200">
+           
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto border-collapse text-left">
-              <thead>
-                <tr className="bg-gray-100 text-gray-700 text-sm uppercase">
-                  <th className="p-3 border-b">ID</th>
-                  <th className="p-3 border-b">Name</th>
-                  <th className="p-3 border-b">Primary Contact</th>
-                  <th className="p-3 border-b">Shop</th>
-                  <th className="p-3 border-b">Area</th>          
-                  
-                  <th className="p-3 border-b">Credit</th>
-                  <th className="p-3 border-b">Debit</th>
-                  <th className="p-3 border-b">Total Sales</th>
-                  <th className="p-3 border-b">Remarks</th>
-                  <th className="p-3 border-b">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={10}
-                      className="p-6 text-center text-gray-500"
-                    >
-                      Loading...
-                    </td>
-                  </tr>
-                ) : filtered.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={10}
-                      className="p-6 text-center text-gray-500"
-                    >
-                      No customers found.
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((c) => (
-                    <tr key={c._id} className="hover:bg-gray-50">
-                      <td className="p-3 align-top text-sm text-gray-700 font-mono">
-                        {c._id.slice(-8)}
-                      </td>
-                      <td className="p-3 align-top text-base text-gray-800 font-semibold">
-                        {c.name}
-                      </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        <div className="flex items-center gap-2">
-                          <Phone size={16} />
-                          <div>
-                            <div className="font-medium">
-                              {c.contacts?.[0] || "-"}
-                            </div>
-                            {c.contacts?.length > 1 && (
-                              <div className="text-xs text-gray-500">
-                                +{c.contacts.length - 1} more
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        {c.shopName}
-                      </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        {c.area || "-"}                       {/* 👉 NEW */}
-                      </td>
-                      
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        {formatCurrency(c.credit)}
-                      </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        {formatCurrency(c.debit)}
-                      </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        {formatCurrency(c.totalSales)}
-                      </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        {c.remarks || "-"}
-                      </td>
-                      <td className="p-3 align-top text-sm text-gray-700">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => handleView(c)}
-                            className="inline-flex items-center gap-2 px-3 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
-                            title="View"
-                          >
-                            <Eye size={16} /> View
-                          </button>
-
-                          <button
-                            onClick={() => handleEdit(c)}
-                            className="inline-flex items-center gap-2 px-3 py-1 rounded bg-yellow-50 text-yellow-800 hover:bg-yellow-100"
-                            title="Edit"
-                          >
-                            <Edit3 size={16} /> Edit
-                          </button>
-
-                          {/* Settlement button */}
-                          <button
-                            onClick={() => openSettlementModal(c)}
-                            className="inline-flex items-center gap-2 px-3 py-1 rounded bg-green-50 text-green-700 hover:bg-green-100"
-                            title="Settle credit vs debit"
-                          >
-                            Settle
-                          </button>
-
-                          <button
-                            onClick={() => openDeleteModal(c._id)}
-                            className="inline-flex items-center gap-2 px-3 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100"
-                            title="Delete"
-                          >
-                            <Trash2 size={16} /> Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+  
+          {/* medium-height, owner-friendly */}
+          <div className="max-h-[520px] overflow-auto">
+            <CustomerList
+              customers={customers}
+              search={search}
+              sortMode={sortMode}
+              loading={loading}
+              handleView={handleView}
+              handleEdit={handleEdit}
+              openSettlementModal={openSettlementModal}
+              openDeleteModal={openDeleteModal}
+            />
           </div>
-        </div>
+        </section>
       </main>
-
+  
       <Footer />
-
-      {/* VIEW Modal with same blur bg */}
+  
+      {/* ================= VIEW MODAL ================= */}
       {viewingCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm px-4">
-          <CustomerViewModal
-            customer={viewingCustomer}
-            onClose={() => setViewingCustomer(null)}
-            onEdit={(c) => {
-              setViewingCustomer(null);
-              handleEdit(c);
-            }}
-            onDelete={(id) => {
-              setViewingCustomer(null);
-              openDeleteModal(id);
-            }}
-          />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
+         <CustomerViewModal
+  customer={viewingCustomer}
+  onClose={() => setViewingCustomer(null)}
+  onDelete={(id) => {
+    setViewingCustomer(null);
+    openDeleteModal(id);
+  }}
+/>
+
         </div>
       )}
-
-      {/* Settlement Modal */}
+  
+      {/* ================= SETTLEMENT MODAL ================= */}
       {settlementCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">
-              Settle credit against debit
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              Settle Credit
             </h3>
-            <p className="text-sm text-gray-600 mb-3">
-              Customer:{" "}
+  
+            <p className="text-sm text-slate-700 mb-3">
               <span className="font-semibold">
-                {settlementCustomer.name} ({settlementCustomer.shopName})
-              </span>
+                {settlementCustomer.name}
+              </span>{" "}
+              ({settlementCustomer.shopName})
             </p>
-            <p className="text-sm text-gray-700 mb-2">
-              Current Credit:{" "}
-              <span className="font-semibold text-green-700">
-                ₹{(settlementCustomer.credit || 0).toFixed(2)}
-              </span>
+  
+            <div className="space-y-2 text-sm">
+              <p className="text-green-700 font-semibold">
+                Credit: ₹{(settlementCustomer.credit || 0).toFixed(2)}
+              </p>
+              <p className="text-red-700 font-semibold">
+                Debit: ₹{(settlementCustomer.debit || 0).toFixed(2)}
+              </p>
+            </div>
+  
+            <p className="mt-4 text-sm text-slate-700">
+              Credit will be used to reduce debit. This action is irreversible.
             </p>
-            <p className="text-sm text-gray-700 mb-4">
-              Current Debit:{" "}
-              <span className="font-semibold text-red-700">
-                ₹{(settlementCustomer.debit || 0).toFixed(2)}
-              </span>
-            </p>
-
-            <p className="text-sm text-gray-600 mb-4">
-              On confirming, the customer&apos;s{" "}
-              <strong>total credit amount</strong> will be used to reduce the
-              debit (up to the debit amount). Are you sure you want to proceed?
-            </p>
-
-            <div className="mt-4 flex justify-end gap-3">
+  
+            <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={closeSettlementModal}
-                className="px-4 py-2 rounded border text-gray-700 hover:bg-gray-50 text-sm"
+                className="rounded-lg border px-4 py-2 text-sm font-medium text-slate-800"
                 disabled={settling}
               >
                 Cancel
@@ -1033,8 +495,7 @@ export default function CustomersPage() {
               <button
                 onClick={confirmSettlement}
                 disabled={settling}
-                className={`px-4 py-2 rounded bg-green-600 text-white text-sm ${settling ? "opacity-70" : "hover:bg-green-700"
-                  }`}
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-70"
               >
                 {settling ? "Settling..." : "Confirm"}
               </button>
@@ -1042,31 +503,29 @@ export default function CustomersPage() {
           </div>
         </div>
       )}
-
-      {/* Delete Modal */}
+  
+      {/* ================= DELETE MODAL ================= */}
       {deleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-800">
-              Delete customer?
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900">
+              Delete Customer
             </h3>
-            <p className="text-sm text-gray-500 mt-2">
-              This action cannot be undone. Are you sure you want to delete this
-              customer?
+            <p className="mt-2 text-sm text-slate-700">
+              This action cannot be undone.
             </p>
-
+  
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={cancelDelete}
-                className="px-4 py-2 rounded border text-gray-700"
+                className="rounded-lg border px-4 py-2 text-sm font-medium text-slate-800"
               >
                 Cancel
               </button>
               <button
                 onClick={performDelete}
                 disabled={deleting}
-                className={`px-4 py-2 rounded bg-red-600 text-white ${deleting ? "opacity-70" : ""
-                  }`}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-70"
               >
                 Delete
               </button>
@@ -1076,4 +535,5 @@ export default function CustomersPage() {
       )}
     </div>
   );
+  
 }

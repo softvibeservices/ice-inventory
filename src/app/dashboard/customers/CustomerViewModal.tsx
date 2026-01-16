@@ -1,27 +1,13 @@
 // src/app/components/CustomerViewModal.tsx
 "use client";
 
-import { X, Edit3, Trash2, MapPin, ExternalLink } from "lucide-react";
+import { X, Trash2, MapPin } from "lucide-react";
 import { useEffect } from "react";
-
-interface Customer {
-  _id: string;
-  name: string;
-  contacts: string[];
-  shopName: string;
-  shopAddress: string;
-  area?: string;
-  location?: { latitude?: number; longitude?: number };
-  credit: number;
-  debit: number;
-  totalSales: number;
-  remarks?: string;
-}
+import { Customer } from "@/types/customer.type";
 
 interface Props {
   customer: Customer | null;
   onClose: () => void;
-  onEdit: (c: Customer) => void;
   onDelete: (id: string) => void;
 }
 
@@ -37,7 +23,6 @@ const formatCurrency = (v?: number) => {
 export default function CustomerViewModal({
   customer,
   onClose,
-  onEdit,
   onDelete,
 }: Props) {
   if (!customer) return null;
@@ -63,140 +48,147 @@ export default function CustomerViewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-8 relative animate-fadeIn"
         onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl bg-white rounded-xl shadow-xl flex flex-col max-h-[80vh]"
       >
-        {/* Close button (top-right) */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-gray-100 transition"
-          title="Close"
-        >
-          <X size={18} />
-        </button>
-
-        {/* Header */}
-        <div className="flex items-start gap-6">
-          <div className="flex-shrink-0 w-20 h-20 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-md">
-            {String(customer.name || " ").slice(0, 2).toUpperCase()}
-          </div>
-
-          <div className="flex-1">
-            <h3 className="text-2xl font-bold text-gray-900">
+        {/* ================= HEADER ================= */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div>
+            <h3 className="text-base font-bold text-slate-900">
               {customer.name}
             </h3>
-            <p className="text-sm text-gray-500 mt-1">{customer.shopName}</p>
+            <p className="text-sm text-slate-700">
+              {customer.shopName}
+            </p>
           </div>
+  
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100"
+          >
+            <X size={16} />
+          </button>
         </div>
-
-        {/* Details */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Contacts */}
-          <div className="bg-gray-50 rounded-lg p-4 shadow-sm">
-            <div className="text-xs text-gray-600">Primary Contact</div>
-            <div className="text-lg font-medium text-gray-800">
-              {customer.contacts?.[0] || "-"}
+  
+        {/* ================= BODY ================= */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 text-sm">
+  
+          {/* CONTACTS */}
+          <div>
+            <div className="font-semibold text-slate-800 mb-1">
+              Contacts
             </div>
-            {customer.contacts?.length > 1 && (
-              <div className="mt-2">
-                <div className="text-xs text-gray-600">Other Contacts</div>
-                <ul className="text-sm list-disc ml-5 text-gray-700">
-                  {customer.contacts.slice(1).map((ct, i) => (
-                    <li key={i}>{ct}</li>
-                  ))}
-                </ul>
-              </div>
+  
+            {customer.contacts && customer.contacts.length > 0 ? (
+              <ul className="space-y-1">
+                {customer.contacts.map((contact, index) => (
+                  <li
+                    key={index}
+                    className="text-slate-900 flex items-center gap-2"
+                  >
+                    <span className="text-xs text-slate-500">
+                      {index === 0 ? "Primary" : `Alt ${index}`}
+                    </span>
+                    <span className="font-medium">{contact}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="text-slate-600">-</div>
             )}
           </div>
-
-          {/* Address + Location */}
-          <div className="bg-gray-50 rounded-lg p-4 shadow-sm">
-            <div className="text-xs text-gray-600">Shop Address</div>
-            <div className="text-sm text-gray-800">{customer.shopAddress}</div>
-            <div className="text-xs text-gray-600 mt-3">Area</div>
-            <div className="text-sm text-gray-800">
-              {customer.area || "-"}
+  
+          {/* ADDRESS */}
+          <div className="border-t pt-3 space-y-2">
+            <div>
+              <span className="font-semibold text-slate-800">Address:</span>{" "}
+              <span className="text-slate-900">
+                {customer.shopAddress}
+              </span>
             </div>
-            <div className="text-xs text-gray-600 mt-3">Location</div>
-            <div className="text-sm text-gray-800 flex items-center gap-2">
+  
+            <div>
+              <span className="font-semibold text-slate-800">Area:</span>{" "}
+              <span className="text-slate-900">
+                {customer.area || "-"}
+              </span>
+            </div>
+  
+            <div>
+              <span className="font-semibold text-slate-800">Location:</span>{" "}
               {customer.location?.latitude && customer.location?.longitude ? (
-                <>
-                  <MapPin size={16} />
-                  <span>
-                    {customer.location.latitude}, {customer.location.longitude}
-                  </span>
-                  <button
-                    onClick={openInMap}
-                    className="ml-2 text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 text-xs underline"
-                  >
-                    <ExternalLink size={14} /> See in Map
-                  </button>
-                </>
+                <button
+                  onClick={openInMap}
+                  className="inline-flex items-center gap-1 text-blue-700 hover:underline"
+                >
+                  <MapPin size={14} />
+                  View on map
+                </button>
               ) : (
-                <span className="text-gray-400">Not provided</span>
+                <span className="text-slate-600">Not provided</span>
               )}
             </div>
           </div>
-
-          {/* Credit */}
-          <div className="bg-gray-50 rounded-lg p-4 shadow-sm">
-            <div className="text-xs text-gray-600">Credit</div>
-            <div className="text-lg font-medium text-gray-800">
-              {formatCurrency(customer.credit)}
+  
+          {/* FINANCIALS */}
+          <div className="grid grid-cols-3 gap-3 text-center border-t pt-3">
+            <div>
+              <div className="text-xs text-slate-600">Credit</div>
+              <div className="font-bold text-green-700">
+                {formatCurrency(customer.credit)}
+              </div>
+            </div>
+  
+            <div>
+              <div className="text-xs text-slate-600">Debit</div>
+              <div className="font-bold text-red-700">
+                {formatCurrency(customer.debit)}
+              </div>
+            </div>
+  
+            <div>
+              <div className="text-xs text-slate-600">Sales</div>
+              <div className="font-bold text-slate-900">
+                {formatCurrency(customer.totalSales)}
+              </div>
             </div>
           </div>
-
-          {/* Debit */}
-          <div className="bg-gray-50 rounded-lg p-4 shadow-sm">
-            <div className="text-xs text-gray-600">Debit</div>
-            <div className="text-lg font-medium text-gray-800">
-              {formatCurrency(customer.debit)}
+  
+          {/* REMARKS */}
+          <div className="border-t pt-3">
+            <div className="font-semibold text-slate-800 mb-1">
+              Remarks
             </div>
-          </div>
-
-          {/* Total Sales */}
-          <div className="bg-gray-50 rounded-lg p-4 shadow-sm">
-            <div className="text-xs text-gray-600">Total Sales</div>
-            <div className="text-lg font-medium text-gray-800">
-              {formatCurrency(customer.totalSales)}
-            </div>
-          </div>
-
-          {/* Remarks */}
-          <div className="md:col-span-2 bg-gray-50 rounded-lg p-4 shadow-sm">
-            <div className="text-xs text-gray-600">Remarks</div>
-            <div className="text-sm text-gray-800">
+            <div className="text-slate-900">
               {customer.remarks || "-"}
             </div>
           </div>
         </div>
-
-        {/* Footer Actions */}
-        <div className="mt-8 flex justify-end gap-3">
+  
+        {/* ================= FOOTER ================= */}
+        <div className="border-t px-4 py-3 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-50"
+            className="px-3 py-1.5 rounded border text-slate-800 hover:bg-slate-50 text-sm"
           >
             Close
           </button>
-          <button
-            onClick={() => onEdit(customer)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-yellow-100 text-yellow-900 hover:bg-yellow-200"
-          >
-            <Edit3 size={16} /> Edit
-          </button>
+  
           <button
             onClick={() => onDelete(customer._id)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-100 text-red-800 hover:bg-red-200"
+            className="px-3 py-1.5 rounded bg-red-100 text-red-800 hover:bg-red-200 text-sm flex items-center gap-1"
           >
-            <Trash2 size={16} /> Delete
+            <Trash2 size={14} /> Delete
           </button>
         </div>
       </div>
     </div>
   );
+  
+  
+  
 }
