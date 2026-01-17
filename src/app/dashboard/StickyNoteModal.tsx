@@ -322,35 +322,40 @@ export default function StickyNoteModal({
   };
 
   // ========= RENDER =========
+  // ========= RENDER =========
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <Pin className="w-4 h-4 text-amber-500" />
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-start justify-between px-3 sm:px-4 py-3 border-b border-gray-200 gap-3">
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            <Pin className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm sm:text-base font-semibold text-gray-800">
                 {mode === "create"
                   ? "New Sticky Note (Phone Order)"
                   : "View / Edit Sticky Note"}
               </h3>
-              <p className="text-[11px] text-gray-500">
-                Use keyboard: ↑ / ↓ to move in suggestions, Enter to select, then Enter in quantity to jump to next row.
+              <p className="text-[10px] sm:text-[11px] text-gray-500 mt-1">
+                Use keyboard: ↑/↓ to move in suggestions, Enter to select, then Enter in quantity to jump to next row.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-100"
+            className="p-1.5 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0"
           >
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 text-xs sm:text-sm">
-          <div className="grid grid-cols-1 sm:grid-cols-[2fr,2fr] gap-3 items-start">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 space-y-4 text-xs sm:text-sm">
+          {/* Customer & Shop Name Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+            {/* Customer Name with Autocomplete */}
             <div className="relative">
-              <label className="block text-[11px] font-medium text-gray-700 mb-1">
+              <label className="block text-[11px] sm:text-xs font-medium text-gray-700 mb-1">
                 Customer Name (with Shop suggestion)
               </label>
               <input
@@ -409,17 +414,17 @@ export default function StickyNoteModal({
                   }
                 }}
                 placeholder="e.g. Rahul"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-amber-400 outline-none"
+                className="w-full border border-gray-300 rounded-md px-2.5 sm:px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-amber-400 outline-none"
               />
               {showCustomerSuggestions && customerSuggestions.length > 0 && customerInput.trim() && (
-                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow max-h-48 overflow-y-auto">
+                <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
                   {customerSuggestions.map((c, idx) => {
                     const isActive = idx === customerHighlightIndex;
                     return (
                       <button
                         key={c._id}
                         type="button"
-                        className={`w-full text-left px-3 py-1.5 text-xs sm:text-sm ${isActive ? "bg-amber-100" : "hover:bg-amber-50"}`}
+                        className={`w-full text-left px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm ${isActive ? "bg-amber-100" : "hover:bg-amber-50"}`}
                         onMouseDown={(e) => {
                           e.preventDefault();
                           setCustomerInput(c.name);
@@ -438,170 +443,175 @@ export default function StickyNoteModal({
               )}
             </div>
 
+            {/* Shop Name */}
             <div>
-              <label className="block text-[11px] font-medium text-gray-700 mb-1">
+              <label className="block text-[11px] sm:text-xs font-medium text-gray-700 mb-1">
                 Shop Name
               </label>
               <input
                 value={shopInput}
                 onChange={(e) => setShopInput(e.target.value)}
                 placeholder="e.g. Rahul General Store"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-amber-400 outline-none"
+                className="w-full border border-gray-300 rounded-md px-2.5 sm:px-3 py-2 text-xs sm:text-sm focus:ring-2 focus:ring-amber-400 outline-none"
               />
             </div>
           </div>
 
+          {/* Product Table */}
           <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="w-full text-xs sm:text-sm border-collapse">
-              <thead className="bg-gray-50">
-                <tr className="text-left text-[11px] text-gray-600">
-                  <th className="px-2 py-2 w-8 text-center">S.No</th>
-                  <th className="px-2 py-2">Product Name</th>
-                  <th className="px-2 py-2 w-28">Quantity</th>
-                  <th className="px-2 py-2 w-32">Current Stock</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, idx) => {
-                  const suggestions = getProductSuggestionsFor(idx);
-                  const product = getProductForRow(row);
-                  const showSuggestions =
-                    activeRowIndex === idx &&
-                    suggestions.length > 0 &&
-                    row.productName.trim();
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs sm:text-sm border-collapse min-w-[500px]">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr className="text-left text-[10px] sm:text-[11px] text-gray-600">
+                    <th className="px-2 py-2 w-10 sm:w-12 text-center">S.No</th>
+                    <th className="px-2 py-2">Product Name</th>
+                    <th className="px-2 py-2 w-24 sm:w-28">Quantity</th>
+                    <th className="px-2 py-2 w-28 sm:w-32">Current Stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, idx) => {
+                    const suggestions = getProductSuggestionsFor(idx);
+                    const product = getProductForRow(row);
+                    const showSuggestions =
+                      activeRowIndex === idx &&
+                      suggestions.length > 0 &&
+                      row.productName.trim();
 
-                  return (
-                    <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                      <td className="px-2 py-1.5 text-center align-top">{idx + 1}</td>
+                    return (
+                      <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="px-2 py-1.5 text-center align-top text-[11px] sm:text-xs">{idx + 1}</td>
 
-                      <td className="px-2 py-1.5 align-top relative">
-                        <input
-                          ref={(el) => { productRefs.current[idx] = el; }}
-                          value={row.productName}
-                          onChange={(e) => handleRowChange(idx, "productName", e.target.value)}
-                          onFocus={() => {
-                            setActiveRowIndex(idx);
-                            setProductHighlightIndex(null);
-                          }}
-                          onBlur={() => {
-                            const prod = getProductForRow(row);
-                            if (prod) {
-                              handleSelectProduct(idx, prod);
-                            }
-                            setActiveRowIndex(null);
-                            setProductHighlightIndex(null);
-                          }}
-                          onKeyDown={(e) => {
-                            const hasSuggestions = suggestions.length > 0 && row.productName.trim();
-
-                            if (e.key === "ArrowDown" && hasSuggestions) {
-                              e.preventDefault();
+                        <td className="px-2 py-1.5 align-top relative">
+                          <input
+                            ref={(el) => { productRefs.current[idx] = el; }}
+                            value={row.productName}
+                            onChange={(e) => handleRowChange(idx, "productName", e.target.value)}
+                            onFocus={() => {
                               setActiveRowIndex(idx);
-                              setProductHighlightIndex((prev) => {
-                                if (prev === null) return 0;
-                                return Math.min(prev + 1, suggestions.length - 1);
-                              });
-                            } else if (e.key === "ArrowUp" && hasSuggestions) {
-                              e.preventDefault();
-                              setActiveRowIndex(idx);
-                              setProductHighlightIndex((prev) => {
-                                if (prev === null) return suggestions.length - 1;
-                                return Math.max(prev - 1, 0);
-                              });
-                            } else if (e.key === "Enter") {
-                              if (hasSuggestions) {
+                              setProductHighlightIndex(null);
+                            }}
+                            onBlur={() => {
+                              const prod = getProductForRow(row);
+                              if (prod) {
+                                handleSelectProduct(idx, prod);
+                              }
+                              setActiveRowIndex(null);
+                              setProductHighlightIndex(null);
+                            }}
+                            onKeyDown={(e) => {
+                              const hasSuggestions = suggestions.length > 0 && row.productName.trim();
+
+                              if (e.key === "ArrowDown" && hasSuggestions) {
                                 e.preventDefault();
-                                const index = productHighlightIndex ?? 0;
-                                const chosen = suggestions[index] || suggestions[0];
-                                if (chosen) {
-                                  handleSelectProduct(idx, chosen);
+                                setActiveRowIndex(idx);
+                                setProductHighlightIndex((prev) => {
+                                  if (prev === null) return 0;
+                                  return Math.min(prev + 1, suggestions.length - 1);
+                                });
+                              } else if (e.key === "ArrowUp" && hasSuggestions) {
+                                e.preventDefault();
+                                setActiveRowIndex(idx);
+                                setProductHighlightIndex((prev) => {
+                                  if (prev === null) return suggestions.length - 1;
+                                  return Math.max(prev - 1, 0);
+                                });
+                              } else if (e.key === "Enter") {
+                                if (hasSuggestions) {
+                                  e.preventDefault();
+                                  const index = productHighlightIndex ?? 0;
+                                  const chosen = suggestions[index] || suggestions[0];
+                                  if (chosen) {
+                                    handleSelectProduct(idx, chosen);
+                                  }
+                                } else {
+                                  e.preventDefault();
+                                  quantityRefs.current[idx]?.focus();
                                 }
-                              } else {
+                              }
+                            }}
+                            placeholder="Type product name"
+                            className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-[11px] sm:text-xs focus:ring-2 focus:ring-amber-400 outline-none"
+                          />
+                          {showSuggestions && (
+                            <div className="absolute left-2 right-2 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto z-20">
+                              {suggestions.map((p, sIdx) => {
+                                const isActive = activeRowIndex === idx && sIdx === productHighlightIndex;
+                                return (
+                                  <button
+                                    key={p._id}
+                                    type="button"
+                                    className={`w-full text-left px-2 py-1.5 text-[10px] sm:text-[11px] ${isActive ? "bg-amber-100" : "hover:bg-amber-50"}`}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      handleSelectProduct(idx, p);
+                                    }}
+                                  >
+                                    <span className="font-medium text-gray-800">{p.name}</span>
+                                    {p.category && <span className="text-gray-500"> ({p.category})</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-2 py-1.5 align-top">
+                          <input
+                            ref={(el) => { quantityRefs.current[idx] = el; }}
+                            value={row.quantity}
+                            onChange={(e) => handleRowChange(idx, "quantity", e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
                                 e.preventDefault();
-                                quantityRefs.current[idx]?.focus();
+                                const nextIndex = idx + 1;
+                                if (productRefs.current[nextIndex]) {
+                                  productRefs.current[nextIndex]?.focus();
+                                }
                               }
-                            }
-                          }}
-                          placeholder="Type product name"
-                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs sm:text-sm focus:ring-2 focus:ring-amber-400 outline-none"
-                        />
-                        {showSuggestions && (
-                          <div className="absolute left-2 right-2 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-40 overflow-y-auto z-20">
-                            {suggestions.map((p, sIdx) => {
-                              const isActive = activeRowIndex === idx && sIdx === productHighlightIndex;
-                              return (
-                                <button
-                                  key={p._id}
-                                  type="button"
-                                  className={`w-full text-left px-2 py-1.5 text-[11px] sm:text-xs ${isActive ? "bg-amber-100" : "hover:bg-amber-50"}`}
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    handleSelectProduct(idx, p);
-                                  }}
-                                >
-                                  <span className="font-medium text-gray-800">{p.name}</span>
-                                  {p.category && <span className="text-gray-500"> ({p.category})</span>}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </td>
+                            }}
+                            type="number"
+                            inputMode="numeric"
+                            placeholder="0"
+                            className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-[11px] sm:text-xs focus:ring-2 focus:ring-amber-400 outline-none"
+                          />
+                        </td>
 
-                      <td className="px-2 py-1.5 align-top">
-                        <input
-                          ref={(el) => { quantityRefs.current[idx] = el; }}
-                          value={row.quantity}
-                          onChange={(e) => handleRowChange(idx, "quantity", e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const nextIndex = idx + 1;
-                              if (productRefs.current[nextIndex]) {
-                                productRefs.current[nextIndex]?.focus();
-                              }
-                            }
-                          }}
-                          type="number"
-                          inputMode="numeric"
-                          placeholder="0"
-                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs sm:text-sm focus:ring-2 focus:ring-amber-400 outline-none"
-                        />
-                      </td>
-
-                      <td className="px-2 py-1.5 align-top">
-                        {product ? (
-                          <div className="text-[11px] sm:text-xs text-gray-700">
-                            {product.quantity} <span className="text-gray-500">{product.unit}</span>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-gray-400">-</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <td className="px-2 py-1.5 align-top">
+                          {product ? (
+                            <div className="text-[10px] sm:text-[11px] text-gray-700">
+                              {product.quantity} <span className="text-gray-500">{product.unit}</span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] sm:text-[11px] text-gray-400">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Action Buttons Row */}
+          <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-3">
             <button
               type="button"
               onClick={handleAddLines}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-gray-300 text-xs sm:text-sm hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-gray-300 text-xs sm:text-sm hover:bg-gray-50 transition-colors w-full sm:w-auto"
             >
               <Plus className="w-3 h-3" />
               Add 3 more rows
             </button>
 
-            <div className="flex items-center gap-3 ml-auto">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto sm:ml-auto">
               {mode === "edit" && (
                 <>
                   <button
                     type="button"
                     onClick={handleSortByQuantity}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-blue-200 text-[11px] sm:text-xs text-blue-700 hover:bg-blue-50"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-blue-200 text-[11px] sm:text-xs text-blue-700 hover:bg-blue-50 transition-colors"
                   >
                     <Filter className="w-3 h-3" />
                     Sort by quantity
@@ -609,7 +619,7 @@ export default function StickyNoteModal({
                   <button
                     type="button"
                     onClick={handleClearSort}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-gray-200 text-[11px] sm:text-xs text-gray-700 hover:bg-gray-50"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-gray-200 text-[11px] sm:text-xs text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     <RotateCcw className="w-3 h-3" />
                     Clear
@@ -617,24 +627,25 @@ export default function StickyNoteModal({
                 </>
               )}
 
-              <div className="text-right">
-                <p className="text-[10px] text-gray-500 leading-tight">Total Quantity (Boxes)</p>
-                <p className="text-sm font-semibold text-amber-700">{totalQuantity}</p>
+              <div className="text-right bg-amber-50 px-3 py-1.5 rounded-md border border-amber-200">
+                <p className="text-[9px] sm:text-[10px] text-gray-600 leading-tight">Total Quantity (Boxes)</p>
+                <p className="text-sm sm:text-base font-semibold text-amber-700">{totalQuantity}</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-4 py-3 border-t border-gray-200 bg-gray-50">
+        {/* Footer */}
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-t border-gray-200 bg-gray-50">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-md border border-gray-300 text-xs sm:text-sm text-gray-700 hover:bg-white"
+            className="px-4 py-2 rounded-md border border-gray-300 text-xs sm:text-sm text-gray-700 hover:bg-white transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-1.5 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm shadow"
+            className="px-5 py-2 rounded-md bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm shadow transition-colors font-medium"
           >
             Save Sticky Note
           </button>

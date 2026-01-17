@@ -1,3 +1,5 @@
+// ice-inventory/src/app/dashboard/profile/delivery-partners/DeliveryPartnersPage.tsx
+
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -14,6 +16,12 @@ type Partner = {
   adminEmail?: string | null;
 };
 
+type Toast = {
+  id: string;
+  type: "success" | "error" | "info";
+  message: string;
+};
+
 export default function DeliveryPartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(false);
@@ -22,20 +30,10 @@ export default function DeliveryPartnersPage() {
   const [confirmDeleteFor, setConfirmDeleteFor] = useState<Partner | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingLoading, setDeletingLoading] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const [toasts, setToasts] = useState<
-    { id: string; type: "success" | "error" | "info"; message: string }[]
-  >([]);
-
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [qText, setQText] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "pending" | "approved" | "rejected"
-  >("all");
-
-  const [page, setPage] = useState(1);
-  const perPage = 8;
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
 
   const getSession = () => {
     try {
@@ -48,45 +46,21 @@ export default function DeliveryPartnersPage() {
     }
   };
 
-  const API_BASE =
-    typeof window !== "undefined"
-      ? process.env.NEXT_PUBLIC_API_BASE_URL ?? ""
-      : "";
+  const API_BASE = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_BASE_URL ?? "" : "";
+  const LIST_URL = `${API_BASE}/api/delivery/list`.replace(/([^:]\/)\/+/g, "$1");
+  const UPDATE_URL = `${API_BASE}/api/delivery/update`.replace(/([^:]\/)\/+/g, "$1");
+  const DELETE_URL = `${API_BASE}/api/delivery/delete`.replace(/([^:]\/)\/+/g, "$1");
 
-  const LIST_URL = `${API_BASE}/api/delivery/list`.replace(
-    /([^:]\/)\/+/g,
-    "$1"
-  );
-  const UPDATE_URL = `${API_BASE}/api/delivery/update`.replace(
-    /([^:]\/)\/+/g,
-    "$1"
-  );
-  const DELETE_URL = `${API_BASE}/api/delivery/delete`.replace(
-    /([^:]\/)\/+/g,
-    "$1"
-  );
-
-  const pushToast = (
-    type: "success" | "error" | "info",
-    message: string
-  ) => {
-    const id =
-      String(Date.now()) + Math.random().toString(36).slice(2, 8);
+  const pushToast = (type: "success" | "error" | "info", message: string) => {
+    const id = String(Date.now()) + Math.random().toString(36).slice(2, 8);
     setToasts((s) => [...s, { id, type, message }]);
-    setTimeout(
-      () => setToasts((s) => s.filter((t) => t.id !== id)),
-      4500
-    );
+    setTimeout(() => setToasts((s) => s.filter((t) => t.id !== id)), 4500);
   };
 
-  const removeToast = (id: string) =>
-    setToasts((s) => s.filter((t) => t.id !== id));
+  const removeToast = (id: string) => setToasts((s) => s.filter((t) => t.id !== id));
 
   useEffect(() => {
-    const t = setTimeout(
-      () => setDebouncedQ(qText.trim().toLowerCase()),
-      250
-    );
+    const t = setTimeout(() => setDebouncedQ(qText.trim().toLowerCase()), 250);
     return () => clearTimeout(t);
   }, [qText]);
 
@@ -96,38 +70,25 @@ export default function DeliveryPartnersPage() {
 
     try {
       const session = getSession();
-      const adminEmail = session?.email
-        ? String(session.email).toLowerCase()
-        : null;
+      const adminEmail = session?.email ? String(session.email).toLowerCase() : null;
       const adminId = session?.id ?? session?._id ?? null;
 
       const q = new URLSearchParams();
-
       if (adminEmail) q.set("adminEmail", adminEmail);
       else if (adminId) q.set("userId", adminId);
 
-      const url = `${LIST_URL}${
-        q.toString() ? `?${q.toString()}` : ""
-      }`;
-
+      const url = `${LIST_URL}${q.toString() ? `?${q.toString()}` : ""}`;
       const res = await fetch(url, { credentials: "include" });
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
         setError(data?.error ?? "Failed to fetch partners");
         setPartners([]);
-        pushToast(
-          "error",
-          data?.error ?? "Failed to fetch partners"
-        );
+        pushToast("error", data?.error ?? "Failed to fetch partners");
         return;
       }
 
-      const list: any[] = Array.isArray(data)
-        ? data
-        : data.partners ??
-          (data.partner ? [data.partner] : []);
-
+      const list: any[] = Array.isArray(data) ? data : data.partners ?? (data.partner ? [data.partner] : []);
       const normalized: Partner[] = list.map((p) => ({
         _id: String(p._id ?? p.id ?? ""),
         name: p.name ?? "Unknown",
@@ -149,7 +110,7 @@ export default function DeliveryPartnersPage() {
     } finally {
       setLoading(false);
     }
-  }, [LIST_URL, refreshKey]);
+  }, [LIST_URL]);
 
   useEffect(() => {
     fetchPartners();
@@ -158,8 +119,7 @@ export default function DeliveryPartnersPage() {
   const filtered = useMemo(() => {
     const s = debouncedQ;
     return partners.filter((p) => {
-      if (statusFilter !== "all" && p.status !== statusFilter)
-        return false;
+      if (statusFilter !== "all" && p.status !== statusFilter) return false;
       if (!s) return true;
       return (
         (p.name ?? "").toLowerCase().includes(s) ||
@@ -168,20 +128,6 @@ export default function DeliveryPartnersPage() {
       );
     });
   }, [partners, debouncedQ, statusFilter]);
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filtered.length / perPage)
-  );
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [totalPages, page]);
-
-  const paged = useMemo(() => {
-    const start = (page - 1) * perPage;
-    return filtered.slice(start, start + perPage);
-  }, [filtered, page]);
 
   const validateEdit = (p: Partner) => {
     if (!p.name || p.name.trim().length < 1) {
@@ -204,7 +150,6 @@ export default function DeliveryPartnersPage() {
 
     try {
       const session = getSession();
-
       const body: any = {
         partnerId: editing._id,
         name: editing.name,
@@ -218,9 +163,7 @@ export default function DeliveryPartnersPage() {
 
       const res = await fetch(UPDATE_URL, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(body),
       });
@@ -235,11 +178,7 @@ export default function DeliveryPartnersPage() {
       setPartners((prev) =>
         prev.map((x) =>
           x._id === editing._id
-            ? {
-                ...x,
-                ...editing,
-                email: (editing.email || "").toLowerCase(),
-              }
+            ? { ...x, ...editing, email: (editing.email || "").toLowerCase() }
             : x
         )
       );
@@ -252,10 +191,6 @@ export default function DeliveryPartnersPage() {
     } finally {
       setSaving(false);
     }
-  }
-
-  function requestDelete(p: Partner) {
-    setConfirmDeleteFor(p);
   }
 
   async function confirmDelete() {
@@ -273,9 +208,7 @@ export default function DeliveryPartnersPage() {
 
       const res = await fetch(DELETE_URL, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(body),
       });
@@ -288,10 +221,7 @@ export default function DeliveryPartnersPage() {
         return;
       }
 
-      setPartners((p) =>
-        p.filter((x) => x._id !== target._id)
-      );
-
+      setPartners((p) => p.filter((x) => x._id !== target._id));
       pushToast("success", data?.message ?? "Partner deleted");
       setConfirmDeleteFor(null);
     } catch (err) {
@@ -303,507 +233,368 @@ export default function DeliveryPartnersPage() {
   }
 
   const statusBadge = (s: Partner["status"]) => {
-    if (s === "approved")
-      return (
-        <span className="px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">
-          Approved
-        </span>
-      );
-    if (s === "rejected")
-      return (
-        <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-800">
-          Rejected
-        </span>
-      );
-    return (
-      <span className="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-800">
-        Pending
-      </span>
-    );
+    const configs = {
+      approved: "px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700",
+      rejected: "px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700",
+      pending: "px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700",
+    };
+    const labels = { approved: "Approved", rejected: "Rejected", pending: "Pending" };
+    return <span className={configs[s]}>{labels[s]}</span>;
   };
 
   const formatDate = (iso?: string | null) => {
     if (!iso) return "-";
     try {
-      return new Date(iso).toLocaleString();
+      return new Date(iso).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
     } catch {
-      return iso as string;
+      return iso;
     }
   };
 
   return (
-    <div className="p-6">
-      <div className="bg-white rounded-xl shadow p-4">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center text-2xl">
-              🚚
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-100">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-2xl shadow-lg">
+                🚚
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-800">Delivery Partners</h1>
+                <p className="text-sm text-gray-600 mt-0.5">
+                  Manage and monitor your delivery partner network
+                </p>
+              </div>
             </div>
-            <div>
-              <div className="text-lg font-semibold text-gray-800">
-                Delivery Partners
+
+            {/* Search & Filters */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <input
+                  aria-label="Search delivery partners"
+                  value={qText}
+                  onChange={(e) => setQText(e.target.value)}
+                  placeholder="Search by name, email, or phone..."
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
               </div>
-              <div className="text-sm text-gray-600">
-                Manage delivery partners — search, approve, edit or
-                remove.
-              </div>
+
+              <select
+                aria-label="Filter by status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+
+              <button
+                onClick={fetchPartners}
+                className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                ↻ Refresh
+              </button>
             </div>
           </div>
 
-          <div className="w-full md:w-auto flex items-center gap-2">
-            <div className="flex-1 md:flex-none">
-              <input
-                aria-label="Search delivery partners"
-                value={qText}
-                onChange={(e) => {
-                  setQText(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search by name, email, phone..."
-                className="w-full md:w-72 px-3 py-2 border rounded text-sm text-gray-600"
-              />
-            </div>
+          {/* Content */}
+          <div className="p-6">
+            {loading ? (
+              <div className="py-16 text-center">
+                <div className="inline-block w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                <p className="mt-3 text-sm text-gray-500">Loading partners...</p>
+              </div>
+            ) : error ? (
+              <div className="py-16 text-center">
+                <div className="text-red-600 mb-3">⚠️ {error}</div>
+                <button
+                  onClick={fetchPartners}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="py-16 text-center">
+                <div className="text-6xl mb-4">📦</div>
+                <div className="text-gray-600 mb-4 font-medium">No delivery partners found</div>
+                <button
+                  onClick={() => {
+                    setQText("");
+                    setStatusFilter("all");
+                    fetchPartners();
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Reset Filters
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Desktop Table */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Partner
+                        </th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Contact
+                        </th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Status
+                        </th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Joined
+                        </th>
+                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filtered.map((p) => (
+                        <tr key={p._id} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center overflow-hidden text-sm font-semibold text-blue-700">
+                                {p.avatar ? (
+                                  <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  p.name.charAt(0).toUpperCase()
+                                )}
+                              </div>
+                              <div>
+                                <div className="font-medium text-gray-900">{p.name}</div>
+                                <div className="text-xs text-gray-500">ID: {p._id.slice(-8)}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="text-sm text-gray-700">{p.email ?? "-"}</div>
+                            <div className="text-xs text-gray-500">{p.phone ?? "-"}</div>
+                          </td>
+                          <td className="py-4 px-4">{statusBadge(p.status)}</td>
+                          <td className="py-4 px-4 text-sm text-gray-600">{formatDate(p.createdAt)}</td>
+                          <td className="py-4 px-4">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => setEditing(p)}
+                                className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteFor(p)}
+                                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-            <select
-              aria-label="Filter by status"
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value as any);
-                setPage(1);
-              }}
-              className="px-3 py-2 border rounded text-sm text-gray-600"
-            >
-              <option value="all">All statuses</option>
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
+                {/* Mobile/Tablet Cards */}
+                <div className="lg:hidden grid gap-4">
+                  {filtered.map((p) => (
+                    <div key={p._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start gap-3">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center overflow-hidden text-sm font-semibold text-blue-700 flex-shrink-0">
+                          {p.avatar ? (
+                            <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                          ) : (
+                            p.name.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-semibold text-gray-900 truncate">{p.name}</h3>
+                              <p className="text-xs text-gray-500 truncate">{p.email ?? "-"}</p>
+                            </div>
+                            {statusBadge(p.status)}
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+                            <span>{p.phone ?? "No phone"}</span>
+                            <span>{formatDate(p.createdAt)}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setEditing(p)}
+                              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteFor(p)}
+                              className="flex-1 px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-            <button
-              onClick={() => {
-                setRefreshKey((k) => k + 1);
-                fetchPartners();
-              }}
-              className="ml-2 px-3 py-2 bg-gray-100 rounded border text-sm text-gray-500"
-            >
-              Refresh
-            </button>
+                {/* Results Count */}
+                <div className="mt-6 text-sm text-gray-600 text-center">
+                  Showing {filtered.length} {filtered.length === 1 ? "partner" : "partners"}
+                </div>
+              </>
+            )}
           </div>
         </div>
-
-        {loading ? (
-          <div className="py-8 text-center text-gray-500">
-            Loading partners…
-          </div>
-        ) : error ? (
-          <div className="py-6 text-center text-red-600">
-            {error}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="py-8 text-center">
-            <div className="text-gray-600 mb-3">
-              No delivery partners found.
-            </div>
-            <div className="flex items-center justify-center gap-2">
-              <button
-                onClick={() => {
-                  setQText("");
-                  setStatusFilter("all");
-                  fetchPartners();
-                }}
-                className="px-3 py-2 bg-blue-600 text-white rounded"
-              >
-                Reset filters
-              </button>
-              <button
-                onClick={() => fetchPartners()}
-                className="px-3 py-2 border rounded text-gray-500"
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Desktop table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-gray-600 border-b">
-                    <th className="py-2">Partner</th>
-                    <th className="py-2">Contact</th>
-                    <th className="py-2">Status</th>
-                    <th className="py-2">Requested</th>
-                    <th className="py-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paged.map((p) => (
-                    <tr
-                      key={p._id}
-                      className="border-t hover:bg-gray-50"
-                    >
-                      <td className="py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden text-sm font-medium text-slate-700">
-                            {p.avatar ? (
-                              <img
-                                src={p.avatar}
-                                alt={p.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : p.name ? (
-                              p.name
-                                .charAt(0)
-                                .toUpperCase()
-                            ) : (
-                              "?"
-                            )}
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-800">
-                              {p.name}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              ID: {p._id}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="py-3">
-                        <div className="text-sm text-gray-700">
-                          {p.email ?? "-"}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {p.phone ?? "-"}
-                        </div>
-                      </td>
-
-                      <td className="py-3">
-                        {statusBadge(p.status)}
-                      </td>
-
-                      <td className="py-3 text-sm text-gray-600">
-                        {formatDate(p.createdAt)}
-                      </td>
-
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => setEditing(p)}
-                            className="px-3 py-1 rounded border text-sm text-gray-500"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => requestDelete(p)}
-                            className="px-3 py-1 rounded bg-red-600 text-white text-sm"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile cards */}
-            <div className="md:hidden grid grid-cols-1 gap-3">
-              {paged.map((p) => (
-                <div
-                  key={p._id}
-                  className="border rounded-lg p-3 bg-white"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden text-sm font-medium text-slate-700">
-                      {p.avatar ? (
-                        <img
-                          src={p.avatar}
-                          alt={p.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : p.name ? (
-                        p.name.charAt(0).toUpperCase()
-                      ) : (
-                        "?"
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="font-medium text-gray-800">
-                            {p.name}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {p.email ?? "-"}
-                          </div>
-                        </div>
-                        <div>{statusBadge(p.status)}</div>
-                      </div>
-
-                      <div className="mt-2 flex items-center justify-between gap-2">
-                        <div className="text-xs text-gray-500">
-                          {p.phone ?? "-"}
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          {formatDate(p.createdAt)}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex gap-2">
-                        <button
-                          onClick={() => setEditing(p)}
-                          className="px-3 py-1 rounded border text-sm"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => requestDelete(p)}
-                          className="px-3 py-1 rounded bg-red-600 text-white text-sm"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
-              <div>
-                Showing{" "}
-                {Math.min(
-                  (page - 1) * perPage + 1,
-                  filtered.length
-                )}{" "}
-                -{" "}
-                {Math.min(
-                  page * perPage,
-                  filtered.length
-                )}{" "}
-                of {filtered.length}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage(1)}
-                  className="px-2 py-1 border rounded"
-                  disabled={page === 1}
-                >
-                  First
-                </button>
-
-                <button
-                  onClick={() =>
-                    setPage((p) => Math.max(1, p - 1))
-                  }
-                  className="px-2 py-1 border rounded"
-                  disabled={page === 1}
-                >
-                  Prev
-                </button>
-
-                <div className="px-2">
-                  {page} / {totalPages}
-                </div>
-
-                <button
-                  onClick={() =>
-                    setPage((p) =>
-                      Math.min(totalPages, p + 1)
-                    )
-                  }
-                  className="px-2 py-1 border rounded"
-                  disabled={page === totalPages}
-                >
-                  Next
-                </button>
-
-                <button
-                  onClick={() => setPage(totalPages)}
-                  className="px-2 py-1 border rounded"
-                  disabled={page === totalPages}
-                >
-                  Last
-                </button>
-              </div>
-            </div>
-          </>
-        )}
       </div>
 
       {/* Edit Modal */}
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setEditing(null)}
-          />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
           <form
             onSubmit={saveEdit}
-            className="relative bg-white rounded p-6 z-10 w-full max-w-md"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
           >
-            <h4 className="font-semibold mb-2 text-gray-500">
-              Edit Partner
-            </h4>
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800">Edit Partner</h2>
+              <p className="text-sm text-gray-600 mt-1">Update partner information</p>
+            </div>
 
-            <label className="block text-sm text-gray-700">
-              Name
-            </label>
-            <input
-              value={editing.name}
-              onChange={(e) =>
-                setEditing({
-                  ...editing,
-                  name: e.target.value,
-                })
-              }
-              className="w-full mb-2 border p-2 rounded text-gray-500"
-            />
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input
+                  value={editing.name}
+                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-            <label className="block text-sm text-gray-700">
-              Email
-            </label>
-            <input
-              value={editing.email ?? ""}
-              onChange={(e) =>
-                setEditing({
-                  ...editing,
-                  email: e.target.value,
-                })
-              }
-              className="w-full mb-2 border p-2 rounded text-gray-500"
-            />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={editing.email ?? ""}
+                  onChange={(e) => setEditing({ ...editing, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-            <label className="block text-sm text-gray-700">
-              Phone
-            </label>
-            <input
-              value={editing.phone ?? ""}
-              onChange={(e) =>
-                setEditing({
-                  ...editing,
-                  phone: e.target.value,
-                })
-              }
-              className="w-full mb-2 border p-2 rounded text-gray-500"
-            />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <input
+                  value={editing.phone ?? ""}
+                  onChange={(e) => setEditing({ ...editing, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-            <label className="block text-sm text-gray-700">
-              Status
-            </label>
-            <select
-              value={editing.status}
-              onChange={(e) =>
-                setEditing({
-                  ...editing,
-                  status: e.target.value as Partner["status"],
-                })
-              }
-              className="w-full mb-4 border p-2 rounded text-gray-500"
-            >
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={editing.status}
+                  onChange={(e) => setEditing({ ...editing, status: e.target.value as Partner["status"] })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
 
-            <div className="flex justify-end gap-2">
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setEditing(null)}
-                className="px-3 py-1 border rounded text-gray-500"
+                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
               >
                 Cancel
               </button>
-
               <button
                 type="submit"
                 disabled={saving}
-                className="px-3 py-1 bg-blue-600 text-white rounded"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {saving ? "Saving..." : "Save"}
+                {saving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Confirm Delete Modal */}
+      {/* Delete Confirmation Modal */}
       {confirmDeleteFor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setConfirmDeleteFor(null)}
-          />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="p-6">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <h2 className="text-xl font-bold text-gray-800 text-center mb-2">Confirm Deletion</h2>
+              <p className="text-sm text-gray-600 text-center">
+                Are you sure you want to delete <strong>{confirmDeleteFor.name}</strong>? This action cannot be undone.
+              </p>
+            </div>
 
-          <div className="relative bg-white rounded p-6 z-10 w-full max-w-sm">
-            <h4 className="font-semibold mb-2 text-gray-500">
-              Confirm Deletion
-            </h4>
-
-            <p className="text-sm text-gray-700">
-              Are you sure you want to permanently
-              delete{" "}
-              <strong>
-                {confirmDeleteFor.name}
-              </strong>{" "}
-              (ID: {confirmDeleteFor._id})?
-              This action cannot be undone.
-            </p>
-
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
               <button
                 onClick={() => setConfirmDeleteFor(null)}
-                className="text-gray-500 px-3 py-1 border rounded"
+                className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
               >
                 Cancel
               </button>
-
               <button
                 onClick={confirmDelete}
                 disabled={deletingLoading}
-                className="px-3 py-1 bg-red-600 text-white rounded"
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {deletingLoading
-                  ? "Deleting..."
-                  : "Yes, delete"}
+                {deletingLoading ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toasts */}
-      <div className="fixed right-4 bottom-4 z-50 flex flex-col gap-2 w-80">
+      {/* Toast Notifications */}
+      <div className="fixed right-4 bottom-4 z-50 flex flex-col gap-2 w-full max-w-sm">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`rounded-lg shadow p-3 flex items-start gap-3 ${
+            className={`rounded-lg shadow-lg p-4 flex items-start gap-3 ${
               t.type === "success"
                 ? "bg-green-50 border border-green-200"
                 : t.type === "error"
                 ? "bg-red-50 border border-red-200"
-                : "bg-white border"
+                : "bg-blue-50 border border-blue-200"
             }`}
           >
+            <span className="text-xl">
+              {t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}
+            </span>
             <div className="flex-1">
-              <div className="text-sm text-gray-700">
-                {t.message}
-              </div>
+              <p className="text-sm font-medium text-gray-900">{t.message}</p>
             </div>
-
-            <div>
-              <button
-                onClick={() => removeToast(t.id)}
-                className="text-xs text-gray-500 px-2 py-1"
-              >
-                Close
-              </button>
-            </div>
+            <button
+              onClick={() => removeToast(t.id)}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              ✕
+            </button>
           </div>
         ))}
       </div>

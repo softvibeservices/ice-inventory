@@ -156,37 +156,44 @@ const handleConfirmDelete: () => Promise<void> = async () => {
   };
 
   // ========= RENDER =========
+  // ========= RENDER =========
   return (
     <>
       {/* Sticky Notes Panel */}
-      <aside className="w-[40%] min-w-[260px] bg-[#fff9e6] rounded-xl shadow-md border border-amber-200 p-4 lg:p-5 flex flex-col max-h-[calc(100vh-7rem)]">
-        <div className="flex items-center justify-between mb-3">
+      <aside className="w-full lg:w-[40%] lg:min-w-[280px] bg-[#fff9e6] rounded-xl shadow-md border border-amber-200 p-4 lg:p-5 flex flex-col max-h-[500px] lg:max-h-[calc(100vh-7rem)]">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
           <div className="flex items-center gap-2">
-            <StickyIcon className="w-5 h-5 text-amber-500" />
-            <h2 className="font-semibold text-amber-900 text-sm lg:text-base">
+            <StickyIcon className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 flex-shrink-0" />
+            <h2 className="font-semibold text-amber-900 text-sm sm:text-base">
               Phone Orders / Sticky Notes
             </h2>
           </div>
           <button
             onClick={openCreateModal}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs lg:text-sm bg-amber-500 hover:bg-amber-600 text-white shadow-sm"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-full text-xs sm:text-sm bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-colors w-full sm:w-auto"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
             Add Sticky
           </button>
         </div>
 
-        <p className="text-[11px] text-amber-800/80 mb-3">
+        <p className="text-[10px] sm:text-[11px] text-amber-800/80 mb-3">
           When someone calls and gives order, click &ldquo;Add Sticky&rdquo;, fill quickly and save. View / edit / delete from below.
         </p>
 
         <div className="flex-1 overflow-y-auto space-y-3 pr-1">
           {loadingNotes ? (
-            <p className="text-xs text-amber-700">Loading notes...</p>
+            <div className="flex flex-col items-center justify-center py-8">
+              <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+              <p className="text-xs text-amber-700">Loading notes...</p>
+            </div>
           ) : notes.length === 0 ? (
-            <p className="text-xs text-amber-700/80">
-              No sticky notes yet. Start by adding one.
-            </p>
+            <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+              <StickyIcon className="w-12 h-12 text-amber-300 mb-2" />
+              <p className="text-xs text-amber-700/80">
+                No sticky notes yet. Start by adding one.
+              </p>
+            </div>
           ) : (
             notes.map((note, index) => {
               const boxTotal = computeNoteBoxTotal(note);
@@ -197,20 +204,22 @@ const handleConfirmDelete: () => Promise<void> = async () => {
                   key={note._id}
                   className={`relative border border-amber-300 rounded-xl px-3 py-3 flex flex-col gap-1 bg-gradient-to-br from-amber-100 to-amber-200 shadow-lg ${tilt} hover:-translate-y-1 transition-transform`}
                 >
+                  {/* Pin on top */}
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2">
-                    <div className="w-7 h-1.5 rounded-full bg-amber-300 shadow-sm" />
+                    <div className="w-6 sm:w-7 h-1.5 rounded-full bg-amber-300 shadow-sm" />
                   </div>
 
+                  {/* Header: Shop & Customer */}
                   <div className="flex items-start justify-between gap-2 mt-1">
-                    <div>
-                      <p className="text-xs font-semibold text-amber-900">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-amber-900 truncate">
                         {note.shopName}
                       </p>
-                      <p className="text-[11px] text-amber-800">
+                      <p className="text-[11px] text-amber-800 truncate">
                         {note.customerName}
                       </p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0">
                       <p className="text-[10px] text-amber-700">
                         Total Boxes
                       </p>
@@ -220,24 +229,26 @@ const handleConfirmDelete: () => Promise<void> = async () => {
                     </div>
                   </div>
 
-                  <div className="flex justify-between items-center mt-1">
+                  {/* Footer: Items count & Actions */}
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mt-1">
                     <p className="text-[10px] text-amber-800/80">
                       {note.items.length} item
                       {note.items.length > 1 ? "s" : ""}
                     </p>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
                         onClick={() => openEditModal(note)}
-                        className="text-[11px] px-2 py-0.5 rounded-full border border-amber-400 text-amber-900 bg-amber-100/80 hover:bg-amber-200"
+                        className="text-[10px] sm:text-[11px] px-2 py-1 rounded-full border border-amber-400 text-amber-900 bg-amber-100/80 hover:bg-amber-200 transition-colors flex-1 sm:flex-initial"
                       >
                         View / Edit
                       </button>
                       <button
                         onClick={() => openDeleteConfirm(note)}
-                        className="text-[11px] px-2 py-0.5 rounded-full border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 inline-flex items-center gap-1"
+                        className="text-[10px] sm:text-[11px] px-2 py-1 rounded-full border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 inline-flex items-center justify-center gap-1 transition-colors flex-1 sm:flex-initial"
                       >
                         <Trash2 className="w-3 h-3" />
-                        Delete
+                        <span className="hidden sm:inline">Delete</span>
+                        <span className="sm:hidden">Del</span>
                       </button>
                     </div>
                   </div>
@@ -247,7 +258,7 @@ const handleConfirmDelete: () => Promise<void> = async () => {
           )}
         </div>
 
-        <p className="mt-3 text-[10px] text-amber-800/80">
+        <p className="mt-3 text-[9px] sm:text-[10px] text-amber-800/80 leading-relaxed">
           Tip: After converting this sticky note into a final bill, delete it from here to keep this area clean.
         </p>
       </aside>
@@ -267,10 +278,10 @@ const handleConfirmDelete: () => Promise<void> = async () => {
 
       {/* Delete Confirm Modal */}
       {noteToDelete && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-5">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-4 sm:p-5">
             <div className="flex items-center gap-2 mb-3">
-              <Trash2 className="w-5 h-5 text-red-600" />
+              <Trash2 className="w-5 h-5 text-red-600 flex-shrink-0" />
               <h3 className="text-sm font-semibold text-gray-800">
                 Delete Sticky Note?
               </h3>
@@ -280,10 +291,10 @@ const handleConfirmDelete: () => Promise<void> = async () => {
               <span className="font-semibold">{noteToDelete.shopName}</span>?{" "}
               This action cannot be undone.
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
               <button
                 onClick={closeDeleteConfirm}
-                className="px-3 py-1.5 rounded-md border border-gray-300 text-xs text-gray-700 hover:bg-gray-50"
+                className="w-full sm:w-auto px-4 py-2 rounded-md border border-gray-300 text-xs text-gray-700 hover:bg-gray-50 transition-colors"
                 disabled={deleting}
               >
                 Cancel
@@ -291,7 +302,7 @@ const handleConfirmDelete: () => Promise<void> = async () => {
               <button
                 onClick={handleConfirmDelete}
                 disabled={deleting}
-                className="px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-xs text-white"
+                className="w-full sm:w-auto px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-xs text-white transition-colors"
               >
                 {deleting ? "Deleting..." : "Confirm Delete"}
               </button>

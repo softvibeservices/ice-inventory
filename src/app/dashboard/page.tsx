@@ -69,13 +69,13 @@ export default function DashboardPage() {
   }, [userId]);
 
   // ========= RENDER =========
-  return (
+   return (
     <div className="flex flex-col min-h-screen bg-slate-50 overflow-hidden">
       <DashboardNavbar />
 
       <main className="flex-grow text-gray-700 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8 h-full">
-          <div className="flex gap-6 items-start h-full">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6 lg:py-8 h-full">
+          <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 items-start h-full">
             {/* LEFT: Delivery Overview */}
             <DeliveryOverview
               orders={orders}
@@ -92,4 +92,5 @@ export default function DashboardPage() {
       <Toaster position="top-right" reverseOrder={false} />
     </div>
   );
+
 }
