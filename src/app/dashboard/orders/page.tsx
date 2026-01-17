@@ -125,7 +125,11 @@ export default function OrdersPage() {
   // view modal state
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
 
-  // ===== helpers =====
+  const [unsettledOrders, setUnsettledOrders] = useState<Order[]>([]);
+  const [settledOrders, setSettledOrders] = useState<Order[]>([]);
+  const [debtOrders, setDebtOrders] = useState<Order[]>([]);
+  const [discardedOrders, setDiscardedOrders] = useState<Order[]>([]);
+
 
 
 
@@ -305,13 +309,13 @@ export default function OrdersPage() {
 
         const arr: CustomerLite[] = Array.isArray(data)
           ? data.map((c: any) => ({
-              _id: String(c._id),
-              name: c.name,
-              shopName: c.shopName,
-              shopAddress: c.shopAddress,
-              area: c.area,
-              contacts: c.contacts,
-            }))
+            _id: String(c._id),
+            name: c.name,
+            shopName: c.shopName,
+            shopAddress: c.shopAddress,
+            area: c.area,
+            contacts: c.contacts,
+          }))
           : [];
 
         setCustomers(arr);
@@ -332,13 +336,6 @@ export default function OrdersPage() {
         setLoading(true);
 
         const params = new URLSearchParams({ userId });
-
-        if (tab === "Unsettled") {
-          params.set("status", "Unsettled");
-        } else {
-          params.set("status", "settled");
-        }
-
         const res = await fetch(`/api/orders?${params.toString()}`);
         const data = await res.json();
         if (!res.ok) {
@@ -347,28 +344,42 @@ export default function OrdersPage() {
 
         const all: Order[] = Array.isArray(data) ? data : [];
 
-        let filtered: Order[] = all;
-        if (tab === "Settled") {
-          filtered = all.filter(
-            (o) =>
-              o.discardedAt == null &&
-              o.settlementMethod != null &&
-              o.settlementMethod !== "Debt"
-          );
-        } else if (tab === "Discarded") {
-          filtered = all.filter((o) => o.discardedAt != null);
-        } else if (tab === "Debt") {
-          filtered = all.filter(
-            (o) => !o.discardedAt && o.settlementMethod === "Debt"
-          );
-        }
-
-        const computed = filtered.map((o) => ({
+        const computed = all.map((o) => ({
           ...o,
-          quantitySummary: computeQuantitySummaryForOrder(o.items, o.freeItems, products),
+          quantitySummary: computeQuantitySummaryForOrder(
+            o.items,
+            o.freeItems,
+            products
+          ),
         }));
 
-        setOrders(computed);
+        const unsettled = computed.filter(
+          (o) => o.status === "Unsettled" && !o.discardedAt
+        );
+        const settled = computed.filter(
+          (o) =>
+            o.status === "settled" &&
+            !o.discardedAt &&
+            o.settlementMethod !== "Debt"
+        );
+        const debt = computed.filter(
+          (o) =>
+            o.status === "settled" &&
+            !o.discardedAt &&
+            o.settlementMethod === "Debt"
+        );
+        const discarded = computed.filter((o) => !!o.discardedAt);
+
+        setUnsettledOrders(unsettled);
+        setSettledOrders(settled);
+        setDebtOrders(debt);
+        setDiscardedOrders(discarded);
+
+        // set orders for current tab
+        if (tab === "Settled") setOrders(settled);
+        else if (tab === "Debt") setOrders(debt);
+        else if (tab === "Discarded") setOrders(discarded);
+        else setOrders(unsettled);
       } catch (err: any) {
         console.error(err);
         toast.error(err?.message || "Failed to load orders");
@@ -379,6 +390,7 @@ export default function OrdersPage() {
 
     fetchOrders();
   }, [userId, tab, products]);
+
 
   // recompute client-side quantitySummary whenever products change
   useEffect(() => {
@@ -623,41 +635,37 @@ export default function OrdersPage() {
             <div className="inline-flex rounded-md shadow-sm border border-gray-200 overflow-hidden text-sm font-medium">
               <button
                 onClick={() => setTab("Unsettled")}
-                className={`px-3 py-1.5 ${
-                  tab === "Unsettled"
+                className={`px-3 py-1.5 ${tab === "Unsettled"
                     ? "bg-blue-600 text-white"
                     : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
+                  }`}
               >
                 Unsettled
               </button>
               <button
                 onClick={() => setTab("Settled")}
-                className={`px-3 py-1.5 border-l border-gray-200 ${
-                  tab === "Settled"
+                className={`px-3 py-1.5 border-l border-gray-200 ${tab === "Settled"
                     ? "bg-blue-600 text-white"
                     : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
+                  }`}
               >
                 Settled
               </button>
               <button
                 onClick={() => setTab("Debt")}
-                className={`px-3 py-1.5 border-l border-gray-200 ${
-                  tab === "Debt"
+                className={`px-3 py-1.5 border-l border-gray-200 ${tab === "Debt"
                     ? "bg-blue-600 text-white"
                     : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
+                  }`}
               >
                 Debt
               </button>
               <button
                 onClick={() => setTab("Discarded")}
-                className={`px-3 py-1.5 border-l border-gray-200 ${
-                  tab === "Discarded"
+                className={`px-3 py-1.5 border-l border-gray-200 ${tab === "Discarded"
                     ? "bg-blue-600 text-white"
                     : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
+                  }`}
               >
                 Discarded
               </button>
@@ -679,7 +687,12 @@ export default function OrdersPage() {
             onOpenSettle={openSettleModal}
             onOpenDebtSettle={openDebtSettleModal}
             onOpenView={openViewModal}
+            unsettledOrders={unsettledOrders}
+            settledOrders={settledOrders}
+            debtOrders={debtOrders}
+            discardedOrders={discardedOrders}
           />
+
         </div>
       </main>
 

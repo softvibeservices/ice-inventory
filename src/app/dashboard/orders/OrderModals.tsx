@@ -5,8 +5,8 @@ import { Order, SettlementMethod, CashBankMethod, OrderLineItem } from "@/types/
 import DeliveryStatusBadge from "./DeliveryStatusBadge";
 
 type OrderModalsProps = {
-  settleOrder: Order | null;
-  settleMethod: SettlementMethod | null;
+  settleOrder: Order | null;  
+  settleMethod: SettlementMethod | null;     
   settleAmount: string;
   debtSettleOrder: Order | null;
   debtSettleMethod: CashBankMethod | null;
