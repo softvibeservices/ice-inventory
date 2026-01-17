@@ -14,6 +14,7 @@ type Props = {
 export default function BillingDetailsComponent({ userId }: Props) {
   const emptyBill: SellerDetails = {
     sellerName: "",
+    contact: "",
     gstNumber: "",
     fullAddress: "",
     logoUrl: "",
@@ -58,6 +59,7 @@ export default function BillingDetailsComponent({ userId }: Props) {
         if (data && !data.error && Object.keys(data).length > 0) {
           const mapped: SellerDetails = {
             sellerName: data.sellerName ?? "",
+            contact: data.contact ?? "",
             gstNumber: data.gstNumber ?? "",
             fullAddress: data.fullAddress ?? "",
             logoUrl: data.logoUrl ?? "",
@@ -195,6 +197,7 @@ export default function BillingDetailsComponent({ userId }: Props) {
     }
     if (
       !bill.sellerName ||
+      !bill.contact ||
       !bill.gstNumber ||
       !bill.fullAddress ||
       !bill.qrCodeUrl ||
@@ -202,7 +205,7 @@ export default function BillingDetailsComponent({ userId }: Props) {
       !bill.slogan
     ) {
       toast.error(
-        "Please fill all required bill fields (QR & Signature are mandatory) ❗"
+        "Please fill all required bill fields (Contact, QR & Signature are mandatory) ❗"
       );
       return;
     }
@@ -221,6 +224,7 @@ export default function BillingDetailsComponent({ userId }: Props) {
       }
       const normalized: SellerDetails = {
         sellerName: data.sellerName ?? bill.sellerName,
+        contact: data.contact ?? bill.contact,
         gstNumber: data.gstNumber ?? bill.gstNumber,
         fullAddress: data.fullAddress ?? bill.fullAddress,
         logoUrl: data.logoUrl ?? bill.logoUrl,
@@ -285,6 +289,12 @@ export default function BillingDetailsComponent({ userId }: Props) {
               <div className="text-xs text-gray-500 mb-1">Seller</div>
               <div className="font-medium text-gray-800 break-words">
                 {bill.sellerName || "—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 mb-1">Contact Number</div>
+              <div className="font-medium text-gray-800 break-all">
+                {bill.contact || "—"}
               </div>
             </div>
             <div>
@@ -389,8 +399,25 @@ export default function BillingDetailsComponent({ userId }: Props) {
               />
             </label>
 
-            {/* GST Number */}
+            {/* Contact Number */}
             <label className="text-sm text-gray-600">
+              Contact Number *
+              <input
+                className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                value={bill.contact || ""}
+                onChange={(e) =>
+                  setBill((b) => ({
+                    ...b,
+                    contact: e.target.value,
+                  }))
+                }
+                placeholder="e.g., +91 98765 43210"
+                type="tel"
+              />
+            </label>
+
+            {/* GST Number */}
+            <label className="text-sm text-gray-600 md:col-span-2">
               GST Number *
               <input
                 className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
@@ -598,5 +625,4 @@ export default function BillingDetailsComponent({ userId }: Props) {
       )}
     </div>
   );
-
 }

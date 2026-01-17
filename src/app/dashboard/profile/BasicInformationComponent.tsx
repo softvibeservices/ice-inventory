@@ -1,7 +1,5 @@
 // src/app/dashboard/profile/BasicInformationComponent.tsx
 
-
-
 "use client";
 
 import { useState } from "react";
@@ -55,6 +53,19 @@ export default function BasicInformationComponent({ user, onUpdate }: Props) {
         setLocalUser(data);
         setOriginalUser(data);
         onUpdate(data); // Notify parent component
+        
+        // Update localStorage with new user data
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            const updatedStoredUser = { ...parsed, ...data };
+            localStorage.setItem("user", JSON.stringify(updatedStoredUser));
+          } catch (e) {
+            console.error("Failed to update localStorage:", e);
+          }
+        }
+        
         toast.success("Profile updated successfully ✅");
       } else {
         toast.error(data.error || "Update failed ❌");
@@ -67,16 +78,16 @@ export default function BasicInformationComponent({ user, onUpdate }: Props) {
   };
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold flex items-center gap-2 text-gray-800">
+    <div className="space-y-4 sm:space-y-6">
+      <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-gray-800">
         <User className="w-5 h-5" /> Basic Information
       </h2>
 
-      <div className="grid md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <label className="text-sm text-gray-600">
           Full Name
           <input
-            className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
+            className="mt-1 w-full border border-gray-300 rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-400 transition-all"
             value={localUser.name || ""}
             onChange={(e) =>
               setLocalUser({ ...localUser, name: e.target.value })
@@ -88,7 +99,8 @@ export default function BasicInformationComponent({ user, onUpdate }: Props) {
         <label className="text-sm text-gray-600">
           Email
           <input
-            className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
+            type="email"
+            className="mt-1 w-full border border-gray-300 rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-400 transition-all"
             value={localUser.email || ""}
             onChange={(e) =>
               setLocalUser({ ...localUser, email: e.target.value })
@@ -100,7 +112,8 @@ export default function BasicInformationComponent({ user, onUpdate }: Props) {
         <label className="text-sm text-gray-600">
           Contact Number
           <input
-            className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
+            type="tel"
+            className="mt-1 w-full border border-gray-300 rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-400 transition-all"
             value={localUser.contact || ""}
             onChange={(e) =>
               setLocalUser({ ...localUser, contact: e.target.value })
@@ -112,7 +125,7 @@ export default function BasicInformationComponent({ user, onUpdate }: Props) {
         <label className="text-sm text-gray-600">
           Shop / Business Name
           <input
-            className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
+            className="mt-1 w-full border border-gray-300 rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-400 transition-all"
             value={localUser.shopName || ""}
             onChange={(e) =>
               setLocalUser({ ...localUser, shopName: e.target.value })
@@ -123,13 +136,14 @@ export default function BasicInformationComponent({ user, onUpdate }: Props) {
 
         <label className="text-sm text-gray-600 md:col-span-2">
           Shop Address
-          <input
-            className="mt-1 w-full border rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 bg-white text-gray-900 placeholder-gray-400"
+          <textarea
+            className="mt-1 w-full border border-gray-300 rounded-lg p-3 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900 placeholder-gray-400 transition-all resize-none"
             value={localUser.shopAddress || ""}
             onChange={(e) =>
               setLocalUser({ ...localUser, shopAddress: e.target.value })
             }
             placeholder="Shop Address"
+            rows={2}
           />
         </label>
       </div>
@@ -137,9 +151,16 @@ export default function BasicInformationComponent({ user, onUpdate }: Props) {
       <button
         onClick={updateProfile}
         disabled={loading || !isChanged}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg shadow disabled:opacity-50"
+        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg shadow disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
       >
-        {loading ? "Saving..." : "💾 Save Changes"}
+        {loading ? (
+          <span className="inline-flex items-center gap-2">
+            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+            Saving...
+          </span>
+        ) : (
+          "💾 Save Changes"
+        )}
       </button>
     </div>
   );

@@ -7,10 +7,14 @@ export async function POST(req: Request) {
   try {
     await connectDB();
     const body = await req.json();
-    const { userId } = body;
+    const { userId, contact } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 });
+    }
+
+    if (!contact) {
+      return NextResponse.json({ error: "Contact number is required" }, { status: 400 });
     }
 
     const existing = await SellerDetails.findOne({ userId });
@@ -24,7 +28,8 @@ export async function POST(req: Request) {
       const created = await SellerDetails.create(body);
       return NextResponse.json(created, { status: 201 });
     }
-  } catch  {
+  } catch (error) {
+    console.error("Error saving seller details:", error);
     return NextResponse.json({ error: "Failed to save seller details" }, { status: 500 });
   }
 }
@@ -34,11 +39,15 @@ export async function GET(req: Request) {
     await connectDB();
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
-    if (!userId) return NextResponse.json({ error: "UserId required" }, { status: 400 });
+    
+    if (!userId) {
+      return NextResponse.json({ error: "UserId required" }, { status: 400 });
+    }
 
     const details = await SellerDetails.findOne({ userId });
     return NextResponse.json(details || {});
-  } catch  {
+  } catch (error) {
+    console.error("Error fetching seller details:", error);
     return NextResponse.json({ error: "Failed to fetch seller details" }, { status: 500 });
   }
 }

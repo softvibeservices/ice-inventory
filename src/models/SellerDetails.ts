@@ -4,6 +4,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface ISellerDetails extends Document {
   userId: string; // linked with User
   sellerName: string;
+  contact: string; // contact number
   gstNumber: string;
   fullAddress: string;
   logoUrl?: string; // optional
@@ -19,6 +20,7 @@ const SellerDetailsSchema = new Schema<ISellerDetails>(
   {
     userId: { type: String, required: true, unique: true },
     sellerName: { type: String, required: true },
+    contact: { type: String, required: true },
     gstNumber: { type: String, required: true },
     fullAddress: { type: String, required: true },
     logoUrl: { type: String },

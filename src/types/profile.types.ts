@@ -12,20 +12,21 @@ export type UserProfile = {
   role?: string;
 };
 
-export type SellerDetails = {
+export interface SellerDetails {
   _id?: string;
   userId?: string;
-  sellerName?: string;
-  gstNumber?: string;
-  fullAddress?: string;
+  sellerName: string;
+  contact: string;
+  gstNumber: string;
+  fullAddress: string;
   logoUrl?: string;
   logoPublicId?: string;
-  qrCodeUrl?: string;
+  qrCodeUrl: string;
   qrPublicId?: string;
-  signatureUrl?: string;
+  signatureUrl: string;
   signaturePublicId?: string;
-  slogan?: string;
-};
+  slogan: string;
+}
 
 export type BankDetails = {
   _id?: string;
