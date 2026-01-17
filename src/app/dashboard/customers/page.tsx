@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
-import { Plus, Trash2, Edit3, Phone, Building, FileText, Eye } from "lucide-react";
+import { Plus } from "lucide-react";
 import CustomerForm from "./CustomerForm";
 import CustomerList from "./CustomerList";
 import CustomerViewModal from "./CustomerViewModal";
@@ -389,54 +389,44 @@ export default function CustomersPage() {
   
         {/* ===== Form ===== */}
         <div className="mb-6">
-        <CustomerForm
-  form={form}
-  setForm={setForm}
-  showForm={showForm}
-  saving={saving}
-  editingId={editingId}
-  handleSubmit={handleSubmit}
-  onCancel={() => {
-    setShowForm(false);   // ✅ CLOSE FORM
-    setEditingId(null);  // ✅ EXIT EDIT MODE
-    setForm({            // ✅ RESET FORM
-      name: "",
-      contacts: [""],
-      shopName: "",
-      shopAddress: "",
-      area: "",
-      latitude: "",
-      longitude: "",
-      remarks: "",
-      credit: "0",
-      debit: "0",
-      totalSales: "0",
-    });
-  }}
-/>
-
+          <CustomerForm
+            form={form}
+            setForm={setForm}
+            showForm={showForm}
+            saving={saving}
+            editingId={editingId}
+            handleSubmit={handleSubmit}
+            onCancel={() => {
+              setShowForm(false);
+              setEditingId(null);
+              setForm({
+                name: "",
+                contacts: [""],
+                shopName: "",
+                shopAddress: "",
+                area: "",
+                latitude: "",
+                longitude: "",
+                remarks: "",
+                credit: "0",
+                debit: "0",
+                totalSales: "0",
+              });
+            }}
+          />
         </div>
   
-        {/* ===== Table / List Container ===== */}
-        <section className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-200">
-           
-          </div>
-  
-          {/* medium-height, owner-friendly */}
-          <div className="max-h-[520px] overflow-auto">
-            <CustomerList
-              customers={customers}
-              search={search}
-              sortMode={sortMode}
-              loading={loading}
-              handleView={handleView}
-              handleEdit={handleEdit}
-              openSettlementModal={openSettlementModal}
-              openDeleteModal={openDeleteModal}
-            />
-          </div>
-        </section>
+        {/* ===== Customer List ===== */}
+        <CustomerList
+          customers={customers}
+          search={search}
+          sortMode={sortMode}
+          loading={loading}
+          handleView={handleView}
+          handleEdit={handleEdit}
+          openSettlementModal={openSettlementModal}
+          openDeleteModal={openDeleteModal}
+        />
       </main>
   
       <Footer />
@@ -444,15 +434,14 @@ export default function CustomersPage() {
       {/* ================= VIEW MODAL ================= */}
       {viewingCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4">
-         <CustomerViewModal
-  customer={viewingCustomer}
-  onClose={() => setViewingCustomer(null)}
-  onDelete={(id) => {
-    setViewingCustomer(null);
-    openDeleteModal(id);
-  }}
-/>
-
+          <CustomerViewModal
+            customer={viewingCustomer}
+            onClose={() => setViewingCustomer(null)}
+            onDelete={(id) => {
+              setViewingCustomer(null);
+              openDeleteModal(id);
+            }}
+          />
         </div>
       )}
   
@@ -535,5 +524,4 @@ export default function CustomersPage() {
       )}
     </div>
   );
-  
 }

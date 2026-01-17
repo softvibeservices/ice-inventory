@@ -2,7 +2,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Eye, Edit3, Trash2, Phone } from "lucide-react";
+import { Phone } from "lucide-react";
 import { Customer, SortMode } from "@/types/customer.type";
 
 interface CustomerListProps {
@@ -77,7 +77,6 @@ export default function CustomerList({
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-  
       {/* ===== Header ===== */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 border-b border-slate-200">
         <h2 className="text-base sm:text-lg font-semibold text-slate-900">
@@ -87,13 +86,34 @@ export default function CustomerList({
           {filtered.length} result{filtered.length !== 1 ? "s" : ""}
         </div>
       </div>
-  
+
       {/* ================= DESKTOP / TABLET TABLE ================= */}
-      <div className="hidden lg:block max-h-[520px] overflow-auto">
+      <div className="hidden lg:block overflow-auto" style={{
+        maxHeight: '520px',
+        scrollbarWidth: 'thin',
+        scrollbarColor: '#cbd5e1 #f1f5f9'
+      }}>
+        <style>{`
+          .hidden.lg\\:block.overflow-auto::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+          }
+          .hidden.lg\\:block.overflow-auto::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+          }
+          .hidden.lg\\:block.overflow-auto::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+          }
+          .hidden.lg\\:block.overflow-auto::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+        `}</style>
         <table className="w-full border-collapse text-left">
           <thead className="sticky top-0 bg-slate-100 z-10">
             <tr className="text-xs font-semibold uppercase tracking-wide text-slate-800">
-              <th className="p-3 border-b">ID</th>
+              <th className="p-3 border-b">S.No</th>
               <th className="p-3 border-b">Name</th>
               <th className="p-3 border-b">Contact</th>
               <th className="p-3 border-b">Shop</th>
@@ -105,7 +125,7 @@ export default function CustomerList({
               <th className="p-3 border-b text-center">Actions</th>
             </tr>
           </thead>
-  
+
           <tbody>
             {loading ? (
               <tr>
@@ -120,16 +140,16 @@ export default function CustomerList({
                 </td>
               </tr>
             ) : (
-              filtered.map((c) => (
+              filtered.map((c, index) => (
                 <tr key={c._id} className="hover:bg-slate-50">
-                  <td className="p-3 text-sm font-mono text-slate-700">
-                    {c._id.slice(-8)}
+                  <td className="p-3 text-sm font-medium text-slate-700">
+                    {index + 1}
                   </td>
-  
+
                   <td className="p-3 text-sm font-semibold text-slate-900">
                     {c.name}
                   </td>
-  
+
                   <td className="p-3 text-sm text-slate-800">
                     <div className="flex items-center gap-2">
                       <Phone size={15} />
@@ -145,31 +165,31 @@ export default function CustomerList({
                       </div>
                     </div>
                   </td>
-  
+
                   <td className="p-3 text-sm text-slate-800">
                     {c.shopName}
                   </td>
-  
+
                   <td className="p-3 text-sm text-slate-800">
                     {c.area || "-"}
                   </td>
-  
+
                   <td className="p-3 text-sm text-right font-medium text-green-700">
                     {formatCurrency(c.credit)}
                   </td>
-  
+
                   <td className="p-3 text-sm text-right font-medium text-red-700">
                     {formatCurrency(c.debit)}
                   </td>
-  
+
                   <td className="p-3 text-sm text-right text-slate-800">
                     {formatCurrency(c.totalSales)}
                   </td>
-  
+
                   <td className="p-3 text-sm text-slate-700">
                     {c.remarks || "-"}
                   </td>
-  
+
                   <td className="p-3">
                     <div className="flex flex-wrap justify-center gap-2">
                       <button
@@ -204,9 +224,29 @@ export default function CustomerList({
           </tbody>
         </table>
       </div>
-  
+
       {/* ================= MOBILE VIEW (CARD STYLE) ================= */}
-      <div className="lg:hidden max-h-[520px] overflow-auto divide-y">
+      <div className="lg:hidden overflow-auto divide-y" style={{
+        maxHeight: '520px',
+        scrollbarWidth: 'thin',
+        scrollbarColor: '#cbd5e1 #f1f5f9'
+      }}>
+        <style>{`
+          .lg\\:hidden.overflow-auto::-webkit-scrollbar {
+            width: 8px;
+          }
+          .lg\\:hidden.overflow-auto::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+          }
+          .lg\\:hidden.overflow-auto::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+          }
+          .lg\\:hidden.overflow-auto::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+        `}</style>
         {loading ? (
           <div className="p-6 text-center text-slate-700">Loading...</div>
         ) : filtered.length === 0 ? (
@@ -214,7 +254,7 @@ export default function CustomerList({
             No customers found.
           </div>
         ) : (
-          filtered.map((c) => (
+          filtered.map((c, index) => (
             <div key={c._id} className="p-4 space-y-2">
               <div className="flex justify-between items-start">
                 <div>
@@ -225,15 +265,15 @@ export default function CustomerList({
                     {c.shopName}
                   </p>
                 </div>
-                <span className="text-xs font-mono text-slate-600">
-                  {c._id.slice(-6)}
+                <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                  #{index + 1}
                 </span>
               </div>
-  
+
               <div className="text-sm text-slate-800">
                 📞 {c.contacts?.[0] || "-"}
               </div>
-  
+
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div className="text-green-700 font-medium">
                   Credit: {formatCurrency(c.credit)}
@@ -242,7 +282,7 @@ export default function CustomerList({
                   Debit: {formatCurrency(c.debit)}
                 </div>
               </div>
-  
+
               <div className="flex flex-wrap gap-2 pt-2">
                 <button
                   onClick={() => handleView(c)}
@@ -275,5 +315,4 @@ export default function CustomerList({
       </div>
     </div>
   );
-  
 }
