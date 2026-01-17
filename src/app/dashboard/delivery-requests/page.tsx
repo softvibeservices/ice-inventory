@@ -1,4 +1,5 @@
 // src/app/dashboard/delivery-requests/page.tsx
+// ✅ FIXED: Removed userId prop from DashboardNavbar
 "use client";
 
 import { useEffect, useState } from "react";
@@ -24,7 +25,6 @@ export default function DeliveryRequestsPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(false);
   const [workingId, setWorkingId] = useState<string | null>(null);
-  const [adminEmail, setAdminEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -34,65 +34,47 @@ export default function DeliveryRequestsPage() {
     partnerName: string;
   } | null>(null);
 
-  // detect admin identity from URL or window (supporting ?adminEmail=... or ?userId=...)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const aemail = params.get("adminEmail") ?? params.get("email");
-    const uid = params.get("userId");
-    if (aemail) setAdminEmail(aemail.toLowerCase());
-    if (uid) setUserId(uid);
-
-    // try to detect session user if no query param was provided
-    (async () => {
-      if (!aemail && !uid) {
-        try {
-          const r = await fetch("/api/auth/session");
-          if (r.ok) {
-            const j = await r.json().catch(() => null);
-            const maybeUser = j?.user ?? j;
-            if (maybeUser?.email)
-              setAdminEmail(String(maybeUser.email).toLowerCase());
-            if (maybeUser?._id) setUserId(String(maybeUser._id));
-            if (maybeUser?.id) setUserId(String(maybeUser.id));
-          }
-        } catch {
-          // ignore if endpoint doesn't exist
-        }
-      }
-    })();
-  }, []);
-
+  // ✅ FIXED: Get userId from localStorage only
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (!stored) {
       router.push("/login");
       return;
     }
-    const parsed = JSON.parse(stored || "{}");
-    if (parsed?.role === "manager") {
-      router.push("/dashboard");
+    
+    try {
+      const parsed = JSON.parse(stored);
+      
+      // Check if manager - redirect to dashboard
+      if (parsed?.role === "manager") {
+        router.push("/dashboard");
+        return;
+      }
+      
+      // Set userId for API calls
+      if (parsed?._id) {
+        setUserId(parsed._id);
+      }
+    } catch (error) {
+      console.error("Error parsing user data:", error);
+      router.push("/login");
     }
-  }, []);
+  }, [router]);
 
-  // load pending partners when admin identity is known
+  // load pending partners when userId is known
   const loadRequests = async () => {
-    if (!userId && !adminEmail) {
-      setErrorMsg(
-        "Provide ?userId=... or ?adminEmail=... in URL, or ensure session endpoint exists."
-      );
+    if (!userId) {
+      setErrorMsg("User ID not found. Please log in again.");
       return;
     }
+    
     setErrorMsg(null);
     setLoading(true);
+    
     try {
-      const q = new URLSearchParams();
-      if (userId) q.set("userId", userId);
-      if (adminEmail) q.set("adminEmail", adminEmail);
-      q.set("status", "pending");
-
-      const res = await fetch(`/api/delivery/list?${q.toString()}`);
+      const res = await fetch(`/api/delivery/list?userId=${userId}&status=pending`);
       const data = await res.json().catch(() => null);
+      
       if (!res.ok) {
         const err = data?.error ?? "Failed to load requests";
         setPartners([]);
@@ -110,8 +92,10 @@ export default function DeliveryRequestsPage() {
   };
 
   useEffect(() => {
-    loadRequests();
-  }, [userId, adminEmail]);
+    if (userId) {
+      loadRequests();
+    }
+  }, [userId]);
 
   // Show confirmation modal
   const showConfirmation = (
@@ -123,10 +107,10 @@ export default function DeliveryRequestsPage() {
     setShowConfirmModal(true);
   };
 
-  // Accept / Reject handler (robust JSON parsing and error handling)
+  // Accept / Reject handler
   async function handleAction(partnerId: string, action: "approve" | "reject") {
-    if (!userId && !adminEmail) {
-      setErrorMsg("Missing admin identity. Provide ?userId or ?adminEmail in URL.");
+    if (!userId) {
+      setErrorMsg("User ID not found. Please log in again.");
       return;
     }
 
@@ -134,9 +118,7 @@ export default function DeliveryRequestsPage() {
     setWorkingId(partnerId);
 
     try {
-      const body: any = { partnerId };
-      if (userId) body.userId = userId;
-      if (adminEmail) body.adminEmail = adminEmail;
+      const body = { partnerId, userId };
 
       const res = await fetch(`/api/delivery/${action}`, {
         method: "PATCH",
@@ -153,12 +135,13 @@ export default function DeliveryRequestsPage() {
       } else {
         setPartners((p) => p.filter((x) => x._id !== partnerId));
         setErrorMsg(null);
+        
         // Show success message
         const successMsg =
           action === "approve"
             ? "✅ Partner approved successfully!"
             : "❌ Partner request rejected.";
-        // You can replace this with a toast notification if you prefer
+        
         const tempDiv = document.createElement("div");
         tempDiv.className =
           "fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50";
@@ -196,6 +179,7 @@ export default function DeliveryRequestsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* ✅ FIXED: Removed userId prop */}
       <DashboardNavbar />
 
       <main className="flex-grow">
