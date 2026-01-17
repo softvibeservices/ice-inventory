@@ -1,40 +1,65 @@
 // src/app/api/delivery/notifications/route.ts
+// ✅ FIXED VERSION: Requires userId, removes adminEmail dependency
+
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import Order from "@/models/Order";
+import User from "@/models/User";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
-    const adminEmail = searchParams.get("adminEmail")?.toLowerCase();
 
-    if (!userId && !adminEmail) {
-      return NextResponse.json({ error: "userId or adminEmail required" }, { status: 400 });
+    // ✅ SECURITY: userId is REQUIRED
+    if (!userId) {
+      return NextResponse.json(
+        { error: "userId is required" },
+        { status: 400 }
+      );
     }
 
     await connectDB();
 
-    let pendingPartners = 0;
-    if (userId) {
-      pendingPartners = await DeliveryPartner.countDocuments({ createdByUser: userId, status: "pending" });
-    } else if (adminEmail) {
-      pendingPartners = await DeliveryPartner.countDocuments({
-        $or: [{ adminEmail }, { createdByUser: null, adminEmail: null }],
-        status: "pending",
-      });
+    // ✅ SECURITY: Verify user exists
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
     }
 
-    // pending deliveries only makes sense with userId (shop owner)
-    let pendingDeliveries = 0;
-    if (userId) {
-      pendingDeliveries = await Order.countDocuments({ userId, deliveryStatus: { $in: ["Pending", "On the Way"] } });
+    // ✅ SECURITY: Block managers from seeing notifications
+    if (user.role === "manager") {
+      return NextResponse.json(
+        { error: "Access denied: Managers not allowed" },
+        { status: 403 }
+      );
     }
 
-    return NextResponse.json({ pendingPartners, pendingDeliveries });
+    // ✅ Count pending delivery partners for THIS admin only
+    const pendingPartners = await DeliveryPartner.countDocuments({
+      createdByUser: userId,
+      status: "pending",
+    });
+
+    // ✅ Count pending deliveries for THIS admin only
+    const pendingDeliveries = await Order.countDocuments({
+      userId,
+      deliveryStatus: { $in: ["Pending", "On the Way"] },
+    });
+
+    return NextResponse.json({
+      pendingPartners,
+      pendingDeliveries,
+    });
   } catch (err: any) {
-    console.error(err);
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+    console.error("GET /api/delivery/notifications error:", err);
+    return NextResponse.json(
+      { error: "Failed to fetch notifications" },
+      { status: 500 }
+    );
   }
 }

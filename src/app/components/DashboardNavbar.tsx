@@ -1,4 +1,5 @@
 // src/app/components/DashboardNavbar.tsx
+// ✅ FIXED VERSION: Always uses userId from localStorage
 
 "use client";
 
@@ -21,25 +22,29 @@ import {
   X,
 } from "lucide-react";
 
-export default function DashboardNavbar({ userId }: { userId?: string }) {
+export default function DashboardNavbar() {
   const pathname = usePathname();
   const router = useRouter();
 
   const [pendingCount, setPendingCount] = useState(0);
   const [role, setRole] = useState<string | null>(null);
-  const [adminEmail, setAdminEmail] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null); // ✅ ADDED
   const [showDialog, setShowDialog] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  /* ================= LOAD ROLE ================= */
+  /* ================= LOAD USER DATA ================= */
+  // ✅ FIXED: Get userId and role from localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem("user");
       if (stored) {
         const parsed = JSON.parse(stored);
-        setRole(parsed.role);
+        setRole(parsed.role || "admin");
+        setUserId(parsed._id || null); // ✅ Extract userId
       }
-    } catch {}
+    } catch (error) {
+      console.error("Error loading user data:", error);
+    }
   }, []);
 
   /* ================= NAV LINKS ================= */
@@ -58,37 +63,34 @@ export default function DashboardNavbar({ userId }: { userId?: string }) {
         ]),
   ];
 
-  /* ================= ADMIN EMAIL ================= */
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("user");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.email) setAdminEmail(parsed.email.toLowerCase());
-      }
-    } catch {}
-  }, []);
-
   /* ================= NOTIFICATIONS ================= */
+  // ✅ FIXED: Only use userId, not adminEmail
   useEffect(() => {
-    if (!adminEmail && !userId) return;
+    if (!userId || role === "manager") return; // ✅ Skip if no userId or if manager
 
-    const q = new URLSearchParams();
-    if (userId) q.set("userId", userId);
-    else if (adminEmail) q.set("adminEmail", adminEmail);
-
-    fetch(`/api/delivery/notifications?${q.toString()}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (typeof d?.pendingPartners === "number") {
-          setPendingCount(d.pendingPartners);
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch(`/api/delivery/notifications?userId=${userId}`);
+        const data = await res.json();
+        
+        if (typeof data?.pendingPartners === "number") {
+          setPendingCount(data.pendingPartners);
         }
-      })
-      .catch(() => {});
-  }, [adminEmail, userId]);
+      } catch (error) {
+        console.error("Failed to fetch notifications:", error);
+      }
+    };
 
-  const requestsHref = adminEmail
-    ? `/dashboard/delivery-requests?adminEmail=${encodeURIComponent(adminEmail)}`
+    fetchNotifications();
+
+    // ✅ Optional: Poll for updates every 30 seconds
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [userId, role]);
+
+  // ✅ FIXED: Build requests href with userId
+  const requestsHref = userId
+    ? `/dashboard/delivery-requests?userId=${encodeURIComponent(userId)}`
     : "/dashboard/delivery-requests";
 
   /* ================= LOGOUT ================= */
@@ -205,33 +207,60 @@ export default function DashboardNavbar({ userId }: { userId?: string }) {
         {mobileOpen && (
           <div className="lg:hidden border-t border-white/10 bg-[#020617]">
             <div className="px-4 py-3 space-y-1">
-              {navLinks.map(({ href, label }) => (
+              {navLinks.map(({ href, label, icon: Icon }) => (
                 <Link
                   key={href}
                   href={href}
                   onClick={() => setMobileOpen(false)}
-                  className={`block px-3 py-2 rounded-md text-sm transition
+                  className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition
                     ${
                       pathname === href
                         ? "bg-cyan-500/20 text-cyan-400"
                         : "text-slate-300 hover:bg-white/10"
                     }`}
                 >
+                  <Icon size={18} />
                   {label}
                 </Link>
               ))}
 
-              {role === "manager" && (
-                <button
-                  onClick={() => {
-                    setMobileOpen(false);
-                    setShowDialog(true);
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-md text-sm text-red-400 hover:bg-red-500/10"
-                >
-                  Logout
-                </button>
+              {/* Mobile Profile & Logout */}
+              {role !== "manager" && (
+                <>
+                  <Link
+                    href="/dashboard/profile"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 rounded-md text-sm text-slate-300 hover:bg-white/10 transition"
+                  >
+                    <UserCircle size={18} />
+                    Profile
+                  </Link>
+                  <Link
+                    href={requestsHref}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 rounded-md text-sm text-slate-300 hover:bg-white/10 transition relative"
+                  >
+                    <Bell size={18} />
+                    Delivery Requests
+                    {pendingCount > 0 && (
+                      <span className="ml-auto bg-red-600 text-xs px-2 py-0.5 rounded-full">
+                        {pendingCount > 99 ? "99+" : pendingCount}
+                      </span>
+                    )}
+                  </Link>
+                </>
               )}
+
+              <button
+                onClick={() => {
+                  setMobileOpen(false);
+                  setShowDialog(true);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
+              >
+                <LogOut size={18} />
+                Logout
+              </button>
             </div>
           </div>
         )}
