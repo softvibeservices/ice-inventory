@@ -70,12 +70,13 @@ export default function DeliveryPartnersPage() {
 
     try {
       const session = getSession();
-      const adminEmail = session?.email ? String(session.email).toLowerCase() : null;
-      const adminId = session?.id ?? session?._id ?? null;
+      const userId = session?.id ?? session?._id ?? null;
 
+      // ✅ FIXED: Always send userId (required by the backend)
       const q = new URLSearchParams();
-      if (adminEmail) q.set("adminEmail", adminEmail);
-      else if (adminId) q.set("userId", adminId);
+      if (userId) {
+        q.set("userId", userId);
+      }
 
       const url = `${LIST_URL}${q.toString() ? `?${q.toString()}` : ""}`;
       const res = await fetch(url, { credentials: "include" });
@@ -584,7 +585,7 @@ export default function DeliveryPartnersPage() {
             }`}
           >
             <span className="text-xl">
-              {t.type === "success" ? "✓" : t.type === "error" ? "✕" : "ℹ"}
+              {t.type === "success" ? "✓" : t.type === "error" ? "✕" : "i"}
             </span>
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-900">{t.message}</p>

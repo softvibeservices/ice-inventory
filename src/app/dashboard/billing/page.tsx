@@ -105,7 +105,10 @@ export default function BillingPage() {
 
   // bill meta
   const [serialNo, setSerialNo] = useState<string>("");
-  const [date, setDate] = useState<string>("");
+  const [date, setDate] = useState<string>(() => {
+    const now = new Date();
+    return `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+  });
 
   // fixed line (editable)
   const [fixedLine, setFixedLine] = useState<string>(
@@ -191,7 +194,7 @@ export default function BillingPage() {
     setRemarks("");
     const newSerial = generateSerial();
     setSerialNo(newSerial);
-    updateDateToToday();
+    
     try {
       if (typeof window !== "undefined") {
         sessionStorage.setItem("billing-serial", newSerial);

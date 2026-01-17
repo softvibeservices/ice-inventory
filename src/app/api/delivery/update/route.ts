@@ -2,8 +2,6 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
-import User from "@/models/User";
-import mongoose from "mongoose";
 
 /**
  * PATCH /api/delivery/update
