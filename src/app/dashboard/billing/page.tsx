@@ -232,6 +232,8 @@ export default function BillingPage() {
     const uid = parsed._id as string;
     setUserId(uid);
 
+ 
+
     // --- Fetch Seller ---
     fetch(`/api/seller-details?userId=${encodeURIComponent(uid)}`)
       .then((r) => safeJson(r))
@@ -769,7 +771,9 @@ export default function BillingPage() {
               <h2 className="text-lg sm:text-xl font-bold text-gray-700">
                 {seller?.sellerName || "Seller Name"}
               </h2>
-              <p className="text-gray-700">{seller?.contact || "-"}</p>
+              {seller?.contact && (
+          <p className="text-gray-700"> {seller.contact}</p>
+        )}
               <p className="text-gray-700">{seller?.fullAddress || "-"}</p>
               <p className="text-gray-800">GST: {seller?.gstNumber || "-"}</p>
               <div className="mt-1">
