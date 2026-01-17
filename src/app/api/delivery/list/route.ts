@@ -1,9 +1,11 @@
-// src\app\api\delivery\list\route.ts
+// src/app/api/delivery/list/route.ts
+// ✅ FIXED VERSION - Admin email comes from logged-in user, NOT from .env
+
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import mongoose from "mongoose";
-import User from "@/models/User"; // 🔒 added
+import User from "@/models/User";
 
 function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -12,111 +14,99 @@ function escapeRegex(s: string) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId") ?? undefined;
-    const adminEmailQuery = searchParams.get("adminEmail") ?? undefined;
+    const userId = searchParams.get("userId");
     const status = searchParams.get("status") ?? undefined;
 
-    const envAdminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL
-      ? String(process.env.NEXT_PUBLIC_ADMIN_EMAIL).toLowerCase()
-      : undefined;
-
-    const adminEmailRaw = adminEmailQuery ?? envAdminEmail;
-    const adminEmail = adminEmailRaw
-      ? String(adminEmailRaw).toLowerCase()
-      : undefined;
-
-    if (!userId && !adminEmail) {
+    // ✅ SECURITY: userId is REQUIRED
+    if (!userId) {
       return NextResponse.json(
-        {
-          error:
-            "userId or adminEmail required (or set NEXT_PUBLIC_ADMIN_EMAIL)",
-        },
+        { error: "userId is required" },
         { status: 400 }
       );
     }
 
     await connectDB();
 
-    // 🔒 SECURITY CHECK
-    if (userId) {
-      const user = await User.findById(userId).select("role");
-      if (!user) {
-        return NextResponse.json(
-          { error: "User not found" },
-          { status: 404 }
-        );
-      }
-      if (user.role === "manager") {
-        return NextResponse.json(
-          { error: "Access denied: Managers not allowed" },
-          { status: 403 }
-        );
-      }
+    // ✅ SECURITY: Get the actual user's email and role
+    const user = await User.findById(userId).select("email role");
+    if (!user) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
     }
 
-    // ✔ ORIGINAL DELIVERY LIST LOGIC
+    // ✅ SECURITY: Block managers from accessing delivery partners
+    if (user.role === "manager") {
+      return NextResponse.json(
+        { error: "Access denied: Managers not allowed" },
+        { status: 403 }
+      );
+    }
+
+    // ✅ CORRECT: Use the logged-in user's email as adminEmail
+    const adminEmail = user.email ? String(user.email).toLowerCase() : null;
+
+    // ✅ BUILD FILTER: Find delivery partners belonging to THIS admin
     const filter: any = {};
 
-    if (adminEmail) {
-      const safe = escapeRegex(adminEmail);
-      filter.adminEmail = { $regex: new RegExp(`^${safe}$`, "i") };
-    } else if (userId) {
-      const ors: any[] = [
-        { createdByUser: userId },
-        { createdByUser: String(userId) },
-        { ownerId: userId },
-        { ownerId: String(userId) },
-      ];
-      if (mongoose.Types.ObjectId.isValid(userId)) {
-        ors.push(
-          { createdByUser: new mongoose.Types.ObjectId(userId) },
-          { ownerId: new mongoose.Types.ObjectId(userId) }
-        );
-      }
-      filter.$or = ors;
+    // Filter by userId (primary method)
+    const ors: any[] = [
+      { createdByUser: userId },
+      { createdByUser: String(userId) },
+    ];
+
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      ors.push({ createdByUser: new mongoose.Types.ObjectId(userId) });
     }
 
+    // Also support adminEmail for backwards compatibility
+    if (adminEmail) {
+      const safe = escapeRegex(adminEmail);
+      ors.push({ adminEmail: { $regex: new RegExp(`^${safe}$`, "i") } });
+    }
+
+    filter.$or = ors;
+
+    // Filter by status if provided
     if (status) {
       filter.status = { $regex: new RegExp(`^${String(status)}$`, "i") };
     }
 
+    // ✅ QUERY: Get delivery partners belonging to this admin
     const raw = await DeliveryPartner.find(filter)
       .sort({ createdAt: -1 })
       .lean();
 
+    // ✅ NORMALIZE: Format the response
     const normalized = (Array.isArray(raw) ? raw : []).map((doc: any) => {
       const email = doc.email
         ? String(doc.email).toLowerCase()
         : doc.contactEmail
         ? String(doc.contactEmail).toLowerCase()
         : null;
+      
       let admin = doc.adminEmail ?? doc.ownerEmail ?? null;
       admin = admin ? String(admin).toLowerCase() : null;
 
       let createdByUserVal: string | null = null;
-      if (doc.createdByUser)
+      if (doc.createdByUser) {
         createdByUserVal =
           typeof doc.createdByUser === "object" && doc.createdByUser._id
             ? String(doc.createdByUser._id)
             : String(doc.createdByUser);
-      else if (doc.ownerId)
-        createdByUserVal =
-          typeof doc.ownerId === "object" && doc.ownerId._id
-            ? String(doc.ownerId._id)
-            : String(doc.ownerId);
+      }
 
-      const s = doc.status
-        ? String(doc.status).toLowerCase()
-        : "pending";
+      const s = doc.status ? String(doc.status).toLowerCase() : "pending";
       const statusNorm =
-        s === "approved" ? "approved" : s === "rejected" ? "rejected" : "pending";
+        s === "approved"
+          ? "approved"
+          : s === "rejected"
+          ? "rejected"
+          : "pending";
 
       return {
-        _id: doc._id
-          ? String(doc._id)
-          : doc.id
-          ? String(doc.id)
-          : null,
+        _id: doc._id ? String(doc._id) : doc.id ? String(doc.id) : null,
         name: doc.name ?? doc.fullName ?? "Unknown",
         email,
         phone: doc.phone ?? doc.contact ?? null,

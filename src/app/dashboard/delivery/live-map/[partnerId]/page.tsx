@@ -1,4 +1,5 @@
 // src/app/dashboard/delivery/live-map/[partnerId]/page.tsx
+
 "use client";
 
 import dynamic from "next/dynamic";
@@ -59,17 +60,56 @@ export default function LiveMapPage() {
   const [location, setLocation] = useState<LocationData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null); // ✅ ADDED: Store userId
 
-  async function fetchLocation() {
-    if (!partnerId) return;
+  // ✅ SECURITY: Get userId from localStorage on component mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) {
+      setError("User authentication required. Please log in.");
+      setLoading(false);
+      return;
+    }
 
     try {
+      const userData = JSON.parse(storedUser);
+      if (!userData._id) {
+        setError("User ID not found. Please log in again.");
+        setLoading(false);
+        return;
+      }
+      setUserId(userData._id);
+    } catch (err) {
+      console.error("Error parsing user data:", err);
+      setError("Invalid user data. Please log in again.");
+      setLoading(false);
+    }
+  }, []);
+
+  async function fetchLocation() {
+    // ✅ SECURITY: Don't fetch if we don't have userId
+    if (!partnerId || !userId) {
+      if (!userId) {
+        setError("User authentication required");
+      }
+      return;
+    }
+
+    try {
+      // ✅ SECURITY: Include userId in the API request
       const res = await fetch(
-        `/api/delivery/live-location?partnerId=${partnerId}`,
+        `/api/delivery/live-location?partnerId=${partnerId}&userId=${userId}`,
         { cache: "no-store" }
       );
 
       const data = await res.json();
+
+      // ✅ SECURITY: Handle authorization errors specifically
+      if (res.status === 403) {
+        setError("Access denied: You do not have permission to view this partner's location.");
+        setLoading(false);
+        return;
+      }
 
       if (data.error) {
         setError(data.error);
@@ -88,11 +128,14 @@ export default function LiveMapPage() {
   }
 
   useEffect(() => {
-    fetchLocation();
-    // Update location every 3 seconds
-    const interval = setInterval(fetchLocation, 3000);
-    return () => clearInterval(interval);
-  }, [partnerId]);
+    // ✅ SECURITY: Only start fetching when we have userId
+    if (userId) {
+      fetchLocation();
+      // Update location every 3 seconds
+      const interval = setInterval(fetchLocation, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [partnerId, userId]); // ✅ ADDED: userId as dependency
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -197,38 +240,25 @@ export default function LiveMapPage() {
                             <MapPin className="w-4 h-4 text-slate-500" />
                             <span>Lng: {location.longitude.toFixed(6)}</span>
                           </div>
-
                           {location.phone && (
-                            <div className="flex items-center gap-2 pt-2 border-t">
+                            <div className="flex items-center gap-2">
                               <Phone className="w-4 h-4 text-slate-500" />
                               <span>{location.phone}</span>
                             </div>
                           )}
-
-                          <div className="flex items-center gap-2 text-xs text-slate-500 pt-2 border-t">
-                            <Clock className="w-3 h-3" />
-                            <span>
-                              {new Date(location.updatedAt).toLocaleString()}
-                            </span>
-                          </div>
+                          {location.updatedAt && (
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-slate-500" />
+                              <span>
+                                {new Date(location.updatedAt).toLocaleString()}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </Popup>
                   </Marker>
                 </MapContainer>
-              </div>
-
-              {/* Map Info Footer */}
-              <div className="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-200">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm">
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span>Live tracking active</span>
-                  </div>
-                  <div className="text-slate-500">
-                    Location updates every 3 seconds
-                  </div>
-                </div>
               </div>
             </div>
           )}
