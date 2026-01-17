@@ -36,24 +36,23 @@ export default function DeliveryOverview({
     });
   };
 
-  // ========= RENDER =========
  // ========= RENDER =========
  return (
-  <section className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 lg:p-8 min-h-[60vh] overflow-hidden">
-    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-blue-700 mb-4 sm:mb-6">
+  <section className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 lg:p-8 overflow-hidden flex flex-col">
+    <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-blue-700 mb-4 sm:mb-6 flex-shrink-0">
       Delivery Overview
     </h1>
 
     {loadingOrders ? (
-      <div className="flex flex-col items-center justify-center py-12">
+      <div className="flex flex-col items-center justify-center py-12 flex-1">
         <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
         <p className="text-sm text-gray-500">Loading dashboard…</p>
       </div>
     ) : (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 h-auto lg:h-[calc(100vh-200px)]">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 flex-1 overflow-hidden">
         {/* Pending / On the Way */}
-        <div className="border rounded-lg p-3 sm:p-4 bg-blue-50 h-auto lg:h-full flex flex-col overflow-hidden">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="border rounded-lg p-3 sm:p-4 bg-blue-50 flex flex-col overflow-hidden h-[400px] lg:h-full">
+          <div className="flex items-center gap-2 mb-3 flex-shrink-0">
             <Truck className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" />
             <h2 className="font-semibold text-sm sm:text-base text-blue-800">
               Pending / On the Way
@@ -61,14 +60,14 @@ export default function DeliveryOverview({
           </div>
 
           {pendingOrOnTheWay.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 sm:py-12">
+            <div className="flex flex-col items-center justify-center py-8 sm:py-12 flex-1">
               <Truck className="w-12 h-12 text-blue-300 mb-3" />
               <p className="text-sm text-gray-600">
                 No active deliveries.
               </p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto pr-1 sm:pr-2">
+            <div className="flex-1 overflow-y-auto pr-1 sm:pr-2 scrollbar-thin scrollbar-thumb-blue-300 scrollbar-track-blue-50">
               <ul className="space-y-2">
                 {pendingOrOnTheWay.map((o) => (
                   <li
@@ -103,8 +102,8 @@ export default function DeliveryOverview({
         </div>
 
         {/* Delivered but Unsettled */}
-        <div className="border rounded-lg p-3 sm:p-4 bg-green-50 h-auto lg:h-full flex flex-col overflow-hidden">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="border rounded-lg p-3 sm:p-4 bg-green-50 flex flex-col overflow-hidden h-[400px] lg:h-full">
+          <div className="flex items-center gap-2 mb-3 flex-shrink-0">
             <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-green-600 flex-shrink-0" />
             <h2 className="font-semibold text-sm sm:text-base text-green-800">
               Delivered but Unsettled
@@ -112,14 +111,14 @@ export default function DeliveryOverview({
           </div>
 
           {deliveredButUnsettled.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 sm:py-12">
+            <div className="flex flex-col items-center justify-center py-8 sm:py-12 flex-1">
               <CheckCircle className="w-12 h-12 text-green-300 mb-3" />
               <p className="text-sm text-gray-600">
                 All delivered orders are settled 🎉
               </p>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto pr-1 sm:pr-2">
+            <div className="flex-1 overflow-y-auto pr-1 sm:pr-2 scrollbar-thin scrollbar-thumb-green-300 scrollbar-track-green-50">
               <ul className="space-y-2">
                 {deliveredButUnsettled.map((o) => (
                   <li
