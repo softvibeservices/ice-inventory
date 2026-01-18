@@ -1,5 +1,5 @@
 // src/app/components/DashboardNavbar.tsx
-// ✅ FIXED VERSION: Always uses userId from localStorage
+// ✅ UPDATED: Better notification badge with red styling and count
 
 "use client";
 
@@ -28,19 +28,18 @@ export default function DashboardNavbar() {
 
   const [pendingCount, setPendingCount] = useState(0);
   const [role, setRole] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null); // ✅ ADDED
+  const [userId, setUserId] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   /* ================= LOAD USER DATA ================= */
-  // ✅ FIXED: Get userId and role from localStorage
   useEffect(() => {
     try {
       const stored = localStorage.getItem("user");
       if (stored) {
         const parsed = JSON.parse(stored);
         setRole(parsed.role || "admin");
-        setUserId(parsed._id || null); // ✅ Extract userId
+        setUserId(parsed._id || null);
       }
     } catch (error) {
       console.error("Error loading user data:", error);
@@ -64,9 +63,8 @@ export default function DashboardNavbar() {
   ];
 
   /* ================= NOTIFICATIONS ================= */
-  // ✅ FIXED: Only use userId, not adminEmail
   useEffect(() => {
-    if (!userId || role === "manager") return; // ✅ Skip if no userId or if manager
+    if (!userId || role === "manager") return;
 
     const fetchNotifications = async () => {
       try {
@@ -83,12 +81,11 @@ export default function DashboardNavbar() {
 
     fetchNotifications();
 
-    // ✅ Optional: Poll for updates every 30 seconds
+    // Poll for updates every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, [userId, role]);
 
-  // ✅ FIXED: Build requests href with userId
   const requestsHref = userId
     ? `/dashboard/delivery-requests?userId=${encodeURIComponent(userId)}`
     : "/dashboard/delivery-requests";
@@ -169,13 +166,36 @@ export default function DashboardNavbar() {
 
           {/* RIGHT */}
           <div className="ml-auto flex items-center gap-3">
+            {/* ✅ ENHANCED NOTIFICATION BELL */}
             {role !== "manager" && (
-              <Link href={requestsHref} className="relative">
-                <Bell className="text-slate-300 hover:text-cyan-400" size={22} />
+              <Link href={requestsHref} className="relative group">
+                <div className="relative">
+                  <Bell 
+                    className={`transition ${
+                      pendingCount > 0 
+                        ? "text-red-400 hover:text-red-300" 
+                        : "text-slate-300 hover:text-cyan-400"
+                    }`} 
+                    size={22} 
+                  />
+                  {pendingCount > 0 && (
+                    <>
+                      {/* ✅ ANIMATED PULSE RING */}
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full animate-ping opacity-75"></span>
+                      
+                      {/* ✅ COUNT BADGE */}
+                      <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-lg border border-red-400">
+                        {pendingCount > 99 ? "99+" : pendingCount}
+                      </span>
+                    </>
+                  )}
+                </div>
+                
+                {/* ✅ HOVER TOOLTIP */}
                 {pendingCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-600 text-xs px-1.5 py-0.5 rounded-full">
-                    {pendingCount > 99 ? "99+" : pendingCount}
-                  </span>
+                  <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white text-xs px-3 py-1 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    {pendingCount} pending request{pendingCount > 1 ? 's' : ''}
+                  </div>
                 )}
               </Link>
             )}
@@ -235,15 +255,21 @@ export default function DashboardNavbar() {
                     <UserCircle size={18} />
                     Profile
                   </Link>
+                  
+                  {/* ✅ ENHANCED MOBILE NOTIFICATION LINK */}
                   <Link
                     href={requestsHref}
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-md text-sm text-slate-300 hover:bg-white/10 transition relative"
+                    className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition relative ${
+                      pendingCount > 0 
+                        ? "text-red-400 hover:bg-red-500/10" 
+                        : "text-slate-300 hover:bg-white/10"
+                    }`}
                   >
                     <Bell size={18} />
-                    Delivery Requests
+                    <span>Delivery Requests</span>
                     {pendingCount > 0 && (
-                      <span className="ml-auto bg-red-600 text-xs px-2 py-0.5 rounded-full">
+                      <span className="ml-auto bg-red-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg border border-red-400">
                         {pendingCount > 99 ? "99+" : pendingCount}
                       </span>
                     )}
