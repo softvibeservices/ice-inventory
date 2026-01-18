@@ -1,5 +1,4 @@
-// ice-inventory\src\app\dashboard\sticky-notes.tsx
-
+// ice-inventory/src/app/dashboard/sticky-notes.tsx
 
 "use client";
 
@@ -9,6 +8,7 @@ import {
   Plus,
   Trash2,
   Pin,
+  Truck, // ✅ NEW: Icon for delivery partner
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import type {
@@ -85,6 +85,11 @@ export function StickyNotesPanel() {
   };
 
   const openEditModal = (note: StickyNote) => {
+    // ✅ NEW: Block editing sticky notes created by delivery partners
+    if (note.deliveryPartnerId) {
+      toast.error("Cannot edit sticky notes created by delivery partners");
+      return;
+    }
     setEditingNote(note);
     setShowModal(true);
   };
@@ -102,14 +107,13 @@ export function StickyNotesPanel() {
     setDeleting(false);
   };
 
-
-const handleConfirmDelete: () => Promise<void> = async () => {
+  const handleConfirmDelete: () => Promise<void> = async () => {
     if (!noteToDelete) return;
     if (!userId) {
       toast.error("User not logged in");
       return;
     }
-  
+
     try {
       setDeleting(true);
       const res = await fetch("/api/sticky-notes", {
@@ -117,12 +121,12 @@ const handleConfirmDelete: () => Promise<void> = async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: noteToDelete._id, userId }),
       });
-  
+
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data?.error || "Delete failed");
       }
-  
+
       setNotes((prev) => prev.filter((n) => n._id !== noteToDelete._id));
       toast.success("Sticky note deleted");
       closeDeleteConfirm();
@@ -132,8 +136,7 @@ const handleConfirmDelete: () => Promise<void> = async () => {
       setDeleting(false);
     }
   };
-  
-  
+
   const computeNoteBoxTotal = (note: StickyNote) => {
     return note.items.reduce((sum, it) => {
       if (it.unit !== "box") return sum;
@@ -155,7 +158,11 @@ const handleConfirmDelete: () => Promise<void> = async () => {
     closeModal();
   };
 
-  // ========= RENDER =========
+  // ✅ NEW: Check if note was created by delivery partner
+  const isDeliveryPartnerNote = (note: StickyNote) => {
+    return !!note.deliveryPartnerId;
+  };
+
   // ========= RENDER =========
   return (
     <>
@@ -199,31 +206,61 @@ const handleConfirmDelete: () => Promise<void> = async () => {
               const boxTotal = computeNoteBoxTotal(note);
               const tilt =
                 index % 2 === 0 ? "rotate-[-1.5deg]" : "rotate-[1.5deg]";
+              const isFromDelivery = isDeliveryPartnerNote(note);
+              
               return (
                 <div
                   key={note._id}
-                  className={`relative border border-amber-300 rounded-xl px-3 py-3 flex flex-col gap-1 bg-gradient-to-br from-amber-100 to-amber-200 shadow-lg ${tilt} hover:-translate-y-1 transition-transform`}
+                  className={`relative border ${
+                    isFromDelivery 
+                      ? "border-blue-300 bg-gradient-to-br from-blue-50 to-blue-100" 
+                      : "border-amber-300 bg-gradient-to-br from-amber-100 to-amber-200"
+                  } rounded-xl px-3 py-3 flex flex-col gap-1 shadow-lg ${tilt} hover:-translate-y-1 transition-transform`}
                 >
                   {/* Pin on top */}
                   <div className="absolute -top-2 left-1/2 -translate-x-1/2">
-                    <div className="w-6 sm:w-7 h-1.5 rounded-full bg-amber-300 shadow-sm" />
+                    <div className={`w-6 sm:w-7 h-1.5 rounded-full ${
+                      isFromDelivery ? "bg-blue-300" : "bg-amber-300"
+                    } shadow-sm`} />
                   </div>
+
+                  {/* ✅ NEW: Delivery Partner Indicator */}
+                  {isFromDelivery && (
+                    <div className="absolute -top-1 -right-1 bg-blue-500 text-white rounded-full p-1 shadow-md">
+                      <Truck className="w-3 h-3" />
+                    </div>
+                  )}
 
                   {/* Header: Shop & Customer */}
                   <div className="flex items-start justify-between gap-2 mt-1">
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-amber-900 truncate">
+                      <p className={`text-xs font-semibold truncate ${
+                        isFromDelivery ? "text-blue-900" : "text-amber-900"
+                      }`}>
                         {note.shopName}
                       </p>
-                      <p className="text-[11px] text-amber-800 truncate">
+                      <p className={`text-[11px] truncate ${
+                        isFromDelivery ? "text-blue-800" : "text-amber-800"
+                      }`}>
                         {note.customerName}
                       </p>
+                      {/* ✅ NEW: Show delivery partner tag */}
+                      {isFromDelivery && (
+                        <p className="text-[9px] text-blue-600 flex items-center gap-1 mt-0.5">
+                          <Truck className="w-2.5 h-2.5" />
+                          Delivery Partner
+                        </p>
+                      )}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-[10px] text-amber-700">
+                      <p className={`text-[10px] ${
+                        isFromDelivery ? "text-blue-700" : "text-amber-700"
+                      }`}>
                         Total Boxes
                       </p>
-                      <p className="text-xs font-semibold text-amber-900">
+                      <p className={`text-xs font-semibold ${
+                        isFromDelivery ? "text-blue-900" : "text-amber-900"
+                      }`}>
                         {boxTotal}
                       </p>
                     </div>
@@ -231,20 +268,27 @@ const handleConfirmDelete: () => Promise<void> = async () => {
 
                   {/* Footer: Items count & Actions */}
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mt-1">
-                    <p className="text-[10px] text-amber-800/80">
+                    <p className={`text-[10px] ${
+                      isFromDelivery ? "text-blue-800/80" : "text-amber-800/80"
+                    }`}>
                       {note.items.length} item
                       {note.items.length > 1 ? "s" : ""}
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
                       <button
                         onClick={() => openEditModal(note)}
-                        className="text-[10px] sm:text-[11px] px-2 py-1 rounded-full border border-amber-400 text-amber-900 bg-amber-100/80 hover:bg-amber-200 transition-colors flex-1 sm:flex-initial"
+                        disabled={isFromDelivery}
+                        className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-full border ${
+                          isFromDelivery
+                            ? "border-blue-400 text-blue-900 bg-blue-100/80 cursor-not-allowed opacity-60"
+                            : "border-amber-400 text-amber-900 bg-amber-100/80 hover:bg-amber-200"
+                        } transition-colors flex-1 sm:flex-initial`}
                       >
-                        View / Edit
+                        {isFromDelivery ? "View Only" : "View / Edit"}
                       </button>
                       <button
                         onClick={() => openDeleteConfirm(note)}
-                        className="text-[10px] sm:text-[11px] px-2 py-1 rounded-full border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 inline-flex items-center justify-center gap-1 transition-colors flex-1 sm:flex-initial"
+                        className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-full border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 inline-flex items-center justify-center gap-1 transition-colors flex-1 sm:flex-initial`}
                       >
                         <Trash2 className="w-3 h-3" />
                         <span className="hidden sm:inline">Delete</span>
@@ -260,6 +304,11 @@ const handleConfirmDelete: () => Promise<void> = async () => {
 
         <p className="mt-3 text-[9px] sm:text-[10px] text-amber-800/80 leading-relaxed">
           Tip: After converting this sticky note into a final bill, delete it from here to keep this area clean.
+          {/* ✅ NEW: Info about delivery partner notes */}
+          <span className="block mt-1 text-blue-700">
+            <Truck className="w-2.5 h-2.5 inline mr-1" />
+            Notes with truck icon were created by delivery partners.
+          </span>
         </p>
       </aside>
 
@@ -290,6 +339,13 @@ const handleConfirmDelete: () => Promise<void> = async () => {
               Are you sure you want to delete this sticky note for{" "}
               <span className="font-semibold">{noteToDelete.shopName}</span>?{" "}
               This action cannot be undone.
+              {/* ✅ NEW: Warning for delivery partner notes */}
+              {isDeliveryPartnerNote(noteToDelete) && (
+                <span className="block mt-2 text-blue-700 font-medium">
+                  <Truck className="w-3 h-3 inline mr-1" />
+                  This note was created by a delivery partner.
+                </span>
+              )}
             </p>
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
               <button
