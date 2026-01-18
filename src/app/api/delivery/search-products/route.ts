@@ -25,7 +25,7 @@ export async function GET(req: Request) {
       name: { $regex: query, $options: "i" },
     })
       .limit(10)
-      .select("name price category")
+      .select("name price category unit quantity") // ✅ ADDED unit and quantity
       .lean();
 
     return NextResponse.json({ products }, { status: 200 });
