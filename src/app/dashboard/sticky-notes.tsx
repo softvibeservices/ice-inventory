@@ -1,4 +1,4 @@
-// ice-inventory/src/app/dashboard/sticky-notes.tsx
+// src/app/dashboard/sticky-notes.tsx
 
 "use client";
 
@@ -7,8 +7,7 @@ import {
   StickyNote as StickyIcon,
   Plus,
   Trash2,
-  Pin,
-  Truck, // ✅ NEW: Icon for delivery partner
+  Truck, // ✅ Icon for delivery partner indicator
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import type {
@@ -85,11 +84,7 @@ export function StickyNotesPanel() {
   };
 
   const openEditModal = (note: StickyNote) => {
-    // ✅ NEW: Block editing sticky notes created by delivery partners
-    if (note.deliveryPartnerId) {
-      toast.error("Cannot edit sticky notes created by delivery partners");
-      return;
-    }
+    // ✅ MANAGER CAN EDIT ALL NOTES (no restriction)
     setEditingNote(note);
     setShowModal(true);
   };
@@ -158,7 +153,7 @@ export function StickyNotesPanel() {
     closeModal();
   };
 
-  // ✅ NEW: Check if note was created by delivery partner
+  // ✅ Check if note was created by delivery partner
   const isDeliveryPartnerNote = (note: StickyNote) => {
     return !!note.deliveryPartnerId;
   };
@@ -224,7 +219,7 @@ export function StickyNotesPanel() {
                     } shadow-sm`} />
                   </div>
 
-                  {/* ✅ NEW: Delivery Partner Indicator */}
+                  {/* ✅ Delivery Partner Indicator */}
                   {isFromDelivery && (
                     <div className="absolute -top-1 -right-1 bg-blue-500 text-white rounded-full p-1 shadow-md">
                       <Truck className="w-3 h-3" />
@@ -244,7 +239,7 @@ export function StickyNotesPanel() {
                       }`}>
                         {note.customerName}
                       </p>
-                      {/* ✅ NEW: Show delivery partner tag */}
+                      {/* ✅ Show delivery partner tag */}
                       {isFromDelivery && (
                         <p className="text-[9px] text-blue-600 flex items-center gap-1 mt-0.5">
                           <Truck className="w-2.5 h-2.5" />
@@ -275,16 +270,16 @@ export function StickyNotesPanel() {
                       {note.items.length > 1 ? "s" : ""}
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
+                      {/* ✅ MANAGER CAN EDIT ALL NOTES - no disabled state */}
                       <button
                         onClick={() => openEditModal(note)}
-                        disabled={isFromDelivery}
                         className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-full border ${
                           isFromDelivery
-                            ? "border-blue-400 text-blue-900 bg-blue-100/80 cursor-not-allowed opacity-60"
+                            ? "border-blue-400 text-blue-900 bg-blue-100/80 hover:bg-blue-200"
                             : "border-amber-400 text-amber-900 bg-amber-100/80 hover:bg-amber-200"
                         } transition-colors flex-1 sm:flex-initial`}
                       >
-                        {isFromDelivery ? "View Only" : "View / Edit"}
+                        View / Edit
                       </button>
                       <button
                         onClick={() => openDeleteConfirm(note)}
@@ -304,7 +299,7 @@ export function StickyNotesPanel() {
 
         <p className="mt-3 text-[9px] sm:text-[10px] text-amber-800/80 leading-relaxed">
           Tip: After converting this sticky note into a final bill, delete it from here to keep this area clean.
-          {/* ✅ NEW: Info about delivery partner notes */}
+          {/* ✅ Info about delivery partner notes */}
           <span className="block mt-1 text-blue-700">
             <Truck className="w-2.5 h-2.5 inline mr-1" />
             Notes with truck icon were created by delivery partners.
@@ -339,7 +334,7 @@ export function StickyNotesPanel() {
               Are you sure you want to delete this sticky note for{" "}
               <span className="font-semibold">{noteToDelete.shopName}</span>?{" "}
               This action cannot be undone.
-              {/* ✅ NEW: Warning for delivery partner notes */}
+              {/* ✅ Info for delivery partner notes */}
               {isDeliveryPartnerNote(noteToDelete) && (
                 <span className="block mt-2 text-blue-700 font-medium">
                   <Truck className="w-3 h-3 inline mr-1" />

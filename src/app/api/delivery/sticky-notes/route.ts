@@ -7,6 +7,14 @@ import DeliveryPartner from "@/models/DeliveryPartner";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
 /* ----------------------------------------
+   Local types for TypeScript safety
+---------------------------------------- */
+interface LeanDeliveryPartner {
+  _id: string;
+  createdByUser?: string;
+}
+
+/* ----------------------------------------
    GET: Sticky notes assigned to delivery partner
 ---------------------------------------- */
 export async function GET(req: Request) {
@@ -61,8 +69,10 @@ export async function POST(req: Request) {
 
     await connectDB();
 
-    // ✅ Get the manager's userId from the delivery partner's profile
-    const partner = await DeliveryPartner.findById(partnerId).select("createdByUser").lean();
+    // ✅ FIXED: Get the manager's userId from the delivery partner's profile with proper typing
+    const partner = await DeliveryPartner.findById(partnerId)
+      .select("createdByUser")
+      .lean<LeanDeliveryPartner | null>();
     
     if (!partner || !partner.createdByUser) {
       return NextResponse.json(

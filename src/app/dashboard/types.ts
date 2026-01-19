@@ -39,6 +39,7 @@ export interface Order {
   export interface StickyNote {
     _id: string;
     userId: string;
+    deliveryPartnerId?: string;
     customerId?: string;
     customerName: string;
     shopName: string;
