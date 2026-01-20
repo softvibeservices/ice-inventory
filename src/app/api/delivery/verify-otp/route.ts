@@ -1,3 +1,5 @@
+// src/app/api/delivery/verify-otp/route.ts
+
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
@@ -12,7 +14,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { partnerId, otp } = body ?? {};
 
-    // ✅ Correct validation
+    // ✅ Validation
     if (!partnerId || !otp) {
       return NextResponse.json(
         { error: "partnerId and otp are required" },
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ STATUS CHECK (auto-logout safety)
+    // ✅ STATUS CHECK
     if (partner.status !== "approved") {
       return NextResponse.json(
         { error: "Partner not approved" },
@@ -68,15 +70,27 @@ export async function POST(req: Request) {
     // ✅ CREATE SESSION TOKEN
     const token = makeSessionToken();
     partner.sessionToken = token;
-
     await partner.save();
 
+    // ✅ ============================================
+    // ✅ CRITICAL FIX: Return full partner object
+    // ✅ ============================================
     return NextResponse.json({
       message: "Login successful",
-      partnerId: String(partner._id),
       token,
-      name: partner.name,
-      email: partner.email,
+      partnerId: String(partner._id),
+      // ✅ ADD THIS: Full partner object for app storage
+      partner: {
+        _id: String(partner._id),
+        name: partner.name,
+        email: partner.email,
+        phone: partner.phone || "",
+        status: partner.status,
+        createdByUser: partner.createdByUser ? String(partner.createdByUser) : null, // ✅ Manager's ID
+        adminId: partner.adminId ? String(partner.adminId) : null,
+        adminEmail: partner.adminEmail || null,
+        createdAt: partner.createdAt,
+      },
     });
   } catch (err) {
     console.error("VERIFY OTP ERROR:", err);
