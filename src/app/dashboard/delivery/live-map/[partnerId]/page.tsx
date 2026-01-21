@@ -9,12 +9,11 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
-import { ArrowLeft, MapPin, Phone, Clock, AlertCircle } from "lucide-react";
+import { ArrowLeft, MapPin, Phone, Clock, AlertCircle, Activity } from "lucide-react";
 
-// Fix leaflet type conflicts
 type LatLngType = [number, number];
 
-// Dynamic imports for Leaflet components
+// Dynamic imports
 const MapContainer: any = dynamic(
   () => import("react-leaflet").then((m) => m.MapContainer),
   { ssr: false }
@@ -35,6 +34,11 @@ const Popup: any = dynamic(
   { ssr: false }
 );
 
+const Polyline: any = dynamic(
+  () => import("react-leaflet").then((m) => m.Polyline),
+  { ssr: false }
+);
+
 // Leaflet partner icon
 const partnerIcon = L.icon({
   iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
@@ -43,6 +47,15 @@ const partnerIcon = L.icon({
   popupAnchor: [0, -40],
 });
 
+interface LocationPoint {
+  latitude: number;
+  longitude: number;
+  timestamp: string;
+  accuracy?: number;
+  speed?: number;
+  batteryLevel?: number;
+}
+
 interface LocationData {
   partnerId: string;
   name: string;
@@ -50,6 +63,8 @@ interface LocationData {
   latitude: number;
   longitude: number;
   updatedAt: string;
+  trail?: LocationPoint[];
+  trailCount?: number;
 }
 
 export default function LiveMapPage() {
@@ -60,9 +75,10 @@ export default function LiveMapPage() {
   const [location, setLocation] = useState<LocationData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null); // ✅ ADDED: Store userId
+  const [userId, setUserId] = useState<string | null>(null);
+  const [showTrail, setShowTrail] = useState(true); // ✅ NEW: Toggle trail display
 
-  // ✅ SECURITY: Get userId from localStorage on component mount
+  // ✅ Get userId from localStorage
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (!storedUser) {
@@ -87,7 +103,6 @@ export default function LiveMapPage() {
   }, []);
 
   async function fetchLocation() {
-    // ✅ SECURITY: Don't fetch if we don't have userId
     if (!partnerId || !userId) {
       if (!userId) {
         setError("User authentication required");
@@ -96,15 +111,14 @@ export default function LiveMapPage() {
     }
 
     try {
-      // ✅ SECURITY: Include userId in the API request
+      // ✅ Include trail data in request
       const res = await fetch(
-        `/api/delivery/live-location?partnerId=${partnerId}&userId=${userId}`,
+        `/api/delivery/live-location?partnerId=${partnerId}&userId=${userId}&includeTrail=true&trailMinutes=60`,
         { cache: "no-store" }
       );
 
       const data = await res.json();
 
-      // ✅ SECURITY: Handle authorization errors specifically
       if (res.status === 403) {
         setError("Access denied: You do not have permission to view this partner's location.");
         setLoading(false);
@@ -128,14 +142,18 @@ export default function LiveMapPage() {
   }
 
   useEffect(() => {
-    // ✅ SECURITY: Only start fetching when we have userId
     if (userId) {
       fetchLocation();
-      // Update location every 3 seconds
+      // Update every 3 seconds
       const interval = setInterval(fetchLocation, 3000);
       return () => clearInterval(interval);
     }
-  }, [partnerId, userId]); // ✅ ADDED: userId as dependency
+  }, [partnerId, userId]);
+
+  // ✅ Prepare trail coordinates for Polyline
+  const trailCoordinates: LatLngType[] = location?.trail
+    ? location.trail.map((point) => [point.latitude, point.longitude] as LatLngType)
+    : [];
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -167,18 +185,35 @@ export default function LiveMapPage() {
                 </div>
               </div>
 
-              {location?.updatedAt && (
-                <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">
-                  <Clock className="w-4 h-4" />
-                  <span>
-                    Updated: {new Date(location.updatedAt).toLocaleTimeString()}
-                  </span>
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                {/* Trail Toggle */}
+                {location && location.trail && location.trail.length > 0 && (
+                  <button
+                    onClick={() => setShowTrail(!showTrail)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      showTrail
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    <Activity className="w-4 h-4" />
+                    <span>Trail ({location.trailCount})</span>
+                  </button>
+                )}
+
+                {location?.updatedAt && (
+                  <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">
+                    <Clock className="w-4 h-4" />
+                    <span>
+                      {new Date(location.updatedAt).toLocaleTimeString()}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Loading State */}
+          {/* Loading */}
           {loading && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12">
               <div className="flex flex-col items-center justify-center">
@@ -188,7 +223,7 @@ export default function LiveMapPage() {
             </div>
           )}
 
-          {/* Error State */}
+          {/* Error */}
           {!loading && error && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
               <div className="flex flex-col items-center justify-center text-center">
@@ -209,7 +244,7 @@ export default function LiveMapPage() {
             </div>
           )}
 
-          {/* Map */}
+          {/* Map with Trail */}
           {!loading && !error && location && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="w-full h-[calc(100vh-280px)] min-h-[400px]">
@@ -221,6 +256,19 @@ export default function LiveMapPage() {
                 >
                   <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
+                  {/* ✅ Movement Trail (Polyline) */}
+                  {showTrail && trailCoordinates.length > 1 && (
+                    <Polyline
+                      positions={trailCoordinates}
+                      pathOptions={{
+                        color: "#3b82f6",
+                        weight: 4,
+                        opacity: 0.7,
+                      }}
+                    />
+                  )}
+
+                  {/* Current Location Marker */}
                   <Marker
                     position={[location.latitude, location.longitude] as LatLngType}
                     icon={partnerIcon}
