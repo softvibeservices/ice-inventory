@@ -7,7 +7,6 @@ import DeliveryPartner from "@/models/DeliveryPartner";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
 export async function GET(req: Request) {
-  // ✅ Verify delivery partner authentication
   const auth = await verifyDeliveryAuth(req);
   if (auth instanceof NextResponse) return auth;
 
@@ -18,15 +17,12 @@ export async function GET(req: Request) {
     const query = searchParams.get("q")?.toLowerCase() || "";
 
     if (!query || query.trim().length === 0) {
-      return NextResponse.json(
-        { customers: [] },
-        { status: 200 }
-      );
+      return NextResponse.json({ customers: [] }, { status: 200 });
     }
 
     await connectDB();
 
-    // ✅ Get manager's userId from delivery partner's profile
+    // Get manager's userId from delivery partner's profile
     const partner = await DeliveryPartner.findById(partnerId)
       .select("createdByUser")
       .lean() as { createdByUser?: string } | null;
@@ -40,7 +36,7 @@ export async function GET(req: Request) {
 
     const userId = partner.createdByUser;
 
-    // ✅ Search customers by manager's userId
+    // Search customers by manager's userId
     const customers = await Customer.find({
       userId,
       $or: [
@@ -49,7 +45,7 @@ export async function GET(req: Request) {
       ],
     })
       .limit(10)
-      .select("name shopName shopAddress contacts")
+      .select("name shopName shopAddress contacts location")
       .lean();
 
     return NextResponse.json({ customers }, { status: 200 });

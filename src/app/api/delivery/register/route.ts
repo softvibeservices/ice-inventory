@@ -29,20 +29,31 @@ export async function POST(req: Request) {
     await connectDB();
 
     const partnerEmail = String(email).toLowerCase().trim();
-    const createdByUserNormalized = createdByUser ? String(createdByUser) : null;
-    const adminIdNormalized = adminId ? String(adminId) : null;
+    let createdByUserNormalized = createdByUser ? String(createdByUser) : null;
+    let adminIdNormalized = adminId ? String(adminId) : null;
 
-    // determine admin email
+    // Determine admin email
     let adminEmail = adminEmailFromClient
       ? String(adminEmailFromClient).toLowerCase()
       : null;
 
+    // ✅ CRITICAL FIX: Auto-populate createdByUser from adminEmail
+    // This fixes both Sticky Notes and Go To Customer search
+    if (adminEmail && !createdByUserNormalized) {
+      const manager = await User.findOne({ email: adminEmail }).select("_id");
+      if (manager) {
+        createdByUserNormalized = String(manager._id);
+        adminIdNormalized = String(manager._id);
+      }
+    }
+
+    // Fallback: If createdByUser exists but no adminEmail, get email from user
     if (!adminEmail && createdByUserNormalized) {
       const owner = await User.findById(createdByUserNormalized).select("email");
       if (owner?.email) adminEmail = owner.email.toLowerCase();
     }
 
-    // 🔒 STRONG DUPLICATE CHECK (email + shop)
+    // 🔒 STRONG DUPLICATE CHECK (email + manager)
     const existingPartner = await DeliveryPartner.findOne({
       email: partnerEmail,
       createdByUser: createdByUserNormalized,
@@ -53,30 +64,27 @@ export async function POST(req: Request) {
     // -------------------------------
     if (existingPartner) {
       const status = String(existingPartner.status).toLowerCase();
-
       if (status === "pending") {
         return NextResponse.json(
           { error: "Registration already pending approval" },
           { status: 409 }
         );
       }
-
       if (status === "approved") {
         return NextResponse.json(
           { error: "Delivery partner already approved" },
           { status: 409 }
         );
       }
-
       if (status === "rejected") {
         // ♻️ Re-request using SAME RECORD
         existingPartner.name = name;
         existingPartner.phone = phone ?? existingPartner.phone;
         existingPartner.password = await bcrypt.hash(password, 10);
+        existingPartner.createdByUser = createdByUserNormalized;
         existingPartner.adminId = adminIdNormalized ?? existingPartner.adminId;
         existingPartner.adminEmail = adminEmail ?? existingPartner.adminEmail;
         existingPartner.status = "pending";
-
         await existingPartner.save();
 
         return NextResponse.json(
@@ -93,7 +101,6 @@ export async function POST(req: Request) {
     // CASE 2 — NEW PARTNER
     // -------------------------------
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const partner = new DeliveryPartner({
       name,
       email: partnerEmail,
@@ -104,7 +111,6 @@ export async function POST(req: Request) {
       adminEmail,
       status: "pending",
     });
-
     await partner.save();
 
     return NextResponse.json(
