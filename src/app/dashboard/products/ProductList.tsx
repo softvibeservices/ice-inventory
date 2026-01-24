@@ -5,8 +5,8 @@ import React, { useMemo, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Product } from "@/types/product.type";
-
 import { SortMode } from "@/types/product.type";
+import { Package, Edit, Trash2, Download, Grid, List } from "lucide-react";
 
 interface ProductListProps {
   products: Product[];
@@ -100,6 +100,11 @@ export default function ProductList({
     const endIndex = startIndex + ITEMS_PER_PAGE;
     return filtered.slice(startIndex, endIndex);
   }, [filtered, currentPage, viewAll]);
+
+  // Calculate total value
+  const totalValue = useMemo(() => {
+    return filtered.reduce((sum, p) => sum + (p.sellingPrice || 0), 0);
+  }, [filtered]);
 
   // Reset to page 1 when filters change
   React.useEffect(() => {
@@ -268,7 +273,6 @@ export default function ProductList({
   const renderPagination = () => {
     if (viewAll || totalPages <= 1) return null;
 
-    const pages = [];
     const maxVisiblePages = 5;
     let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
     let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
@@ -278,24 +282,24 @@ export default function ProductList({
     }
 
     return (
-      <div className="flex items-center justify-center gap-2 mt-6 flex-wrap">
+      <div className="flex items-center justify-center gap-2 my-6 flex-wrap">
         <button
           onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700"
+          className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition shadow-sm"
         >
-          Previous
+          ← Previous
         </button>
 
         {startPage > 1 && (
           <>
             <button
               onClick={() => handlePageChange(1)}
-              className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 text-gray-700"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 transition shadow-sm"
             >
               1
             </button>
-            {startPage > 2 && <span className="text-gray-500">...</span>}
+            {startPage > 2 && <span className="text-gray-500 font-semibold">...</span>}
           </>
         )}
 
@@ -303,10 +307,10 @@ export default function ProductList({
           <button
             key={page}
             onClick={() => handlePageChange(page)}
-            className={`px-3 py-1 text-sm border rounded-md ${
+            className={`px-3 py-2 text-sm border rounded-lg font-medium transition shadow-sm ${
               currentPage === page
                 ? 'bg-blue-600 text-white border-blue-600'
-                : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                : 'border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
           >
             {page}
@@ -315,10 +319,10 @@ export default function ProductList({
 
         {endPage < totalPages && (
           <>
-            {endPage < totalPages - 1 && <span className="text-gray-500">...</span>}
+            {endPage < totalPages - 1 && <span className="text-gray-500 font-semibold">...</span>}
             <button
               onClick={() => handlePageChange(totalPages)}
-              className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 text-gray-700"
+              className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 transition shadow-sm"
             >
               {totalPages}
             </button>
@@ -328,73 +332,107 @@ export default function ProductList({
         <button
           onClick={() => handlePageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700"
+          className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition shadow-sm"
         >
-          Next
+          Next →
         </button>
       </div>
     );
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-300 shadow-sm p-4 sm:p-6">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
   
-      {/* Header + Actions */}
-      <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="text-sm text-gray-800 font-medium">
-            Showing <span className="font-semibold">
-              {viewAll ? filtered.length : paginatedProducts.length}
-            </span> of <span className="font-semibold">{filtered.length}</span> product
-            {filtered.length !== 1 ? "s" : ""}
+      {/* ================= ENHANCED HEADER SECTION ================= */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 p-5">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          
+          {/* Stats Dashboard */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-white px-4 py-2.5 rounded-lg shadow-sm border border-blue-100">
+              <div className="text-xs text-gray-600 font-medium mb-0.5">Showing</div>
+              <div className="text-lg font-bold text-blue-600">
+                {viewAll ? filtered.length : paginatedProducts.length}
+                <span className="text-sm text-gray-600 font-normal"> of {filtered.length}</span>
+              </div>
+            </div>
+            
             {!viewAll && totalPages > 1 && (
-              <span className="ml-2 text-gray-600">
-                (Page {currentPage} of {totalPages})
-              </span>
+              <div className="bg-white px-4 py-2.5 rounded-lg shadow-sm border border-indigo-100">
+                <div className="text-xs text-gray-600 font-medium mb-0.5">Page</div>
+                <div className="text-lg font-bold text-indigo-600">
+                  {currentPage} <span className="text-sm text-gray-600 font-normal">of {totalPages}</span>
+                </div>
+              </div>
             )}
+
+            <div className="bg-white px-4 py-2.5 rounded-lg shadow-sm border border-green-100">
+              <div className="text-xs text-gray-600 font-medium mb-0.5">Total Value</div>
+              <div className="text-lg font-bold text-green-600">
+                ₹{totalValue.toFixed(2)}
+              </div>
+            </div>
           </div>
-  
-          <div className="flex gap-2">
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={handleViewAllToggle}
               className="
-                bg-gray-600 hover:bg-gray-700
+                bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800
                 text-white text-sm font-semibold
-                px-4 py-2 rounded-lg
+                px-5 py-2.5 rounded-lg
+                transition-all shadow-md hover:shadow-lg
+                flex items-center gap-2
               "
             >
-              {viewAll ? "Show Paginated" : "View All Products"}
+              {viewAll ? (
+                <>
+                  <List size={16} />
+                  Show Paginated
+                </>
+              ) : (
+                <>
+                  <Grid size={16} />
+                  View All Products
+                </>
+              )}
             </button>
 
             <button
               onClick={exportPDF}
               disabled={filtered.length === 0}
               className="
-                bg-blue-600 hover:bg-blue-700
+                bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800
                 text-white text-sm font-semibold
-                px-4 py-2 rounded-lg
-                disabled:opacity-50
+                px-5 py-2.5 rounded-lg
+                disabled:opacity-50 disabled:cursor-not-allowed
+                transition-all shadow-md hover:shadow-lg
+                flex items-center gap-2
               "
             >
+              <Download size={16} />
               Download Report
             </button>
           </div>
         </div>
+      </div>
   
-        {/* Filters */}
+      {/* ================= FILTERS SECTION ================= */}
+      <div className="bg-white border-b border-gray-200 p-4">
         <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:flex-1">
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search product or category"
+              placeholder="🔍 Search product or category..."
               className="
-                w-full sm:w-64 h-10 px-3 text-sm
-                border border-gray-400 rounded-md
+                w-full sm:flex-1 md:max-w-xs h-10 px-4 text-sm
+                border border-gray-300 rounded-lg
                 text-gray-900 placeholder-gray-500
                 focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                outline-none
+                outline-none transition
               "
             />
   
@@ -403,19 +441,20 @@ export default function ProductList({
               onChange={(e) => setSortMode(e.target.value as SortMode)}
               className="
                 h-10 px-3 text-sm
-                border border-gray-400 rounded-md
+                border border-gray-300 rounded-lg
                 bg-white text-gray-900
                 focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                outline-none
+                outline-none transition
+                min-w-[180px]
               "
             >
-              <option value="default">Sort: Default</option>
-              <option value="category">Category</option>
-              <option value="unit">Unit</option>
-              <option value="name-asc">Name A–Z</option>
-              <option value="name-desc">Name Z–A</option>
-              <option value="price-asc">Price Low–High</option>
-              <option value="price-desc">Price High–Low</option>
+              <option value="default">📅 Sort: Default</option>
+              <option value="category">📂 Category</option>
+              <option value="unit">📦 Unit</option>
+              <option value="name-asc">🔤 Name A–Z</option>
+              <option value="name-desc">🔤 Name Z–A</option>
+              <option value="price-asc">💰 Price Low–High</option>
+              <option value="price-desc">💰 Price High–Low</option>
             </select>
           </div>
   
@@ -423,23 +462,25 @@ export default function ProductList({
             <button
               onClick={handleClearFilters}
               className="
-                h-10 px-3 text-sm font-medium
-                border border-gray-400 rounded-md
-                text-gray-800 hover:bg-gray-100
+                h-10 px-4 text-sm font-medium
+                border border-gray-300 rounded-lg
+                text-gray-800 hover:bg-gray-50
+                transition shadow-sm
               "
             >
-              Clear
+              ✖ Clear
             </button>
   
             <button
               onClick={fetchProducts}
               className="
-                h-10 px-3 text-sm font-medium
-                border border-gray-400 rounded-md
-                text-gray-800 hover:bg-gray-100
+                h-10 px-4 text-sm font-medium
+                border border-gray-300 rounded-lg
+                text-gray-800 hover:bg-gray-50
+                transition shadow-sm
               "
             >
-              Refresh
+              🔄 Refresh
             </button>
           </div>
         </div>
@@ -448,133 +489,176 @@ export default function ProductList({
       {/* Pagination - Top */}
       {renderPagination()}
   
-      {/* ================= MOBILE VIEW (CARDS) ================= */}
-      <div className="grid grid-cols-1 gap-4 sm:hidden mt-4">
+      {/* ================= MOBILE VIEW (ENHANCED CARDS) ================= */}
+      <div className="grid grid-cols-1 gap-4 sm:hidden p-4">
         {loading ? (
-          <div className="text-center text-gray-800 py-6 font-medium">
-            Loading...
+          <div className="py-12 text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+            <p className="text-gray-700 font-medium">Loading products...</p>
           </div>
         ) : paginatedProducts.length === 0 ? (
-          <div className="text-center text-gray-800 py-6 font-medium">
-            No products found
+          <div className="py-12 text-center">
+            <Package className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+            <p className="text-gray-700 font-semibold text-lg mb-2">No products found</p>
+            <p className="text-gray-500 text-sm">Try adjusting your search or filters</p>
           </div>
         ) : (
-          paginatedProducts.map((p) => (
-            <div
-              key={p._id}
-              className="border border-gray-300 rounded-lg p-4"
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h3 className="font-semibold text-gray-900">
-                    {p.name}
-                  </h3>
-                  <p className="text-sm text-gray-700">
-                    {p.category || "Uncategorized"}
-                  </p>
+          paginatedProducts.map((p, index) => {
+            const globalIndex = viewAll ? filtered.indexOf(p) + 1 : (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
+            return (
+              <div
+                key={p._id}
+                className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow bg-gradient-to-br from-white to-gray-50"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold">
+                        {globalIndex}
+                      </span>
+                      <h3 className="font-bold text-gray-900 text-base">
+                        {p.name}
+                      </h3>
+                    </div>
+                    <p className="text-sm text-gray-700 ml-8">
+                      📂 {p.category || "Uncategorized"}
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full">
+                    {p.unit}
+                  </span>
                 </div>
-                <span className="text-xs font-medium bg-gray-200 text-gray-900 px-2 py-1 rounded">
-                  {p.unit}
-                </span>
-              </div>
   
-              <div className="grid grid-cols-2 gap-2 text-sm text-gray-900 mb-3">
-                <div>
-                  <span className="font-medium text-gray-700">Pack:</span>{" "}
-                  {renderPackQuantity(p)} {renderPackUnit(p)}
+                <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                  <div className="bg-gray-100 p-2 rounded">
+                    <span className="font-medium text-gray-600 text-xs">Pack</span>
+                    <p className="text-gray-900 font-semibold">
+                      {renderPackQuantity(p)} {renderPackUnit(p)}
+                    </p>
+                  </div>
+                  <div className="bg-gray-100 p-2 rounded text-right">
+                    <span className="font-medium text-gray-600 text-xs">MRP</span>
+                    <p className="text-gray-900 font-semibold">
+                      {p.mrp ? formatCurrency(p.mrp) : "-"}
+                    </p>
+                  </div>
+                  <div className="bg-green-50 p-2 rounded col-span-2">
+                    <span className="font-medium text-green-700 text-xs">Selling Price</span>
+                    <p className="text-green-800 font-bold text-lg">
+                      {formatCurrency(p.sellingPrice)}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="font-medium text-gray-700">MRP:</span>{" "}
-                  {p.mrp ? formatCurrency(p.mrp) : "-"}
-                </div>
-                <div>
-                  <span className="font-medium text-gray-700">Price:</span>{" "}
-                  {formatCurrency(p.sellingPrice)}
-                </div>
-              </div>
   
-              <div className="flex justify-end gap-4 text-sm font-semibold">
-                <button
-                  onClick={() => handleEdit(p)}
-                  className="text-blue-700 hover:underline"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => setConfirmDeleteId(p._id ?? null)}
-                  className="text-red-700 hover:underline"
-                >
-                  Delete
-                </button>
+                <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                  <button
+                    onClick={() => handleEdit(p)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-100 text-blue-800 text-sm font-semibold hover:bg-blue-200 transition"
+                  >
+                    <Edit size={14} />
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteId(p._id ?? null)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-100 text-red-800 text-sm font-semibold hover:bg-red-200 transition"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
   
-      {/* ================= DESKTOP / TABLET VIEW (TABLE) ================= */}
-      <div className="hidden sm:block overflow-x-auto mt-4">
+      {/* ================= DESKTOP / TABLET VIEW (ENHANCED TABLE) ================= */}
+      <div className="hidden sm:block overflow-x-auto">
         <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="bg-gray-200 text-gray-900 font-semibold">
-              <th className="p-3 text-left">Name</th>
-              <th className="p-3 text-left">Category</th>
-              <th className="p-3 text-left">Unit</th>
-              <th className="p-3 text-left">Pack Qty</th>
-              <th className="p-3 text-left">Pack Unit</th>
-              <th className="p-3 text-right">Price</th>
-              <th className="p-3 text-right">MRP</th>
-              <th className="p-3 text-left">Actions</th>
+          <thead className="bg-gradient-to-r from-gray-100 to-gray-200 sticky top-0 z-10">
+            <tr className="text-xs font-semibold uppercase tracking-wide text-gray-800">
+              <th className="p-3 text-center border-b-2 border-gray-300">#</th>
+              <th className="p-3 text-left border-b-2 border-gray-300">Product Name</th>
+              <th className="p-3 text-left border-b-2 border-gray-300">Category</th>
+              <th className="p-3 text-center border-b-2 border-gray-300">Unit</th>
+              <th className="p-3 text-center border-b-2 border-gray-300">Pack Qty</th>
+              <th className="p-3 text-center border-b-2 border-gray-300">Pack Unit</th>
+              <th className="p-3 text-right border-b-2 border-gray-300">Price</th>
+              <th className="p-3 text-right border-b-2 border-gray-300">MRP</th>
+              <th className="p-3 text-center border-b-2 border-gray-300">Actions</th>
             </tr>
           </thead>
   
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-gray-900 font-medium">
-                  Loading...
+                <td colSpan={9} className="p-12 text-center">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                  <p className="text-gray-700 font-medium">Loading products...</p>
                 </td>
               </tr>
             ) : paginatedProducts.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-6 text-center text-gray-900 font-medium">
-                  No products found
+                <td colSpan={9} className="p-12 text-center">
+                  <Package className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+                  <p className="text-gray-700 font-semibold text-lg mb-2">No products found</p>
+                  <p className="text-gray-500 text-sm">Try adjusting your search or filters</p>
                 </td>
               </tr>
             ) : (
-              paginatedProducts.map((p) => (
-                <tr key={p._id} className="hover:bg-gray-50">
-                  <td className="p-3 border-b text-gray-900">{p.name}</td>
-                  <td className="p-3 border-b text-gray-800">{p.category || "-"}</td>
-                  <td className="p-3 border-b text-gray-800">{p.unit}</td>
-                  <td className="p-3 border-b text-gray-800">
-                    {renderPackQuantity(p)}
-                  </td>
-                  <td className="p-3 border-b text-gray-800">
-                    {renderPackUnit(p)}
-                  </td>
-                  <td className="p-3 border-b text-right text-gray-900 font-medium">
-                    {formatCurrency(p.sellingPrice)}
-                  </td>
-                  <td className="p-3 border-b text-right text-gray-800">
-                    {p.mrp ? formatCurrency(p.mrp) : "-"}
-                  </td>
-                  <td className="p-3 border-b">
-                    <button
-                      onClick={() => handleEdit(p)}
-                      className="text-blue-700 font-medium mr-3 hover:underline"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setConfirmDeleteId(p._id ?? null)}
-                      className="text-red-700 font-medium hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
+              paginatedProducts.map((p, index) => {
+                const globalIndex = viewAll ? filtered.indexOf(p) + 1 : (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
+                return (
+                  <tr key={p._id} className="hover:bg-blue-50 transition-colors border-b border-gray-100">
+                    <td className="p-3 text-center">
+                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 text-blue-800 font-bold text-xs">
+                        {globalIndex}
+                      </span>
+                    </td>
+                    <td className="p-3 text-gray-900 font-semibold">{p.name}</td>
+                    <td className="p-3">
+                      <span className="inline-block bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-medium">
+                        {p.category || "Uncategorized"}
+                      </span>
+                    </td>
+                    <td className="p-3 text-center">
+                      <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-semibold">
+                        {p.unit}
+                      </span>
+                    </td>
+                    <td className="p-3 text-center text-gray-800 font-medium">
+                      {renderPackQuantity(p)}
+                    </td>
+                    <td className="p-3 text-center text-gray-800">
+                      {renderPackUnit(p)}
+                    </td>
+                    <td className="p-3 text-right text-green-700 font-bold">
+                      {formatCurrency(p.sellingPrice)}
+                    </td>
+                    <td className="p-3 text-right text-gray-700 font-medium">
+                      {p.mrp ? formatCurrency(p.mrp) : "-"}
+                    </td>
+                    <td className="p-3">
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handleEdit(p)}
+                          className="p-1.5 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 transition"
+                          title="Edit Product"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(p._id ?? null)}
+                          className="p-1.5 rounded-lg bg-red-100 text-red-800 hover:bg-red-200 transition"
+                          title="Delete Product"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -582,6 +666,33 @@ export default function ProductList({
 
       {/* Pagination - Bottom */}
       {renderPagination()}
+
+      {/* ================= SUMMARY FOOTER ================= */}
+      {paginatedProducts.length > 0 && (
+        <div className="bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
+            <div className="flex items-center gap-6">
+              <div>
+                <span className="text-gray-600 font-medium">Displayed:</span>
+                <span className="ml-2 text-gray-900 font-bold">
+                  {viewAll ? filtered.length : paginatedProducts.length} product{(viewAll ? filtered.length : paginatedProducts.length) !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-600 font-medium">Page Value:</span>
+                <span className="ml-2 text-green-600 font-bold">
+                  ₹{paginatedProducts.reduce((sum, p) => sum + (p.sellingPrice || 0), 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+            {!viewAll && totalPages > 1 && (
+              <div className="text-gray-600 font-medium">
+                Viewing page <span className="text-blue-600 font-bold">{currentPage}</span> of <span className="text-blue-600 font-bold">{totalPages}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
