@@ -1,7 +1,7 @@
 // icecream-inventory/src/app/dashboard/products/ProductList.tsx
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Product } from "@/types/product.type";
@@ -31,6 +31,10 @@ export default function ProductList({
   setConfirmDeleteId,
   fetchProducts,
 }: ProductListProps) {
+  const ITEMS_PER_PAGE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [viewAll, setViewAll] = useState(false);
+
   const renderPackQuantity = (p: Product) =>
     p.packQuantity !== undefined && p.packQuantity !== null
       ? String(p.packQuantity)
@@ -86,6 +90,31 @@ export default function ProductList({
 
     return list;
   }, [products, search, sortMode]);
+
+  // Pagination logic
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const paginatedProducts = useMemo(() => {
+    if (viewAll) return filtered;
+    
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return filtered.slice(startIndex, endIndex);
+  }, [filtered, currentPage, viewAll]);
+
+  // Reset to page 1 when filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [search, sortMode]);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleViewAllToggle = () => {
+    setViewAll(!viewAll);
+    setCurrentPage(1);
+  };
 
   const exportPDF = () => {
     if (filtered.length === 0) {
@@ -154,7 +183,7 @@ export default function ProductList({
   
     autoTable(doc, {
       startY: 225,
-      theme: "grid", // 🔥 THIS ENABLES FULL GRID (VERTICAL + HORIZONTAL)
+      theme: "grid",
   
       head: [[
         "#",
@@ -173,9 +202,8 @@ export default function ProductList({
         cellPadding: 6,
         valign: "middle",
         overflow: "linebreak",
-  
-        lineColor: [180, 180, 180], // grid line color
-        lineWidth: 0.6,             // grid thickness
+        lineColor: [180, 180, 180],
+        lineWidth: 0.6,
       },
   
       headStyles: {
@@ -183,7 +211,6 @@ export default function ProductList({
         textColor: 255,
         fontStyle: "bold",
         halign: "center",
-  
         lineWidth: 0.8,
         lineColor: [37, 99, 235],
       },
@@ -230,12 +257,83 @@ export default function ProductList({
   
     doc.save(`Products_Report_${date.replace(/\//g, "-")}.pdf`);
   };
-  
-  
 
   const handleClearFilters = () => {
     setSearch("");
     setSortMode("default");
+    setViewAll(false);
+    setCurrentPage(1);
+  };
+
+  const renderPagination = () => {
+    if (viewAll || totalPages <= 1) return null;
+
+    const pages = [];
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    return (
+      <div className="flex items-center justify-center gap-2 mt-6 flex-wrap">
+        <button
+          onClick={() => handlePageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700"
+        >
+          Previous
+        </button>
+
+        {startPage > 1 && (
+          <>
+            <button
+              onClick={() => handlePageChange(1)}
+              className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 text-gray-700"
+            >
+              1
+            </button>
+            {startPage > 2 && <span className="text-gray-500">...</span>}
+          </>
+        )}
+
+        {Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map((page) => (
+          <button
+            key={page}
+            onClick={() => handlePageChange(page)}
+            className={`px-3 py-1 text-sm border rounded-md ${
+              currentPage === page
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {page}
+          </button>
+        ))}
+
+        {endPage < totalPages && (
+          <>
+            {endPage < totalPages - 1 && <span className="text-gray-500">...</span>}
+            <button
+              onClick={() => handlePageChange(totalPages)}
+              className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 text-gray-700"
+            >
+              {totalPages}
+            </button>
+          </>
+        )}
+
+        <button
+          onClick={() => handlePageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700"
+        >
+          Next
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -245,22 +343,42 @@ export default function ProductList({
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="text-sm text-gray-800 font-medium">
-            Showing <span className="font-semibold">{filtered.length}</span> product
+            Showing <span className="font-semibold">
+              {viewAll ? filtered.length : paginatedProducts.length}
+            </span> of <span className="font-semibold">{filtered.length}</span> product
             {filtered.length !== 1 ? "s" : ""}
+            {!viewAll && totalPages > 1 && (
+              <span className="ml-2 text-gray-600">
+                (Page {currentPage} of {totalPages})
+              </span>
+            )}
           </div>
   
-          <button
-            onClick={exportPDF}
-            disabled={filtered.length === 0}
-            className="
-              bg-blue-600 hover:bg-blue-700
-              text-white text-sm font-semibold
-              px-4 py-2 rounded-lg
-              disabled:opacity-50
-            "
-          >
-            Download Report
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleViewAllToggle}
+              className="
+                bg-gray-600 hover:bg-gray-700
+                text-white text-sm font-semibold
+                px-4 py-2 rounded-lg
+              "
+            >
+              {viewAll ? "Show Paginated" : "View All Products"}
+            </button>
+
+            <button
+              onClick={exportPDF}
+              disabled={filtered.length === 0}
+              className="
+                bg-blue-600 hover:bg-blue-700
+                text-white text-sm font-semibold
+                px-4 py-2 rounded-lg
+                disabled:opacity-50
+              "
+            >
+              Download Report
+            </button>
+          </div>
         </div>
   
         {/* Filters */}
@@ -326,19 +444,22 @@ export default function ProductList({
           </div>
         </div>
       </div>
+
+      {/* Pagination - Top */}
+      {renderPagination()}
   
       {/* ================= MOBILE VIEW (CARDS) ================= */}
-      <div className="grid grid-cols-1 gap-4 sm:hidden">
+      <div className="grid grid-cols-1 gap-4 sm:hidden mt-4">
         {loading ? (
           <div className="text-center text-gray-800 py-6 font-medium">
             Loading...
           </div>
-        ) : filtered.length === 0 ? (
+        ) : paginatedProducts.length === 0 ? (
           <div className="text-center text-gray-800 py-6 font-medium">
             No products found
           </div>
         ) : (
-          filtered.map((p) => (
+          paginatedProducts.map((p) => (
             <div
               key={p._id}
               className="border border-gray-300 rounded-lg p-4"
@@ -392,7 +513,7 @@ export default function ProductList({
       </div>
   
       {/* ================= DESKTOP / TABLET VIEW (TABLE) ================= */}
-      <div className="hidden sm:block overflow-x-auto">
+      <div className="hidden sm:block overflow-x-auto mt-4">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="bg-gray-200 text-gray-900 font-semibold">
@@ -414,14 +535,14 @@ export default function ProductList({
                   Loading...
                 </td>
               </tr>
-            ) : filtered.length === 0 ? (
+            ) : paginatedProducts.length === 0 ? (
               <tr>
                 <td colSpan={8} className="p-6 text-center text-gray-900 font-medium">
                   No products found
                 </td>
               </tr>
             ) : (
-              filtered.map((p) => (
+              paginatedProducts.map((p) => (
                 <tr key={p._id} className="hover:bg-gray-50">
                   <td className="p-3 border-b text-gray-900">{p.name}</td>
                   <td className="p-3 border-b text-gray-800">{p.category || "-"}</td>
@@ -458,7 +579,9 @@ export default function ProductList({
           </tbody>
         </table>
       </div>
+
+      {/* Pagination - Bottom */}
+      {renderPagination()}
     </div>
   );
-  
 }
