@@ -1,8 +1,10 @@
 // src/app/dashboard/orders/OrderModals.tsx
 "use client";
 
-import { Order, SettlementMethod, CashBankMethod, OrderLineItem } from "@/types/orders.type";
+import { Order, SettlementMethod, OrderLineItem } from "@/types/orders.type";
 import DeliveryStatusBadge from "./DeliveryStatusBadge";
+
+type CashBankMethod = "Cash" | "Bank/UPI";
 
 type OrderModalsProps = {
   settleOrder: Order | null;  
@@ -22,7 +24,7 @@ type OrderModalsProps = {
   onConfirmDebtSettle: () => void;
   onCloseView: () => void;
   getPackUnitForItem: (it: OrderLineItem) => string | undefined;
-  parsePackUnit: (packUnit?: string) => { value: number; unit: "ml" | "litre" | "gm" | "kg" | "piece" | "box" } | undefined;
+  parsePackUnit: (packUnit?: string) => { value: number; unit: string } | undefined; // ✅ CHANGED: unit is string
 };
 
 export default function OrderModals({

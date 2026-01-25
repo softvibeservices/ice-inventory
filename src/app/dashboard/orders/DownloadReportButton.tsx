@@ -1,6 +1,6 @@
 "use client";
 
-import { Order, CustomerLite } from "@/types/orders.type";
+import { Order, CustomerLite, QuantitySummary } from "@/types/orders.type";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -47,15 +47,33 @@ export default function DownloadReportButton({
     return formatted;
   };
 
-  const formatQtySummary = (q?: Order["quantitySummary"]) => {
+  const formatQtySummary = (q?: QuantitySummary) => {
     if (!q) return "-";
+    
     const parts: string[] = [];
-    if (q.box) parts.push(`${q.box} box${q.box !== 1 ? "es" : ""}`);
-    if (q.litre) parts.push(`${q.litre} L`);
-    if (q.kg) parts.push(`${q.kg} kg`);
-    if (q.gm) parts.push(`${q.gm} gm`);
-    if (q.ml) parts.push(`${q.ml} ml`);
-    if (q.piece) parts.push(`${q.piece} pc${q.piece !== 1 ? "s" : ""}`);
+    
+    // ✅ Dynamic iteration
+    Object.entries(q).forEach(([unit, qty]) => {
+      if (qty > 0) {
+        if (unit === "box") {
+          parts.push(`${qty} box${qty !== 1 ? "es" : ""}`);
+        } else if (unit === "piece") {
+          parts.push(`${qty} pc${qty !== 1 ? "s" : ""}`);
+        } else if (unit === "litre" || unit === "L") {
+          parts.push(`${qty} L`);
+        } else if (unit === "kg") {
+          parts.push(`${qty} kg`);
+        } else if (unit === "gm") {
+          parts.push(`${qty} gm`);
+        } else if (unit === "ml") {
+          parts.push(`${qty} ml`);
+        } else {
+          // ✅ Custom units
+          parts.push(`${qty} ${unit}`);
+        }
+      }
+    });
+    
     return parts.length ? parts.join(", ") : "-";
   };
 
