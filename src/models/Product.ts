@@ -1,35 +1,32 @@
 // icecream-inventory/src/models/Product.ts
 
-
 import { Schema, model, models, Document } from "mongoose";
 
 export interface IProduct extends Document {
-  userId: string;             // Reference to User
+  userId: string;
   name: string;
-  
-  category?: string;          // e.g., Cups, Family Pack, Cone, Candybar etc.
-  unit: "piece" | "box" | "kg" | "litre" | "gm" | "ml";
-  packQuantity?: number;      // e.g., 6, 24
-  packUnit?: string;          // e.g., "1L", "90ml", "500g"
-  sellingPrice: number;       // sell price
-  mrp?: number;               // optional
-  quantity: number;           // stock
-  minStock?: number;          // low stock threshold
-  notes?: string;             // optional notes
+  category?: string;
+  unit: string;
+  packQuantity?: number;
+  packUnit?: string;
+  sellingPrice: number;
+  mrp?: number;
+  quantity: number;
+  minStock?: number;
+  notes?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 const ProductSchema = new Schema<IProduct>(
   {
-    userId: { type: String, required: true }, // link to user
+    userId: { type: String, required: true },
     name: { type: String, required: true, trim: true },
     category: { type: String, trim: true },
     unit: {
       type: String,
-      enum: ["piece", "box", "kg", "litre", "gm", "ml"],
-      default: "piece",
       required: true,
+      trim: true,
     },
     packQuantity: { type: Number, min: 0 },
     packUnit: { type: String, trim: true },

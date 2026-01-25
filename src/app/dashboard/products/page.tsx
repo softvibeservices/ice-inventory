@@ -1,7 +1,5 @@
 // icecream-inventory/src/app/dashboard/products/page.tsx
 
-
-
 "use client";
 
 import React, { JSX, useEffect, useState } from "react";
@@ -17,7 +15,7 @@ import { Product, FormState, SortMode } from "@/types/product.type";
 export default function ProductsPage(): JSX.Element {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string>(""); // Changed from string | null to string
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -30,7 +28,7 @@ export default function ProductsPage(): JSX.Element {
   const initialForm: FormState = {
     name: "",
     category: "",
-    unit: "piece",
+    unit: "", // Changed from "piece" to empty string
     packQuantity: "",
     packUnit: "",
     sellingPrice: "",
@@ -41,20 +39,36 @@ export default function ProductsPage(): JSX.Element {
   };
   const [formData, setFormData] = useState<FormState>(initialForm);
 
+  // Get userId from localStorage
   useEffect(() => {
     const stored = localStorage.getItem("user");
+    console.log("📦 Raw stored user:", stored); // Debug log
+    
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (parsed && parsed._id) setUserId(String(parsed._id));
-      } catch {
-        // ignore parse errors
+        console.log("📦 Parsed user:", parsed); // Debug log
+        
+        if (parsed && parsed._id) {
+          setUserId(String(parsed._id));
+          console.log("✅ UserId set to:", String(parsed._id)); // Debug log
+        } else {
+          console.error("❌ No _id found in parsed user");
+        }
+      } catch (error) {
+        console.error("❌ Error parsing user from localStorage:", error);
       }
+    } else {
+      console.error("❌ No user found in localStorage");
     }
   }, []);
 
   const fetchProducts = async () => {
-    if (!userId) return;
+    if (!userId) {
+      console.log("⏸️ Skipping fetchProducts - no userId yet");
+      return;
+    }
+    
     try {
       setLoading(true);
       const res = await fetch(
@@ -73,7 +87,10 @@ export default function ProductsPage(): JSX.Element {
   };
 
   useEffect(() => {
-    if (userId) fetchProducts();
+    if (userId) {
+      console.log("🔄 Fetching products for userId:", userId);
+      fetchProducts();
+    }
   }, [userId]);
 
   const validateAndBuildPayload = (): {
@@ -199,7 +216,7 @@ export default function ProductsPage(): JSX.Element {
     setFormData({
       name: p.name ?? "",
       category: p.category ?? "",
-      unit: p.unit ?? "piece",
+      unit: p.unit ?? "",
       packQuantity: p.packQuantity !== undefined ? String(p.packQuantity) : "",
       packUnit: p.packUnit ?? "",
       sellingPrice: p.sellingPrice !== undefined ? String(p.sellingPrice) : "",
@@ -247,9 +264,9 @@ export default function ProductsPage(): JSX.Element {
     return (
       <div className="p-8 bg-gray-50 min-h-screen">
         <div className="max-w-2xl mx-auto bg-white rounded-lg shadow p-6 text-center">
-          <h2 className="text-lg font-semibold text-gray-800">Not signed in</h2>
+          <h2 className="text-lg font-semibold text-gray-800">Loading...</h2>
           <p className="text-sm text-gray-600 mt-2">
-            You need to be signed in to manage products. Please log in first.
+            Please wait while we load your account.
           </p>
         </div>
       </div>
@@ -276,8 +293,6 @@ export default function ProductsPage(): JSX.Element {
             </div>
   
             <div className="flex flex-wrap gap-3">
-              
-  
               <button
                 onClick={() => {
                   setShowForm((s) => !s);
@@ -304,6 +319,7 @@ export default function ProductsPage(): JSX.Element {
                 cancelEdit={cancelEdit}
                 isSubmitting={isSubmitting}
                 editingId={editingId}
+                userId={userId} // ✅ ADDED THIS - Pass userId to ProductForm
               />
             </div>
           )}
@@ -338,5 +354,4 @@ export default function ProductsPage(): JSX.Element {
       <Footer />
     </div>
   );
-  
 }
