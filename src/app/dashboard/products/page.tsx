@@ -1,21 +1,23 @@
-// icecream-inventory/src/app/dashboard/products/page.tsx
-
+// src/app/dashboard/products/page.tsx
 "use client";
 
 import React, { JSX, useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { Upload, FileText, Plus } from "lucide-react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import ProductList from "./ProductList";
 import ProductForm from "./ProductForm";
 import DeleteConfirmationModal from "./DeleteConfirmationModal";
+import CSVFormatModal from "./CSVFormatModal";
+import BulkUploadModal from "./BulkUploadModal";
 import { Product, FormState, SortMode } from "@/types/product.type";
 
 export default function ProductsPage(): JSX.Element {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
-  const [userId, setUserId] = useState<string>(""); // Changed from string | null to string
+  const [userId, setUserId] = useState<string>("");
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -24,11 +26,16 @@ export default function ProductsPage(): JSX.Element {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("default");
+  const [showCSVFormat, setShowCSVFormat] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+  // ❌ REMOVED - No longer needed (fetched automatically in BulkUploadModal)
+  // const [categories, setCategories] = useState<string[]>([]);
+  // const [units, setUnits] = useState<string[]>([]);
 
   const initialForm: FormState = {
     name: "",
     category: "",
-    unit: "", // Changed from "piece" to empty string
+    unit: "",
     packQuantity: "",
     packUnit: "",
     sellingPrice: "",
@@ -39,19 +46,18 @@ export default function ProductsPage(): JSX.Element {
   };
   const [formData, setFormData] = useState<FormState>(initialForm);
 
-  // Get userId from localStorage
   useEffect(() => {
     const stored = localStorage.getItem("user");
-    console.log("📦 Raw stored user:", stored); // Debug log
-    
+    console.log("📦 Raw stored user:", stored);
+
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        console.log("📦 Parsed user:", parsed); // Debug log
-        
+        console.log("📦 Parsed user:", parsed);
+
         if (parsed && parsed._id) {
           setUserId(String(parsed._id));
-          console.log("✅ UserId set to:", String(parsed._id)); // Debug log
+          console.log("✅ UserId set to:", String(parsed._id));
         } else {
           console.error("❌ No _id found in parsed user");
         }
@@ -68,7 +74,7 @@ export default function ProductsPage(): JSX.Element {
       console.log("⏸️ Skipping fetchProducts - no userId yet");
       return;
     }
-    
+
     try {
       setLoading(true);
       const res = await fetch(
@@ -110,6 +116,7 @@ export default function ProductsPage(): JSX.Element {
         : undefined;
 
     if (!formData.name.trim()) return { error: "Name is required" };
+    if (!formData.category?.trim()) return { error: "Category is required" }; // ✅ ADDED: Category validation
     if (!formData.unit) return { error: "Unit is required" };
     if (!Number.isFinite(sellingPrice))
       return { error: "Valid selling price is required" };
@@ -118,7 +125,7 @@ export default function ProductsPage(): JSX.Element {
 
     const payload: Partial<Product> = {
       name: formData.name.trim(),
-      category: formData.category?.trim() || undefined,
+      category: formData.category?.trim(), // ✅ CHANGED: No longer optional
       unit: formData.unit,
       packQuantity,
       packUnit: formData.packUnit?.trim() || undefined,
@@ -276,12 +283,9 @@ export default function ProductsPage(): JSX.Element {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <DashboardNavbar />
-  
+
       <main className="flex-grow w-full">
-        {/* Page Container */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-  
-          {/* Top Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
@@ -291,8 +295,8 @@ export default function ProductsPage(): JSX.Element {
                 Manage your shop&apos;s products
               </p>
             </div>
-  
-            <div className="flex flex-wrap gap-3">
+
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={() => {
                   setShowForm((s) => !s);
@@ -302,14 +306,30 @@ export default function ProductsPage(): JSX.Element {
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }
                 }}
-                className="px-5 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition"
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2"
               >
-                {showForm ? "Close Form" : "+ Add Product"}
+                <Plus size={18} />
+                Add Product
+              </button>
+
+              <button
+                onClick={() => setShowBulkUpload(true)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2"
+              >
+                <Upload size={18} />
+                Bulk Upload
+              </button>
+
+              <button
+                onClick={() => setShowCSVFormat(true)}
+                className="px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg flex items-center gap-2"
+              >
+                <FileText size={18} />
+                CSV Format
               </button>
             </div>
           </div>
-  
-          {/* Product Form */}
+
           {showForm && (
             <div className="mb-8">
               <ProductForm
@@ -319,12 +339,11 @@ export default function ProductsPage(): JSX.Element {
                 cancelEdit={cancelEdit}
                 isSubmitting={isSubmitting}
                 editingId={editingId}
-                userId={userId} // ✅ ADDED THIS - Pass userId to ProductForm
+                userId={userId}
               />
             </div>
           )}
-  
-          {/* Product List */}
+
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
             <ProductList
               products={products}
@@ -339,18 +358,32 @@ export default function ProductsPage(): JSX.Element {
             />
           </div>
         </div>
-  
-        {/* Delete Modal */}
+
         <DeleteConfirmationModal
           confirmDeleteId={confirmDeleteId}
           setConfirmDeleteId={setConfirmDeleteId}
           handleDeleteConfirmed={handleDeleteConfirmed}
           isDeleting={isDeleting}
         />
-  
+
+        {showCSVFormat && (
+          <CSVFormatModal onClose={() => setShowCSVFormat(false)} />
+        )}
+
+        {/* ✅ FIXED: Only pass userId, onClose, and onSuccess */}
+        {showBulkUpload && (
+          <BulkUploadModal
+            userId={userId}
+            onClose={() => setShowBulkUpload(false)}
+            onSuccess={() => {
+              fetchProducts();
+            }}
+          />
+        )}
+
         <Toaster position="top-right" reverseOrder={false} />
       </main>
-  
+
       <Footer />
     </div>
   );
