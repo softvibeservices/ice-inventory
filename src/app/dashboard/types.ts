@@ -17,10 +17,16 @@ export interface Product {
   userId: string;
   name: string;
   category?: string;
-  unit: string; // ✅ Changed from enum to string for dynamic units
+  unit: string;
   quantity: number;
   packQuantity?: number;
   packUnit?: string;
+  sellingPrice: number;
+  mrp?: number;
+  minStock?: number; // ✅ Fixed: Changed from 'undefined' to '?: number'
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Customer {
@@ -35,7 +41,7 @@ export interface StickyNoteItem {
   productId?: string;
   productName: string;
   quantity: number;
-  unit?: string; // ✅ Changed from Product["unit"] to string for dynamic units
+  unit?: string;
 }
 
 export interface StickyNote {
@@ -55,7 +61,7 @@ export interface StickyRow {
   productId?: string;
   productName: string;
   quantity: string;
-  unit?: string; // ✅ Changed from Product["unit"] to string for dynamic units
+  unit?: string;
 }
 
 export type ModalMode = "create" | "edit";
