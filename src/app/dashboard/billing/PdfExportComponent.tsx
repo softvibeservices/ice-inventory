@@ -34,6 +34,7 @@ type SellerDetails = {
   accountNumber?: string;
   ifscCode?: string;
   bankingName?: string;
+  compositionLine?: string;
 };
 
 type BankDetails = {
@@ -62,7 +63,6 @@ type PdfExportComponentProps = {
   bank: BankDetails | null;
   serialNo: string;
   date: string;
-  fixedLine: string;
   discountPercent: number;
   remarks: string;
 };
@@ -77,7 +77,6 @@ export default forwardRef(function PdfExportComponent(
     bank,
     serialNo,
     date,
-    fixedLine,
     discountPercent,
     remarks,
   }: PdfExportComponentProps,
@@ -212,13 +211,14 @@ export default forwardRef(function PdfExportComponent(
           });
         }
 
-        const compLine = fixedLine || "composition taxable person not eligible to collect taxes on supplies";
-
-        doc.setFont("helvetica", "italic").setFontSize(9);
-        doc.text(compLine, pageWidth / 2, topY + 66, {
-          align: "center",
-          maxWidth: pageWidth - 100,
-        });
+      // ✅ AFTER
+if (seller?.compositionLine && seller.compositionLine.trim()) {
+  doc.setFont("helvetica", "italic").setFontSize(9);
+  doc.text(seller.compositionLine, pageWidth / 2, topY + 66, {
+    align: "center",
+    maxWidth: pageWidth - 100,
+  });
+}
 
         doc.setFont("helvetica", "bold").setFontSize(14);
         doc.text("BILL OF SUPPLY", pageWidth / 2, topY + 82, {

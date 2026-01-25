@@ -26,6 +26,7 @@ export interface SellerDetails {
   signatureUrl: string;
   signaturePublicId?: string;
   slogan: string;
+  compositionLine?: string; // ✅ NEW: User-configurable composition line
 }
 
 export type BankDetails = {

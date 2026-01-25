@@ -1,4 +1,4 @@
-//ice-inventory\src\app\dashboard\billing\page.tsx 
+// ice-inventory\src\app\dashboard\billing\page.tsx
 
 "use client";
 import { useEffect, useState, useRef } from "react";
@@ -6,7 +6,6 @@ import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
 import PdfExportComponent from "./PdfExportComponent";
-
 
 type Customer = {
   _id: string;
@@ -49,6 +48,7 @@ type SellerDetails = {
   accountNumber?: string;
   ifscCode?: string;
   bankingName?: string;
+  compositionLine?: string;
 };
 
 type BankDetails = {
@@ -110,11 +110,6 @@ export default function BillingPage() {
     return `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
   });
 
-  // fixed line (editable)
-  const [fixedLine, setFixedLine] = useState<string>(
-    "composition taxable person not eligible to collect taxes on supplies"
-  );
-
   // items (start with 15 blank lines)
   const blankItem = (): BillItem => ({
     productName: "",
@@ -141,7 +136,6 @@ export default function BillingPage() {
   const quantityRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const pdfExportRef = useRef<any>(null);
-
 
   // ===== Helpers =====
   const safeJson = async (res: Response) => {
@@ -194,7 +188,7 @@ export default function BillingPage() {
     setRemarks("");
     const newSerial = generateSerial();
     setSerialNo(newSerial);
-    
+
     try {
       if (typeof window !== "undefined") {
         sessionStorage.setItem("billing-serial", newSerial);
@@ -234,8 +228,6 @@ export default function BillingPage() {
     const parsed = JSON.parse(stored);
     const uid = parsed._id as string;
     setUserId(uid);
-
- 
 
     // --- Fetch Seller ---
     fetch(`/api/seller-details?userId=${encodeURIComponent(uid)}`)
@@ -775,18 +767,19 @@ export default function BillingPage() {
                 {seller?.sellerName || "Seller Name"}
               </h2>
               {seller?.contact && (
-          <p className="text-gray-700"> {seller.contact}</p>
-        )}
+                <p className="text-gray-700"> {seller.contact}</p>
+              )}
               <p className="text-gray-700">{seller?.fullAddress || "-"}</p>
               <p className="text-gray-800">GST: {seller?.gstNumber || "-"}</p>
-              <div className="mt-1">
-                <textarea
-                  value={fixedLine}
-                  onChange={(e) => setFixedLine(e.target.value)}
-                  className="mt-2 w-full max-w-md text-xs sm:text-sm border rounded p-2 text-gray-900"
-                  rows={1}
-                />
-              </div>
+              {/* ✅ Display composition line if set */}
+              {seller?.compositionLine && (
+  <div className="mt-1">
+    <p className="text-gray-500 text-right text-xs sm:text-sm italic">
+      {seller.compositionLine}
+    </p>
+  </div>
+)}
+
             </div>
           </div>
           {seller?.slogan && (
@@ -1392,10 +1385,8 @@ export default function BillingPage() {
               bank={bank}
               serialNo={serialNo}
               date={date}
-              fixedLine={fixedLine}
               discountPercent={discountPercent}
-              remarks={remarks}
-            />
+              remarks={remarks}         />
           </div>
         </div>
       </main>
@@ -1436,5 +1427,4 @@ export default function BillingPage() {
       )}
     </div>
   );
-
 }

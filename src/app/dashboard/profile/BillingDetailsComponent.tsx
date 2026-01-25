@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import toast from "react-hot-toast";
-import { FileText, Edit3, Check } from "lucide-react";
+import { FileText, Edit3, Check, Info } from "lucide-react";
 import type { SellerDetails, UploadingState } from "@/types/profile.types";
 
 type Props = {
@@ -21,6 +21,7 @@ export default function BillingDetailsComponent({ userId }: Props) {
     qrCodeUrl: "",
     signatureUrl: "",
     slogan: "",
+    compositionLine: "composition taxable person not eligible to collect taxes on supplies", // ✅ Default
   };
 
   const [bill, setBill] = useState<SellerDetails>({ ...emptyBill });
@@ -70,6 +71,7 @@ export default function BillingDetailsComponent({ userId }: Props) {
             signaturePublicId:
               data.signaturePublicId ?? data.signaturePublicId,
             slogan: data.slogan ?? "",
+            compositionLine: data.compositionLine ?? "composition taxable person not eligible to collect taxes on supplies", // ✅ Use saved or default
             _id: data._id ?? undefined,
             userId: data.userId ?? undefined,
           };
@@ -234,6 +236,7 @@ export default function BillingDetailsComponent({ userId }: Props) {
         signatureUrl: data.signatureUrl ?? bill.signatureUrl,
         signaturePublicId: data.signaturePublicId ?? bill.signaturePublicId,
         slogan: data.slogan ?? bill.slogan,
+        compositionLine: data.compositionLine ?? bill.compositionLine, // ✅ Save composition line
         _id: data._id ?? data._id,
         userId: data.userId ?? userId,
       };
@@ -313,6 +316,13 @@ export default function BillingDetailsComponent({ userId }: Props) {
               <div className="text-xs text-gray-500 mb-1">Slogan</div>
               <div className="text-sm text-gray-800 break-words">
                 {bill.slogan || "—"}
+              </div>
+            </div>
+            {/* ✅ NEW: Display Composition Line */}
+            <div className="sm:col-span-2">
+              <div className="text-xs text-gray-500 mb-1">Composition Line (appears below GST on bill)</div>
+              <div className="text-sm text-gray-800 break-words">
+                {bill.compositionLine || <span className="text-gray-400 italic">None (blank)</span>}
               </div>
             </div>
             <div className="sm:col-span-2">
@@ -580,6 +590,35 @@ export default function BillingDetailsComponent({ userId }: Props) {
                 }
                 placeholder="Thank you for choosing <Your Shop Name>!"
               />
+            </label>
+
+            {/* ✅ NEW: Composition Line Field */}
+            <label className="text-sm text-gray-600 md:col-span-2">
+              <div className="flex items-center gap-2 mb-1">
+                <span>Composition Line (appears below GST on bill)</span>
+                <div className="group relative">
+                  <Info size={14} className="text-gray-400 cursor-help" />
+                  <div className="hidden group-hover:block absolute z-10 w-64 p-2 bg-gray-800 text-white text-xs rounded shadow-lg -top-2 left-6">
+                    This line appears below the GST number on your bills. Leave blank if you don't want any text there.
+                  </div>
+                </div>
+              </div>
+              <textarea
+                className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                value={bill.compositionLine || ""}
+                onChange={(e) =>
+                  setBill((b) => ({
+                    ...b,
+                    compositionLine: e.target.value,
+                  }))
+                }
+                placeholder="e.g., composition taxable person not eligible to collect taxes on supplies (or leave blank)"
+                rows={2}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Default: "composition taxable person not eligible to collect taxes on supplies". 
+                You can customize this or leave it blank.
+              </p>
             </label>
           </div>
 
