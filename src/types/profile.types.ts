@@ -1,6 +1,6 @@
 // src/types/profile.types.ts
 
-export type ActiveTab = "basic" | "password" | "billing" | "bank" | "logout" | "delivery" | "managers";
+export type ActiveTab = "basic" | "password" | "billing" | "bank" | "logout" | "delivery" | "managers" | "product-settings";
 
 export type UserProfile = {
   _id: string;
@@ -26,6 +26,7 @@ export interface SellerDetails {
   signatureUrl: string;
   signaturePublicId?: string;
   slogan: string;
+  compositionLine?: string; // ✅ NEW: User-configurable composition line
 }
 
 export type BankDetails = {
@@ -48,4 +49,11 @@ export type UploadingState = {
   logo: boolean;
   qr: boolean;
   sig: boolean;
+};
+
+export type UserSettings = {
+  _id?: string;
+  userId: string;
+  categories: string[];
+  units: string[];
 };

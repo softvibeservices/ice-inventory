@@ -8,14 +8,7 @@ import toast from "react-hot-toast";
 import OrderList from "./OrderList";
 import OrderModals from "./OrderModals";
 
-type QuantitySummary = {
-  piece: number;
-  box: number;
-  kg: number;
-  litre: number;
-  gm: number;
-  ml: number;
-};
+type QuantitySummary = Record<string, number>;
 
 type OrderStatus = "Unsettled" | "settled" | "Debt";
 
@@ -25,7 +18,7 @@ type OrderLineItem = {
   productId?: string;
   productName: string;
   quantity: number;
-  unit: "piece" | "box" | "kg" | "litre" | "gm" | "ml";
+  unit: string;
 };
 
 type Order = {
@@ -150,91 +143,100 @@ export default function OrdersPage() {
     return byName?.packUnit;
   };
 
-  function parsePackUnit(packUnit?: string): { value: number; unit: "ml" | "litre" | "gm" | "kg" | "piece" | "box" } | undefined {
-    if (!packUnit || typeof packUnit !== "string") return undefined;
-    const s = packUnit.trim().toLowerCase().replace(/\s+/g, "");
-    const m = s.match(/^([\d.]+)(ml|l|litre|litres|kg|g|gm|pc|piece|box)$/);
-    if (!m) return undefined;
-    const num = Number(m[1]);
-    if (Number.isNaN(num)) return undefined;
-    const u = m[2];
-    if (u === "ml") return { value: num, unit: "ml" };
-    if (u === "l" || u.startsWith("litre")) return { value: num, unit: "litre" };
-    if (u === "g" || u === "gm") return { value: num, unit: "gm" };
-    if (u === "kg") return { value: num, unit: "kg" };
-    if (u === "pc" || u === "piece") return { value: num, unit: "piece" };
-    if (u === "box") return { value: num, unit: "box" };
-    return undefined;
-  }
+  function parsePackUnit(packUnit?: string): 
+  { value: number; unit: string } | undefined {
+  
+  if (!packUnit || typeof packUnit !== "string") return undefined;
+  
+  const s = packUnit.trim().toLowerCase().replace(/\s+/g, "");
+  
+  // Match pattern: number + unit
+  const m = s.match(/^([\d.]+)([a-z]+)$/);
+  if (!m) return undefined;
+  
+  const num = Number(m[1]);
+  if (Number.isNaN(num)) return undefined;
+  
+  const unitStr = m[2];
+  
+  // ✅ Map common abbreviations to standard units
+  const unitMap: Record<string, string> = {
+    "ml": "ml",
+    "l": "litre",
+    "litre": "litre",
+    "litres": "litre",
+    "g": "gm",
+    "gm": "gm",
+    "kg": "kg",
+    "pc": "piece",
+    "piece": "piece",
+    "box": "box",
+  };
+  
+  const mappedUnit = unitMap[unitStr] || unitStr; // ✅ Use original if not in map
+  
+  return { value: num, unit: mappedUnit };
+}
 
   function computeQuantitySummaryForOrder(
     items: OrderLineItem[] | undefined,
     freeItems: OrderLineItem[] | undefined,
     productsList: Product[]
   ): QuantitySummary {
-    const out: QuantitySummary = { piece: 0, box: 0, kg: 0, litre: 0, gm: 0, ml: 0 };
-
+    // ✅ Initialize empty object (not fixed keys)
+    const out: QuantitySummary = {};
+  
     const addLine = (it: OrderLineItem) => {
       if (!it) return;
-      if (it.unit === "box") {
-        out.box += Number(it.quantity || 0);
+      
+      const unit = it.unit || "piece"; // Default fallback
+      const quantity = Number(it.quantity || 0);
+      
+      // ✅ Handle box items
+      if (unit === "box") {
+        out["box"] = (out["box"] || 0) + quantity;
         return;
       }
-
+  
+      // Try to get packUnit from product
       let packUnitVal = undefined as ReturnType<typeof parsePackUnit> | undefined;
+      
       if (it.productId) {
         const prod = productsList.find((p) => p._id === it.productId);
         if (prod?.packUnit) packUnitVal = parsePackUnit(prod.packUnit);
       }
-
+  
       if (!packUnitVal) {
         const pn = (it.productName || "").trim().toLowerCase();
         if (pn) {
-          const byName = productsList.find((p) => (p.name || "").trim().toLowerCase() === pn);
+          const byName = productsList.find(
+            (p) => (p.name || "").trim().toLowerCase() === pn
+          );
           if (byName?.packUnit) packUnitVal = parsePackUnit(byName.packUnit);
         }
       }
-
+  
       if (packUnitVal) {
-        const qty = Number(it.quantity || 0);
-        const total = qty * packUnitVal.value;
-        switch (packUnitVal.unit) {
-          case "ml":
-            out.ml += total;
-            break;
-          case "litre":
-            out.litre += total;
-            break;
-          case "gm":
-            out.gm += total;
-            break;
-          case "kg":
-            out.kg += total;
-            break;
-          case "piece":
-            out.piece += total;
-            break;
-          case "box":
-            out.box += total;
-            break;
-        }
+        const total = quantity * packUnitVal.value;
+        const unitKey = packUnitVal.unit;
+        
+        // ✅ Dynamically add to any unit
+        out[unitKey] = (out[unitKey] || 0) + total;
         return;
       }
-
-      const qty = Number(it.quantity || 0);
-      if (it.unit === "ml") out.ml += qty;
-      else if (it.unit === "litre") out.litre += qty;
-      else if (it.unit === "gm") out.gm += qty;
-      else if (it.unit === "kg") out.kg += qty;
-      else if (it.unit === "piece") out.piece += qty;
-      else if (it.unit === "box") out.box += qty;
+  
+      // ✅ Fallback: use item's unit directly
+      out[unit] = (out[unit] || 0) + quantity;
     };
-
+  
     (items || []).forEach(addLine);
     (freeItems || []).forEach(addLine);
-
-    out.box = Math.round(out.box);
-    out.piece = Math.round(out.piece);
+  
+    // ✅ Round all values
+    Object.keys(out).forEach(key => {
+      out[key] = Math.round(out[key]);
+    });
+  
     return out;
   }
 

@@ -12,6 +12,7 @@ import ManagerComponent from "@/app/dashboard/profile/ManagerComponent";
 import BasicInformationComponent from "./BasicInformationComponent";
 import BillingDetailsComponent from "./BillingDetailsComponent";
 import BankDetailsComponent from "./BankDetailsComponent";
+import ProductSettingsComponent from "./ProductSettingsComponent";
 import type {
   ActiveTab,
   UserProfile,
@@ -252,6 +253,16 @@ export default function ProfilePage() {
             🏦 Bank Details
           </button>
           <button
+  onClick={() => setActiveTab("product-settings")}
+  className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+    activeTab === "product-settings"
+      ? "bg-teal-600 text-white"
+      : "hover:bg-gray-100 text-gray-700"
+  }`}
+>
+  ⚙️ Product Settings
+</button>
+          <button
             onClick={() => setActiveTab("delivery")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
               activeTab === "delivery"
@@ -347,6 +358,16 @@ export default function ProfilePage() {
                 🏦 Bank Details
               </button>
               <button
+  onClick={() => handleTabChange("product-settings")}
+  className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+    activeTab === "product-settings"
+      ? "bg-teal-600 text-white"
+      : "hover:bg-gray-100 text-gray-700"
+  }`}
+>
+  ⚙️ Product Settings
+</button>
+              <button
                 onClick={() => handleTabChange("delivery")}
                 className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
                   activeTab === "delivery"
@@ -422,6 +443,9 @@ export default function ProfilePage() {
           {activeTab === "bank" && (
             <BankDetailsComponent sellerId={sellerId} />
           )}
+          {activeTab === "product-settings" && (
+  <ProductSettingsComponent userId={user._id} />
+)}
 
           {/* DELIVERY PARTNERS */}
           {activeTab === "delivery" && (

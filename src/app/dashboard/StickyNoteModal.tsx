@@ -209,6 +209,24 @@ export default function StickyNoteModal({
     }, 0);
   };
 
+  // ✅ NEW: Auto-add rows function
+  const autoAddRowsIfNeeded = (currentIndex: number) => {
+    const totalRows = rows.length;
+    const isSecondToLast = currentIndex === totalRows - 2;
+
+    if (isSecondToLast) {
+      setRows((prev) => [
+        ...prev,
+        ...Array.from({ length: 3 }).map(() => ({
+          productId: undefined,
+          productName: "",
+          quantity: "",
+          unit: undefined,
+        })),
+      ]);
+    }
+  };
+
   const handleAddLines = () => {
     setRows((prev) => [
       ...prev,
@@ -321,7 +339,6 @@ export default function StickyNoteModal({
     }
   };
 
-  // ========= RENDER =========
   // ========= RENDER =========
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4">
@@ -556,6 +573,7 @@ export default function StickyNoteModal({
                           )}
                         </td>
 
+                        {/* ✅ MODIFIED: Quantity cell with auto-add logic */}
                         <td className="px-2 py-1.5 align-top">
                           <input
                             ref={(el) => { quantityRefs.current[idx] = el; }}
@@ -564,10 +582,16 @@ export default function StickyNoteModal({
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
+                                
+                                // ✅ Auto-add rows if on second-to-last row
+                                autoAddRowsIfNeeded(idx);
+                                
                                 const nextIndex = idx + 1;
-                                if (productRefs.current[nextIndex]) {
-                                  productRefs.current[nextIndex]?.focus();
-                                }
+                                setTimeout(() => {
+                                  if (productRefs.current[nextIndex]) {
+                                    productRefs.current[nextIndex]?.focus();
+                                  }
+                                }, 50); // Small delay to allow rows to be added
                               }
                             }}
                             type="number"

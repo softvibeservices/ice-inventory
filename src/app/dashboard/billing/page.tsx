@@ -1,4 +1,4 @@
-//ice-inventory\src\app\dashboard\billing\page.tsx 
+// ice-inventory\src\app\dashboard\billing\page.tsx
 
 "use client";
 import { useEffect, useState, useRef } from "react";
@@ -6,7 +6,6 @@ import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
 import PdfExportComponent from "./PdfExportComponent";
-
 
 type Customer = {
   _id: string;
@@ -49,6 +48,7 @@ type SellerDetails = {
   accountNumber?: string;
   ifscCode?: string;
   bankingName?: string;
+  compositionLine?: string;
 };
 
 type BankDetails = {
@@ -80,8 +80,13 @@ type QuantitySummary = {
 export default function BillingPage() {
   // suggestion control
   const [customerSuggestionIndex, setCustomerSuggestionIndex] = useState(0);
+  const [shippingSuggestionIndex, setShippingSuggestionIndex] = useState(0); // ✅ NEW
   const [productSuggestionIndex, setProductSuggestionIndex] = useState<number[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  // ✅ Control when suggestions appear
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+  const [showShippingSuggestions, setShowShippingSuggestions] = useState(false); // ✅ NEW
 
   // Product suggestion dropdown (UI based)
   const [activeProductRow, setActiveProductRow] = useState<number | null>(null);
@@ -102,6 +107,11 @@ export default function BillingPage() {
   const [shippingCustomer, setShippingCustomer] = useState<Customer | null>(null);
   const [sameAsBilling, setSameAsBilling] = useState(false);
   const [customerInput, setCustomerInput] = useState<string>("");
+  const [shippingInput, setShippingInput] = useState<string>(""); // ✅ NEW
+
+  // ✅ Refs for focus control
+  const shippingInputRef = useRef<HTMLInputElement | null>(null);
+  const billingInputRef = useRef<HTMLInputElement | null>(null);
 
   // bill meta
   const [serialNo, setSerialNo] = useState<string>("");
@@ -109,11 +119,6 @@ export default function BillingPage() {
     const now = new Date();
     return `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
   });
-
-  // fixed line (editable)
-  const [fixedLine, setFixedLine] = useState<string>(
-    "composition taxable person not eligible to collect taxes on supplies"
-  );
 
   // items (start with 15 blank lines)
   const blankItem = (): BillItem => ({
@@ -141,7 +146,6 @@ export default function BillingPage() {
   const quantityRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const pdfExportRef = useRef<any>(null);
-
 
   // ===== Helpers =====
   const safeJson = async (res: Response) => {
@@ -189,12 +193,13 @@ export default function BillingPage() {
     setShippingCustomer(null);
     setSameAsBilling(false);
     setCustomerInput("");
+    setShippingInput(""); // ✅ NEW
     setItems(Array.from({ length: 15 }, blankItem));
     setDiscountPercent(0);
     setRemarks("");
     const newSerial = generateSerial();
     setSerialNo(newSerial);
-    
+
     try {
       if (typeof window !== "undefined") {
         sessionStorage.setItem("billing-serial", newSerial);
@@ -221,7 +226,7 @@ export default function BillingPage() {
       .filter((p) =>
         p.name.toLowerCase().includes(query.toLowerCase())
       )
-      .slice(0, 8); // 🔒 limit suggestions (professional)
+      .slice(0, 8);
   };
 
   // ===== Load Data =====
@@ -234,8 +239,6 @@ export default function BillingPage() {
     const parsed = JSON.parse(stored);
     const uid = parsed._id as string;
     setUserId(uid);
-
- 
 
     // --- Fetch Seller ---
     fetch(`/api/seller-details?userId=${encodeURIComponent(uid)}`)
@@ -377,9 +380,21 @@ export default function BillingPage() {
       });
   }, [seller]);
 
+  // ✅ Auto-check "Same as Billing" when both customers are the same
+  useEffect(() => {
+    if (billingCustomer && shippingCustomer) {
+      if (billingCustomer._id === shippingCustomer._id) {
+        setSameAsBilling(true);
+      }
+    }
+  }, [billingCustomer, shippingCustomer]);
+
   // when sameAsBilling toggled on, copy billing -> shipping
   useEffect(() => {
-    if (sameAsBilling) setShippingCustomer(billingCustomer);
+    if (sameAsBilling && billingCustomer) {
+      setShippingCustomer(billingCustomer);
+      setShippingInput(billingCustomer.shopName || billingCustomer.name || "");
+    }
   }, [sameAsBilling, billingCustomer]);
 
   // ===== Utility helpers based on products =====
@@ -514,8 +529,19 @@ export default function BillingPage() {
       .includes(customerInput.toLowerCase())
   );
 
+  // ✅ NEW: Shipping suggestions
+  const filteredShippingCustomers = customers.filter((c) =>
+    (c.shopName || c.name || "")
+      .toLowerCase()
+      .includes(shippingInput.toLowerCase())
+  );
+
   const onCustomerInputChange = (val: string) => {
     setCustomerInput(val);
+    
+    // Show suggestions only when user starts typing
+    setShowCustomerSuggestions(val.trim().length > 0);
+    
     const cleaned = val.trim().toLowerCase();
     if (!cleaned) {
       setBillingCustomer(null);
@@ -528,16 +554,83 @@ export default function BillingPage() {
     const exact = customers.find((c) => getKey(c) === cleaned);
     if (exact) {
       setBillingCustomer(exact);
-      if (sameAsBilling) setShippingCustomer(exact);
       return;
     }
 
     const partial = customers.filter((c) => getKey(c).includes(cleaned));
     if (partial.length === 1) {
       setBillingCustomer(partial[0]);
-      if (sameAsBilling) setShippingCustomer(partial[0]);
     } else {
       setBillingCustomer(null);
+    }
+  };
+
+  // ✅ NEW: Shipping input change handler
+  const onShippingInputChange = (val: string) => {
+    setShippingInput(val);
+    
+    // Show suggestions only when user starts typing
+    setShowShippingSuggestions(val.trim().length > 0);
+    
+    // Uncheck "Same as Billing" if user types in shipping
+    if (sameAsBilling && val !== customerInput) {
+      setSameAsBilling(false);
+    }
+    
+    const cleaned = val.trim().toLowerCase();
+    if (!cleaned) {
+      setShippingCustomer(null);
+      return;
+    }
+
+    const getKey = (c: Customer) =>
+      (c.shopName || c.name || "").trim().toLowerCase();
+
+    const exact = customers.find((c) => getKey(c) === cleaned);
+    if (exact) {
+      setShippingCustomer(exact);
+      return;
+    }
+
+    const partial = customers.filter((c) => getKey(c).includes(cleaned));
+    if (partial.length === 1) {
+      setShippingCustomer(partial[0]);
+    } else {
+      setShippingCustomer(null);
+    }
+  };
+
+  // Handle Enter key on billing customer with proper focus flow
+  const handleBillingCustomerEnter = () => {
+    const selected = filteredCustomers[customerSuggestionIndex];
+    if (selected) {
+      setBillingCustomer(selected);
+      setCustomerInput(selected.shopName || selected.name || "");
+      setShowCustomerSuggestions(false);
+      
+      // Smart focus handling based on "Same as Billing" checkbox
+      setTimeout(() => {
+        if (!sameAsBilling) {
+          // Focus shipping input if not same as billing
+          shippingInputRef.current?.focus();
+        } else {
+          // Focus first product row if same as billing
+          focusProduct(0);
+        }
+      }, 0);
+    }
+  };
+
+  // ✅ NEW: Handle Enter key on shipping customer
+  const handleShippingCustomerEnter = () => {
+    const selected = filteredShippingCustomers[shippingSuggestionIndex];
+    if (selected) {
+      setShippingCustomer(selected);
+      setShippingInput(selected.shopName || selected.name || "");
+      setShowShippingSuggestions(false);
+      
+      // Move to first product row
+      setTimeout(() => focusProduct(0), 0);
     }
   };
 
@@ -551,11 +644,6 @@ export default function BillingPage() {
         (it) => !it.productName || it.quantity <= 0
       );
 
-      /**
-       * 🔑 GROUP BY PRODUCT.unit ONLY
-       * - unit is already copied from Product schema at selection time
-       * - DO NOT use packUnit / packQuantity here
-       */
       const grouped = filled.reduce((acc, it) => {
         const unitKey = it.unit?.toLowerCase();
         if (!unitKey) return acc;
@@ -566,10 +654,6 @@ export default function BillingPage() {
         return acc;
       }, {} as Record<string, BillItem[]>);
 
-      /**
-       * Optional but consistent ordering of unit groups
-       * (business-friendly, not required for correctness)
-       */
       const unitPriority: Array<BillItem["unit"]> = [
         "box",
         "litre",
@@ -583,13 +667,9 @@ export default function BillingPage() {
         (a, b) => unitPriority.indexOf(a) - unitPriority.indexOf(b)
       );
 
-      /**
-       * 🔽 SORT INSIDE EACH UNIT GROUP BY BILL QUANTITY
-       * Using quantity entered by user in bill
-       */
       const sortedFilled = orderedUnits.flatMap((unit) =>
         grouped[unit].sort(
-          (a, b) => b.quantity - a.quantity // High → Low (more practical)
+          (a, b) => b.quantity - a.quantity
         )
       );
 
@@ -775,18 +855,17 @@ export default function BillingPage() {
                 {seller?.sellerName || "Seller Name"}
               </h2>
               {seller?.contact && (
-          <p className="text-gray-700"> {seller.contact}</p>
-        )}
+                <p className="text-gray-700"> {seller.contact}</p>
+              )}
               <p className="text-gray-700">{seller?.fullAddress || "-"}</p>
               <p className="text-gray-800">GST: {seller?.gstNumber || "-"}</p>
-              <div className="mt-1">
-                <textarea
-                  value={fixedLine}
-                  onChange={(e) => setFixedLine(e.target.value)}
-                  className="mt-2 w-full max-w-md text-xs sm:text-sm border rounded p-2 text-gray-900"
-                  rows={1}
-                />
-              </div>
+              {seller?.compositionLine && (
+                <div className="mt-1">
+                  <p className="text-gray-500 text-right text-xs sm:text-sm italic">
+                    {seller.compositionLine}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           {seller?.slogan && (
@@ -805,16 +884,26 @@ export default function BillingPage() {
 
           {/* BILLING / SHIPPING */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
+            {/* BILLING DETAILS */}
             <div>
               <h3 className="text-sm font-semibold mb-1">Billing Details</h3>
               <div className="flex gap-2">
                 <input
+                  ref={billingInputRef}
                   suppressHydrationWarning
-                  list="customer-suggestions"
                   value={customerInput}
                   onChange={(e) => onCustomerInputChange(e.target.value)}
+                  onFocus={() => {
+                    if (customerInput.trim()) {
+                      setShowCustomerSuggestions(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    setTimeout(() => setShowCustomerSuggestions(false), 200);
+                  }}
                   onKeyDown={(e) => {
-                    if (!filteredCustomers.length) return;
+                    if (!showCustomerSuggestions || !filteredCustomers.length) return;
+                    
                     if (e.key === "ArrowDown") {
                       e.preventDefault();
                       setCustomerSuggestionIndex((i) =>
@@ -827,21 +916,17 @@ export default function BillingPage() {
                     }
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      const selected = filteredCustomers[customerSuggestionIndex];
-                      if (selected) {
-                        setBillingCustomer(selected);
-                        setCustomerInput(selected.shopName || selected.name || "");
-                        focusProduct(0);
-                      }
+                      handleBillingCustomerEnter();
                     }
                   }}
-                  placeholder="Type or pick a shop name..."
+                  placeholder="Type shop name..."
                   className="w-full border p-2 rounded text-xs sm:text-sm text-gray-900"
                 />
                 <button
                   onClick={() => {
                     setCustomerInput("");
                     setBillingCustomer(null);
+                    setShowCustomerSuggestions(false);
                   }}
                   className="px-2 sm:px-3 py-1 sm:py-2 bg-gray-200 rounded text-xs sm:text-sm"
                 >
@@ -849,21 +934,43 @@ export default function BillingPage() {
                 </button>
               </div>
 
-              <datalist id="customer-suggestions">
-                {customers.map((c) => {
-                  const label =
-                    c.shopName && c.name
-                      ? `${c.shopName} - ${c.name}`
-                      : c.shopName || c.name;
-                  return (
-                    <option
-                      key={c._id}
-                      value={c.shopName || c.name}
-                      label={label || undefined}
-                    />
-                  );
-                })}
-              </datalist>
+              {/* Custom dropdown - only show when typing */}
+              {showCustomerSuggestions && filteredCustomers.length > 0 && (
+                <div className="relative">
+                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                    {filteredCustomers.map((c, i) => {
+                      const label = c.shopName && c.name
+                        ? `${c.shopName} - ${c.name}`
+                        : c.shopName || c.name;
+                      return (
+                        <div
+                          key={c._id}
+                          onMouseDown={() => {
+                            setBillingCustomer(c);
+                            setCustomerInput(c.shopName || c.name || "");
+                            setShowCustomerSuggestions(false);
+                            
+                            setTimeout(() => {
+                              if (!sameAsBilling) {
+                                shippingInputRef.current?.focus();
+                              } else {
+                                focusProduct(0);
+                              }
+                            }, 0);
+                          }}
+                          className={`px-3 py-2 cursor-pointer text-sm ${
+                            customerSuggestionIndex === i
+                              ? "bg-blue-600 text-white"
+                              : "hover:bg-blue-50"
+                          }`}
+                        >
+                          {label}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-2 text-xs sm:text-sm text-gray-800">
                 <div>
@@ -886,36 +993,106 @@ export default function BillingPage() {
               </div>
             </div>
 
+            {/* SHIPPING DETAILS */}
             <div>
               <h3 className="text-sm font-semibold mb-1">Shipping Details</h3>
-              <label className="flex items-center gap-2 text-xs sm:text-sm">
+              <label className="flex items-center gap-2 text-xs sm:text-sm mb-2">
                 <input
                   type="checkbox"
                   checked={sameAsBilling}
-                  onChange={(e) => setSameAsBilling(e.target.checked)}
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    setSameAsBilling(isChecked);
+                    if (isChecked && billingCustomer) {
+                      setShippingCustomer(billingCustomer);
+                      setShippingInput(billingCustomer.shopName || billingCustomer.name || "");
+                    }
+                  }}
                 />
                 Same as Billing
               </label>
 
               {!sameAsBilling && (
-                <input
-                  suppressHydrationWarning
-                  list="customer-suggestions"
-                  placeholder="Type or pick shipping customer (optional)"
-                  className="w-full border p-2 rounded text-xs sm:text-sm text-gray-900 mt-2"
-                  onBlur={(e) => {
-                    const val = e.currentTarget.value.trim().toLowerCase();
-                    if (!val) return;
-                    const match = customers.find((c) => {
-                      const key =
-                        (c.shopName || c.name || "")
-                          .trim()
-                          .toLowerCase();
-                      return key === val;
-                    });
-                    if (match) setShippingCustomer(match);
-                  }}
-                />
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      ref={shippingInputRef}
+                      suppressHydrationWarning
+                      value={shippingInput}
+                      onChange={(e) => onShippingInputChange(e.target.value)}
+                      onFocus={() => {
+                        if (shippingInput.trim()) {
+                          setShowShippingSuggestions(true);
+                        }
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => setShowShippingSuggestions(false), 200);
+                      }}
+                      onKeyDown={(e) => {
+                        if (!showShippingSuggestions || !filteredShippingCustomers.length) return;
+                        
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          setShippingSuggestionIndex((i) =>
+                            Math.min(i + 1, filteredShippingCustomers.length - 1)
+                          );
+                        }
+                        if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setShippingSuggestionIndex((i) => Math.max(i - 1, 0));
+                        }
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleShippingCustomerEnter();
+                        }
+                      }}
+                      placeholder="Type shop name..."
+                      className="w-full border p-2 rounded text-xs sm:text-sm text-gray-900"
+                    />
+                    <button
+                      onClick={() => {
+                        setShippingInput("");
+                        setShippingCustomer(null);
+                        setShowShippingSuggestions(false);
+                      }}
+                      className="px-2 sm:px-3 py-1 sm:py-2 bg-gray-200 rounded text-xs sm:text-sm"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  {/* ✅ Shipping suggestions dropdown */}
+                  {showShippingSuggestions && filteredShippingCustomers.length > 0 && (
+                    <div className="relative">
+                      <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                        {filteredShippingCustomers.map((c, i) => {
+                          const label = c.shopName && c.name
+                            ? `${c.shopName} - ${c.name}`
+                            : c.shopName || c.name;
+                          return (
+                            <div
+                              key={c._id}
+                              onMouseDown={() => {
+                                setShippingCustomer(c);
+                                setShippingInput(c.shopName || c.name || "");
+                                setShowShippingSuggestions(false);
+                                
+                                setTimeout(() => focusProduct(0), 0);
+                              }}
+                              className={`px-3 py-2 cursor-pointer text-sm ${
+                                shippingSuggestionIndex === i
+                                  ? "bg-blue-600 text-white"
+                                  : "hover:bg-blue-50"
+                              }`}
+                            >
+                              {label}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="mt-2 text-xs sm:text-sm text-gray-800">
@@ -979,6 +1156,7 @@ export default function BillingPage() {
                   const matched = findProductByName(it.productName);
                   const stock = getProductStock(matched);
                   const editable = canEditRow(idx);
+                  const isLastRow = idx === items.length - 1;
 
                   return (
                     <tr
@@ -1144,16 +1322,30 @@ export default function BillingPage() {
                               if (!editable) return;
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                const nextIndex = idx + 1;
-                                if (nextIndex < items.length) {
-                                  focusProduct(nextIndex);
+                                
+                                // Auto-add line if on last row and has product + quantity
+                                if (isLastRow && it.productName && it.quantity > 0) {
+                                  addLine();
+                                  setTimeout(() => focusProduct(idx + 1), 0);
+                                } else {
+                                  const nextIndex = idx + 1;
+                                  if (nextIndex < items.length) {
+                                    focusProduct(nextIndex);
+                                  }
                                 }
                               }
                               if (e.key === "Tab" && !e.shiftKey) {
                                 e.preventDefault();
-                                const nextIndex = idx + 1;
-                                if (nextIndex < items.length) {
-                                  focusProduct(nextIndex);
+                                
+                                // Same auto-add behavior for Tab
+                                if (isLastRow && it.productName && it.quantity > 0) {
+                                  addLine();
+                                  setTimeout(() => focusProduct(idx + 1), 0);
+                                } else {
+                                  const nextIndex = idx + 1;
+                                  if (nextIndex < items.length) {
+                                    focusProduct(nextIndex);
+                                  }
                                 }
                               }
                             }}
@@ -1265,9 +1457,8 @@ export default function BillingPage() {
                 Sort by Unit
               </button>
               <p className="text-[10px] sm:text-xs text-gray-500">
-                Selecting a suggested product will auto-fill price/unit (you can
-                still edit manually). Quantity is limited to available stock and
-                you must fill products line by line (no skipping rows).
+                ✨ <strong>New:</strong> Press Enter after quantity on the last row to auto-add a new line. 
+                Selecting a product auto-fills price/unit. Quantity is limited to stock.
               </p>
             </div>
           </div>
@@ -1392,7 +1583,6 @@ export default function BillingPage() {
               bank={bank}
               serialNo={serialNo}
               date={date}
-              fixedLine={fixedLine}
               discountPercent={discountPercent}
               remarks={remarks}
             />
@@ -1436,5 +1626,4 @@ export default function BillingPage() {
       )}
     </div>
   );
-
 }

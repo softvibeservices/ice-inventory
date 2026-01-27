@@ -15,15 +15,35 @@ type OrderCardProps = {
 };
 
 export default function OrderCard({ order, area, tab, onDiscard, onOpenSettle, onOpenDebtSettle, onOpenView }: OrderCardProps) {
-  const formatQtySummary = (q?: Order["quantitySummary"]) => {
+  // ✅ UPDATED: Dynamic quantity formatting
+  const formatQtySummary = (q?: Record<string, number>) => {
     if (!q) return "-";
+    
     const parts: string[] = [];
-    if (q.litre) parts.push(`${q.litre} litre${q.litre !== 1 ? "s" : ""}`);
-    if (q.kg) parts.push(`${q.kg} kg`);
-    if (q.box) parts.push(`${q.box} box${q.box !== 1 ? "es" : ""}`);
-    if (q.piece) parts.push(`${q.piece} piece${q.piece !== 1 ? "s" : ""}`);
-    if (q.gm) parts.push(`${q.gm} gm`);
-    if (q.ml) parts.push(`${q.ml} ml`);
+    
+    // ✅ Iterate over all units dynamically
+    Object.entries(q).forEach(([unit, qty]) => {
+      if (qty > 0) {
+        if (unit === "box") {
+          parts.push(`${qty} box${qty !== 1 ? "es" : ""}`);
+        } else if (unit === "piece") {
+          parts.push(`${qty} piece${qty !== 1 ? "s" : ""}`);
+        } else if (unit === "litre" || unit === "L") {
+          parts.push(`${qty} L`);
+        } else if (unit === "kg") {
+          parts.push(`${qty} kg`);
+        } else if (unit === "gm") {
+          parts.push(`${qty} gm`);
+        } else if (unit === "ml") {
+          parts.push(`${qty} ml`);
+        } else {
+          // ✅ Custom units - capitalize first letter
+          const formatted = unit.charAt(0).toUpperCase() + unit.slice(1);
+          parts.push(`${qty} ${formatted}`);
+        }
+      }
+    });
+    
     return parts.length ? parts.join(", ") : "-";
   };
 

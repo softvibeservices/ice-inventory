@@ -14,6 +14,7 @@ export interface ISellerDetails extends Document {
   signatureUrl: string; // compulsory
   signaturePublicId?: string;
   slogan: string;
+  compositionLine?: string; // ✅ NEW: User-configurable composition line
 }
 
 const SellerDetailsSchema = new Schema<ISellerDetails>(
@@ -30,6 +31,10 @@ const SellerDetailsSchema = new Schema<ISellerDetails>(
     signatureUrl: { type: String, required: true },
     signaturePublicId: { type: String },
     slogan: { type: String, required: true },
+    compositionLine: { 
+      type: String, 
+      default: "composition taxable person not eligible to collect taxes on supplies" // ✅ Default value
+    },
   },
   { timestamps: true }
 );

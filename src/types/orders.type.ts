@@ -1,37 +1,18 @@
 // src/types/orders.type.ts
 
+// ✅ CHANGED: Dynamic quantities (not hardcoded units)
+export type QuantitySummary = Record<string, number>;
+
 export type OrderStatus = "Unsettled" | "settled" | "Debt";
+
 export type SettlementMethod = "Cash" | "Bank/UPI" | "Debt";
-export type CashBankMethod = "Cash" | "Bank/UPI";
-export type TabFilter = "Unsettled" | "Settled" | "Discarded" | "Debt";
-export type SortMode =
-  | "date-desc"
-  | "date-asc"
-  | "total-desc"
-  | "total-asc"
-  | "shop-asc"
-  | "shop-desc"
-  | "customer-asc"
-  | "customer-desc"
-  | "area-asc"
-  | "area-desc"
-  | "serial-asc"
-  | "serial-desc";
 
-export type QuantitySummary = {
-  piece: number;
-  box: number;
-  kg: number;
-  litre: number;
-  gm: number;
-  ml: number;
-};
-
+// ✅ CHANGED: unit is now string (not enum)
 export type OrderLineItem = {
   productId?: string;
   productName: string;
   quantity: number;
-  unit: "piece" | "box" | "kg" | "litre" | "gm" | "ml";
+  unit: string; // ✅ Any unit from UserSettings
 };
 
 export type Order = {
@@ -71,12 +52,6 @@ export type Order = {
   createdAt?: string;
 };
 
-export type Product = {
-  _id: string;
-  name: string;
-  packUnit?: string;
-};
-
 export type CustomerLite = {
   _id: string;
   name: string;
@@ -85,3 +60,21 @@ export type CustomerLite = {
   area?: string;
   contacts?: string[];
 };
+
+export type TabFilter = "Unsettled" | "Settled" | "Discarded" | "Debt";
+
+export type SortMode =
+  | "date-desc"
+  | "date-asc"
+  | "total-desc"
+  | "total-asc"
+  | "shop-asc"
+  | "shop-desc"
+  | "customer-asc"
+  | "customer-desc"
+  | "area-asc"
+  | "area-desc"
+  | "serial-asc"
+  | "serial-desc";
+
+export type CashBankMethod = "Cash" | "Bank/UPI";
