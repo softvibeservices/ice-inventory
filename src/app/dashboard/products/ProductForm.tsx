@@ -29,11 +29,13 @@ export default function ProductForm({
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [packUnitNumber, setPackUnitNumber] = useState("");
   const [packUnitType, setPackUnitType] = useState("");
+  const [existingProducts, setExistingProducts] = useState<any[]>([]); // ✅ NEW: Store existing products
+  const [isDuplicate, setIsDuplicate] = useState(false); // ✅ NEW: Track if current form has duplicate
 
-  // Fetch user settings on component mount
+  // ✅ NEW: Fetch user settings and existing products on component mount
   useEffect(() => {
-    const fetchSettings = async () => {
-      console.log("🔄 Fetching settings for userId:", userId);
+    const fetchData = async () => {
+      console.log("🔄 Fetching settings and products for userId:", userId);
       
       if (!userId) {
         console.error("❌ No userId provided!");
@@ -44,18 +46,20 @@ export default function ProductForm({
 
       try {
         setLoadingSettings(true);
-        const url = `/api/user-settings?userId=${encodeURIComponent(userId)}`;
-        console.log("📡 Fetching from:", url);
         
-        const res = await fetch(url);
-        const data = await res.json();
+        // Fetch settings
+        const settingsUrl = `/api/user-settings?userId=${encodeURIComponent(userId)}`;
+        console.log("📡 Fetching settings from:", settingsUrl);
         
-        console.log("📥 Response status:", res.status);
-        console.log("📦 Response data:", data);
+        const settingsRes = await fetch(settingsUrl);
+        const settingsData = await settingsRes.json();
         
-        if (res.ok) {
-          const fetchedCategories = data.categories || [];
-          const fetchedUnits = data.units || [];
+        console.log("📥 Settings response status:", settingsRes.status);
+        console.log("📦 Settings data:", settingsData);
+        
+        if (settingsRes.ok) {
+          const fetchedCategories = settingsData.categories || [];
+          const fetchedUnits = settingsData.units || [];
           
           setCategories(fetchedCategories);
           setUnits(fetchedUnits);
@@ -68,18 +72,30 @@ export default function ProductForm({
             setFormData({ ...formData, unit: fetchedUnits[0] });
           }
         } else {
-          console.error("❌ Failed to load settings:", data.error);
-          toast.error(data.error || "Failed to load product settings");
+          console.error("❌ Failed to load settings:", settingsData.error);
+          toast.error(settingsData.error || "Failed to load product settings");
+        }
+
+        // ✅ NEW: Fetch existing products for duplicate detection
+        const productsUrl = `/api/products?userId=${encodeURIComponent(userId)}`;
+        console.log("📡 Fetching products from:", productsUrl);
+        
+        const productsRes = await fetch(productsUrl);
+        const productsData = await productsRes.json();
+        
+        if (productsRes.ok) {
+          setExistingProducts(Array.isArray(productsData) ? productsData : []);
+          console.log("✅ Products loaded for duplicate detection:", productsData.length);
         }
       } catch (error) {
-        console.error("❌ Error fetching settings:", error);
+        console.error("❌ Error fetching data:", error);
         toast.error("Failed to load product settings");
       } finally {
         setLoadingSettings(false);
       }
     };
 
-    fetchSettings();
+    fetchData();
   }, [userId]);
 
   // Parse existing packUnit when editing
@@ -94,6 +110,39 @@ export default function ProductForm({
     }
   }, [formData.packUnit]);
 
+  // ✅ NEW: Check for duplicates whenever relevant fields change
+  useEffect(() => {
+    if (!formData.name || !formData.category || !formData.unit || editingId) {
+      setIsDuplicate(false);
+      return;
+    }
+
+    const normalizedName = formData.name.trim().toLowerCase();
+    const normalizedCategory = formData.category.trim().toLowerCase();
+    const normalizedUnit = formData.unit.trim().toLowerCase();
+    const normalizedPackQty = formData.packQuantity.trim();
+
+    const duplicate = existingProducts.some((existing) => {
+      // Skip the product being edited
+      if (editingId && existing._id === editingId) {
+        return false;
+      }
+
+      const existingPackQty = existing.packQuantity !== undefined && existing.packQuantity !== null 
+        ? String(existing.packQuantity) 
+        : "";
+      
+      return (
+        existing.name.trim().toLowerCase() === normalizedName &&
+        (existing.category || "").trim().toLowerCase() === normalizedCategory &&
+        existing.unit.trim().toLowerCase() === normalizedUnit &&
+        existingPackQty === normalizedPackQty
+      );
+    });
+
+    setIsDuplicate(duplicate);
+  }, [formData.name, formData.category, formData.unit, formData.packQuantity, existingProducts, editingId]);
+
   // Update packUnit when number or type changes
   const handlePackUnitChange = (number: string, type: string) => {
     setPackUnitNumber(number);
@@ -106,12 +155,31 @@ export default function ProductForm({
     }
   };
 
+  // ✅ NEW: Wrapped submit handler to check for duplicates
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (isDuplicate) {
+      toast.error("This product already exists! Please modify the details or edit the existing product.");
+      return;
+    }
+    
+    handleSubmit(e);
+  };
+
   return (
     <form
-      onSubmit={handleSubmit}
+      onSubmit={handleFormSubmit}
       className="bg-white rounded-xl shadow-sm border border-gray-200 w-full max-w-2xl mx-auto px-4 py-4 sm:px-6 sm:py-5"
     >
-     
+      {/* ✅ NEW: Duplicate Warning Banner */}
+      {isDuplicate && (
+        <div className="mb-4 p-4 bg-orange-100 border-2 border-orange-400 rounded-lg">
+          <p className="text-sm font-bold text-orange-900 flex items-center gap-2">
+            ⚠️ <span>This product already exists in your database with the same name, category, unit, and pack quantity. Please modify the details or edit the existing product instead.</span>
+          </p>
+        </div>
+      )}
 
       {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -126,7 +194,11 @@ export default function ProductForm({
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g. Vanilla Cone"
-            className="mt-1 w-full h-9 px-3 text-sm border border-gray-300 rounded-md placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-700"
+            className={`mt-1 w-full h-9 px-3 text-sm border rounded-md placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none ${
+              isDuplicate 
+                ? "border-orange-400 bg-orange-50 text-orange-900" 
+                : "border-gray-300 text-gray-700"
+            }`}
             required
           />
         </div>
@@ -134,7 +206,7 @@ export default function ProductForm({
         {/* Category - DROPDOWN */}
         <div>
           <label className="text-xs font-semibold text-gray-600">
-            Category
+            Category *
           </label>
           {loadingSettings ? (
             <div className="mt-1 w-full h-9 px-3 text-sm border border-gray-300 rounded-md flex items-center text-gray-400">
@@ -145,7 +217,12 @@ export default function ProductForm({
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="mt-1 w-full h-9 px-2 text-sm border border-gray-300 rounded-md bg-white text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className={`mt-1 w-full h-9 px-2 text-sm border rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none ${
+                  isDuplicate 
+                    ? "border-orange-400 bg-orange-50 text-orange-900" 
+                    : "border-gray-300 text-gray-600"
+                }`}
+                required
               >
                 <option value="">Select Category</option>
                 {categories.map((cat) => (
@@ -177,7 +254,11 @@ export default function ProductForm({
               <select
                 value={formData.unit}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                className="mt-1 w-full h-9 px-2 text-sm border border-gray-300 rounded-md bg-white text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className={`mt-1 w-full h-9 px-2 text-sm border rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none ${
+                  isDuplicate 
+                    ? "border-orange-400 bg-orange-50 text-orange-900" 
+                    : "border-gray-300 text-gray-600"
+                }`}
                 required
               >
                 <option value="">Select Unit</option>
@@ -207,7 +288,11 @@ export default function ProductForm({
             value={formData.packQuantity}
             onChange={(e) => setFormData({ ...formData, packQuantity: e.target.value })}
             placeholder="e.g. 6 or 12"
-            className="mt-1 w-full h-9 px-3 text-sm text-gray-600 border border-gray-300 rounded-md placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            className={`mt-1 w-full h-9 px-3 text-sm border rounded-md placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none ${
+              isDuplicate 
+                ? "border-orange-400 bg-orange-50 text-orange-900" 
+                : "border-gray-300 text-gray-600"
+            }`}
           />
         </div>
   
@@ -339,7 +424,7 @@ export default function ProductForm({
   
         <button
           type="submit"
-          disabled={isSubmitting || loadingSettings}
+          disabled={isSubmitting || loadingSettings || isDuplicate}
           className="px-6 py-2 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-60 transition-colors"
         >
           {isSubmitting

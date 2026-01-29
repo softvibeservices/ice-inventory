@@ -16,6 +16,7 @@ export interface BulkProduct {
   minStock: string;
   notes: string;
   errors?: Record<string, string>;
+  isDuplicate?: boolean; // ✅ NEW: Flag for duplicate products
 }
 
 interface BulkProductRowProps {
@@ -36,20 +37,31 @@ export default function BulkProductRow({
   onRemove,
 }: BulkProductRowProps) {
   const hasErrors = product.errors && Object.keys(product.errors).length > 0;
+  const isDuplicate = product.isDuplicate; // ✅ NEW: Check if product is duplicate
 
   return (
     <div
       className={`border-2 rounded-xl p-4 transition-all ${
-        hasErrors
+        isDuplicate
+          ? "border-orange-400 bg-orange-50 shadow-lg shadow-orange-100"
+          : hasErrors
           ? "border-red-400 bg-red-50 shadow-lg shadow-red-100"
           : "border-gray-300 bg-white hover:border-blue-400 hover:shadow-lg"
       }`}
     >
       {/* Row Header */}
       <div className="flex items-center justify-between mb-4">
-        <span className="text-sm font-bold text-gray-900 bg-gray-100 px-3 py-1 rounded-full">
-          Product #{index + 1}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-gray-900 bg-gray-100 px-3 py-1 rounded-full">
+            Product #{index + 1}
+          </span>
+          {/* ✅ NEW: Duplicate Badge */}
+          {isDuplicate && (
+            <span className="text-xs font-bold text-orange-800 bg-orange-200 px-2 py-1 rounded-full">
+              ⚠️ DUPLICATE
+            </span>
+          )}
+        </div>
         <button
           onClick={() => onRemove(index)}
           className="p-2 rounded-full hover:bg-red-100 text-red-600 transition-colors"
@@ -58,6 +70,16 @@ export default function BulkProductRow({
           <X size={20} />
         </button>
       </div>
+
+      {/* ✅ NEW: Duplicate Warning Banner */}
+      {isDuplicate && (
+        <div className="mb-4 p-3 bg-orange-100 border-2 border-orange-300 rounded-lg">
+          <p className="text-sm font-bold text-orange-900">
+            ⚠️ This product already exists in your database with the same name, category, unit, and pack quantity.
+            Please modify or remove this entry.
+          </p>
+        </div>
+      )}
 
       {/* Grid Layout - Horizontal Fields */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
@@ -74,6 +96,8 @@ export default function BulkProductRow({
             className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
               product.errors?.name
                 ? "border-red-500 bg-red-50 text-red-900"
+                : isDuplicate
+                ? "border-orange-400 bg-orange-50 text-orange-900"
                 : "border-gray-300 text-gray-900 hover:border-blue-400"
             }`}
           />
@@ -95,6 +119,8 @@ export default function BulkProductRow({
             className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
               product.errors?.category
                 ? "border-red-500 bg-red-50 text-red-900"
+                : isDuplicate
+                ? "border-orange-400 bg-orange-50 text-orange-900"
                 : "border-gray-300 text-gray-900 hover:border-blue-400"
             }`}
           >
@@ -123,6 +149,8 @@ export default function BulkProductRow({
             className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
               product.errors?.unit
                 ? "border-red-500 bg-red-50 text-red-900"
+                : isDuplicate
+                ? "border-orange-400 bg-orange-50 text-orange-900"
                 : "border-gray-300 text-gray-900 hover:border-blue-400"
             }`}
           >
@@ -151,7 +179,11 @@ export default function BulkProductRow({
             value={product.packQuantity}
             onChange={(e) => onChange(index, "packQuantity", e.target.value)}
             placeholder="e.g. 6"
-            className="w-full px-3 py-2.5 text-base font-medium border-2 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 hover:border-blue-400 outline-none transition-all"
+            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
+              isDuplicate
+                ? "border-orange-400 bg-orange-50 text-orange-900"
+                : "border-gray-300 text-gray-900 hover:border-blue-400"
+            }`}
           />
         </div>
 
