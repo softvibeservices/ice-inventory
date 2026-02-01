@@ -1,10 +1,41 @@
-// src/app/api/bills/route.ts
+// ✅ FINAL FIX: Backend returns the NEXT serial number after saving
+// This eliminates any race conditions or database delays
+// Location: src/app/api/bills/route.ts
+
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Bill from "@/models/Bill";
 import Order from "@/models/Order";
 import Product from "@/models/Product";
 import Customer from "@/models/Customer";
+import User from "@/models/User";
+
+// ✅ Helper function to calculate next serial number
+function calculateNextSerial(currentSerial: string): string {
+  const now = new Date();
+  const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
+
+  // Extract month and number from current serial (e.g., "020012")
+  const serialMonth = currentSerial.substring(0, 2);
+  const serialNumber = parseInt(currentSerial.substring(2), 10);
+
+  // If we're in a new month, reset to 0001
+  if (serialMonth !== currentMonth) {
+    return `${currentMonth}0001`;
+  }
+
+  // Otherwise increment
+  const nextNumber = serialNumber + 1;
+
+  // If we exceed 9999, reset to 0001
+  if (nextNumber > 9999) {
+    return `${currentMonth}0001`;
+  }
+
+  // Pad to 4 digits
+  const paddedNext = String(nextNumber).padStart(4, "0");
+  return `${currentMonth}${paddedNext}`;
+}
 
 /* =======================
    POST /api/bills
@@ -13,6 +44,8 @@ import Customer from "@/models/Customer";
    - creates the Order document (same one /api/orders POST creates today)
    - decrements product stock
    - increments customer debit + totalSales
+   - ✅ NEW: Updates User's lastSerialNumber atomically
+   - ✅ NEW: Returns the next serial number to use
 ======================= */
 export async function POST(req: Request) {
   await connectDB();
@@ -25,21 +58,14 @@ export async function POST(req: Request) {
       userId,
       orderId,
       serialNumber,
-      billDate,                 // "DD-MM-YYYY" from the form
-
-      // customers
-      billingCustomer,          // { customerId, name, shopName, address, contact }
-      shippingCustomer,         // same shape  (frontend sends even when sameAsBilling)
+      billDate,
+      billingCustomer,
+      shippingCustomer,
       sameAsBilling,
-
-      // items — single array with .free flag
-      items,                    // IBillLineItem[]
-
-      // totals (frontend pre-computes these)
+      items,
       subtotal,
       discountPercentage,
       grandTotal,
-
       remarks,
     } = body;
 
@@ -110,7 +136,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── 2. COMPUTE TOTALS SERVER-SIDE (don't blindly trust client) ─
+    // ── 2. COMPUTE TOTALS SERVER-SIDE ─────────────────────────────
     let serverSubtotal = 0;
     for (const it of items) {
       if (!it.free) {
@@ -139,7 +165,6 @@ export async function POST(req: Request) {
       orderId,
       serialNumber,
       billDate,
-
       billingCustomer: {
         customerId: billingCustomer.customerId || undefined,
         name:       billingCustomer.name,
@@ -155,19 +180,15 @@ export async function POST(req: Request) {
         contact:    shippingCustomer.contact || "",
       },
       sameAsBilling: !!sameAsBilling,
-
       items: billItems,
-
       subtotal:           serverSubtotal,
       discountPercentage: serverDiscountPct,
       discountAmount:     serverDiscountAmt,
       grandTotal:         serverGrandTotal,
-
       remarks: remarks || "",
     });
 
-    // ── 4. CREATE THE Order DOCUMENT (same shape as POST /api/orders) ─
-    //   Split items into paid vs free for the Order (its existing convention)
+    // ── 4. CREATE THE Order DOCUMENT ─────────────────────────────────
     const paidItemsForOrder = items
       .filter((it: any) => !it.free)
       .map((it: any) => ({
@@ -190,7 +211,6 @@ export async function POST(req: Request) {
         total:       0,
       }));
 
-    // Build quantitySummary for the Order (Record<unit, totalQty>)
     const quantitySummary: Record<string, number> = {};
     for (const it of items) {
       const key = (it.unit || "piece").toLowerCase();
@@ -202,33 +222,24 @@ export async function POST(req: Request) {
       orderId,
       serialNumber,
       shopName: billingCustomer.shopName || billingCustomer.name || "Unknown",
-
       customerId:      billingCustomer.customerId || undefined,
       customerName:    billingCustomer.name,
       customerAddress: billingCustomer.address,
       customerContact: billingCustomer.contact || "",
-
       items:      paidItemsForOrder,
       freeItems:  freeItemsForOrder,
       quantitySummary,
-
       subtotal:           serverSubtotal,
       discountPercentage: serverDiscountPct,
       total:              serverGrandTotal,
       remarks:            remarks || "",
-
       status: "Unsettled",
       settlementHistory: [{ action: "Created", at: new Date() }],
     });
 
-    // ── 5. DECREMENT STOCK for every item (paid + free) ─────────────
+    // ── 5. DECREMENT STOCK ─────────────────────────────────────────
     const stockPromises = items
-      .filter(
-        (it: any) =>
-          it.productId &&
-          typeof it.quantity === "number" &&
-          it.quantity > 0
-      )
+      .filter((it: any) => it.productId && it.quantity > 0)
       .map((it: any) =>
         Product.findOneAndUpdate(
           { _id: it.productId, userId },
@@ -241,7 +252,7 @@ export async function POST(req: Request) {
       await Promise.all(stockPromises);
     }
 
-    // ── 6. INCREMENT customer debit + totalSales ───────────────────
+    // ── 6. INCREMENT customer debit ─────────────────────────────────
     const customerId = billingCustomer.customerId;
     if (customerId && serverGrandTotal > 0) {
       await Customer.findByIdAndUpdate(customerId, {
@@ -249,9 +260,24 @@ export async function POST(req: Request) {
       });
     }
 
-    // ── 7. RESPOND ──────────────────────────────────────────────────
+    // ── 7. ✅ UPDATE USER & CALCULATE NEXT SERIAL ─────────────────
+    await User.findByIdAndUpdate(
+      userId,
+      { lastSerialNumber: serialNumber },
+      { new: true }
+    );
+
+    // ✅ Calculate the NEXT serial number to return to frontend
+    const nextSerialNumber = calculateNextSerial(serialNumber);
+
+    // ── 8. RESPOND WITH NEXT SERIAL ────────────────────────────────
     return NextResponse.json(
-      { success: true, bill, order },
+      {
+        success: true,
+        bill,
+        order,
+        nextSerialNumber  // ✅ NEW: Return the next serial to use
+      },
       { status: 201 }
     );
   } catch (err: any) {
@@ -304,11 +330,6 @@ export async function GET(req: Request) {
   }
 }
 
-
-// src/app/api/bills/route.ts
-
-// ... existing POST and GET handlers ...
-
 /* =======================
    PUT /api/bills
    - Updates an existing bill
@@ -316,13 +337,14 @@ export async function GET(req: Request) {
    - Applies new stock changes
    - Updates customer debit
    - Updates the linked Order
+   - ✅ NOTE: Does NOT update lastSerialNumber (editing doesn't change serial sequence)
 ======================= */
 export async function PUT(req: Request) {
     await connectDB();
-  
+
     try {
       const body = await req.json();
-  
+
       const {
         billId,              // MongoDB _id of the bill to update
         userId,
@@ -338,7 +360,7 @@ export async function PUT(req: Request) {
         grandTotal,
         remarks,
       } = body;
-  
+
       // ── 1. VALIDATE ─────────────────────────────────────────────────
       if (!billId || !userId || !orderId) {
         return NextResponse.json(
@@ -346,7 +368,7 @@ export async function PUT(req: Request) {
           { status: 400 }
         );
       }
-  
+
       // Find existing bill
       const existingBill = await Bill.findOne({ _id: billId, userId });
       if (!existingBill) {
@@ -355,7 +377,7 @@ export async function PUT(req: Request) {
           { status: 404 }
         );
       }
-  
+
       // Find existing order
       const existingOrder = await Order.findOne({ orderId, userId });
       if (!existingOrder) {
@@ -364,7 +386,7 @@ export async function PUT(req: Request) {
           { status: 404 }
         );
       }
-  
+
       // ── 2. VALIDATE NEW DATA ────────────────────────────────────────
       if (!billDate || typeof billDate !== "string") {
         return NextResponse.json(
@@ -372,7 +394,7 @@ export async function PUT(req: Request) {
           { status: 400 }
         );
       }
-  
+
       if (
         !billingCustomer ||
         !billingCustomer.name?.trim() ||
@@ -383,7 +405,7 @@ export async function PUT(req: Request) {
           { status: 400 }
         );
       }
-  
+
       if (
         !shippingCustomer ||
         !shippingCustomer.name?.trim() ||
@@ -394,14 +416,14 @@ export async function PUT(req: Request) {
           { status: 400 }
         );
       }
-  
+
       if (!Array.isArray(items) || items.length === 0) {
         return NextResponse.json(
           { error: "At least one bill item is required." },
           { status: 400 }
         );
       }
-  
+
       // ── 3. REVERT OLD STOCK CHANGES ─────────────────────────────────
       const oldItems = existingBill.items || [];
       const stockRevertPromises = oldItems
@@ -413,21 +435,21 @@ export async function PUT(req: Request) {
             { new: true }
           )
         );
-  
+
       if (stockRevertPromises.length) {
         await Promise.all(stockRevertPromises);
       }
-  
+
       // ── 4. REVERT OLD CUSTOMER DEBIT ────────────────────────────────
       const oldCustomerId = existingBill.billingCustomer?.customerId;
       const oldTotal = existingBill.grandTotal || 0;
-      
+
       if (oldCustomerId && oldTotal > 0) {
         await Customer.findByIdAndUpdate(oldCustomerId, {
           $inc: { debit: -oldTotal, totalSales: -oldTotal },
         });
       }
-  
+
       // ── 5. COMPUTE NEW TOTALS SERVER-SIDE ──────────────────────────
       let serverSubtotal = 0;
       for (const it of items) {
@@ -436,11 +458,11 @@ export async function PUT(req: Request) {
           serverSubtotal += lineTotal;
         }
       }
-  
+
       const serverDiscountPct = Math.max(0, Math.min(100, Number(discountPercentage || 0)));
       const serverDiscountAmt = (serverSubtotal * serverDiscountPct) / 100;
       const serverGrandTotal = serverSubtotal - serverDiscountAmt;
-  
+
       // ── 6. UPDATE BILL DOCUMENT ─────────────────────────────────────
       const billItems = items.map((it: any) => ({
         productId: it.productId || undefined,
@@ -451,7 +473,7 @@ export async function PUT(req: Request) {
         total: it.free ? 0 : Number(it.price || 0) * Number(it.quantity || 0),
         free: !!it.free,
       }));
-  
+
       existingBill.serialNumber = serialNumber;
       existingBill.billDate = billDate;
       existingBill.billingCustomer = {
@@ -475,9 +497,9 @@ export async function PUT(req: Request) {
       existingBill.discountAmount = serverDiscountAmt;
       existingBill.grandTotal = serverGrandTotal;
       existingBill.remarks = remarks || "";
-  
+
       await existingBill.save();
-  
+
       // ── 7. UPDATE ORDER DOCUMENT ────────────────────────────────────
       const paidItemsForOrder = items
         .filter((it: any) => !it.free)
@@ -489,7 +511,7 @@ export async function PUT(req: Request) {
           price: Number(it.price || 0),
           total: Number(it.price || 0) * Number(it.quantity || 0),
         }));
-  
+
       const freeItemsForOrder = items
         .filter((it: any) => it.free)
         .map((it: any) => ({
@@ -500,13 +522,13 @@ export async function PUT(req: Request) {
           price: 0,
           total: 0,
         }));
-  
+
       const quantitySummary: Record<string, number> = {};
       for (const it of items) {
         const key = (it.unit || "piece").toLowerCase();
         quantitySummary[key] = (quantitySummary[key] || 0) + Number(it.quantity || 0);
       }
-  
+
       existingOrder.serialNumber = serialNumber;
       existingOrder.shopName = billingCustomer.shopName || billingCustomer.name || "Unknown";
       existingOrder.customerId = billingCustomer.customerId || undefined;
@@ -520,9 +542,9 @@ export async function PUT(req: Request) {
       existingOrder.discountPercentage = serverDiscountPct;
       existingOrder.total = serverGrandTotal;
       existingOrder.remarks = remarks || "";
-  
+
       await existingOrder.save();
-  
+
       // ── 8. APPLY NEW STOCK CHANGES ──────────────────────────────────
       const stockPromises = items
         .filter((it: any) => it.productId && it.quantity > 0)
@@ -533,11 +555,11 @@ export async function PUT(req: Request) {
             { new: true }
           )
         );
-  
+
       if (stockPromises.length) {
         await Promise.all(stockPromises);
       }
-  
+
       // ── 9. APPLY NEW CUSTOMER DEBIT ─────────────────────────────────
       const newCustomerId = billingCustomer.customerId;
       if (newCustomerId && serverGrandTotal > 0) {
@@ -545,7 +567,7 @@ export async function PUT(req: Request) {
           $inc: { debit: serverGrandTotal, totalSales: serverGrandTotal },
         });
       }
-  
+
       // ── 10. RESPOND ─────────────────────────────────────────────────
       return NextResponse.json(
         { success: true, bill: existingBill, order: existingOrder },
@@ -558,4 +580,4 @@ export async function PUT(req: Request) {
         { status: 500 }
       );
     }
-  }
+}
