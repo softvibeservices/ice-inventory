@@ -154,6 +154,98 @@ export default function BillingPage() {
 
   const pdfExportRef = useRef<any>(null);
 
+
+  // =====================================================
+// ADD THIS useEffect TO YOUR BILLING PAGE
+// Place it AFTER the existing useEffects that load customers and products
+// and BEFORE the editing data useEffect
+// =====================================================
+
+  // ✅ NEW: Load sticky note data from sessionStorage
+  useEffect(() => {
+    // Only run if we have userId and data is loaded
+    if (!userId || customers.length === 0 || products.length === 0) return;
+    
+    const stickyNoteData = sessionStorage.getItem("billFromStickyNote");
+    
+    if (stickyNoteData) {
+      try {
+        const data = JSON.parse(stickyNoteData);
+        
+        // Clear sessionStorage immediately
+        sessionStorage.removeItem("billFromStickyNote");
+        
+        // Find customer by ID or match by name
+        const matchedCustomer = customers.find(
+          c => c._id === data.customerId ||
+          (c.name.toLowerCase() === data.customerName.toLowerCase() &&
+           (c as any).shopName?.toLowerCase() === data.shopName.toLowerCase())
+        );
+        
+        if (matchedCustomer) {
+          setBillingCustomer(matchedCustomer);
+          setCustomerInput((matchedCustomer as any).shopName || matchedCustomer.name);
+        } else {
+          // Create a temporary customer object if not found
+          const tempCustomer: Customer = {
+            _id: data.customerId || "",
+            name: data.customerName,
+            shopName: data.shopName,
+          } as Customer;
+          setBillingCustomer(tempCustomer);
+          setCustomerInput(data.shopName || data.customerName);
+        }
+        
+        // Set shipping same as billing
+        setSameAsBilling(true);
+        
+        // Set line items
+        if (data.items && Array.isArray(data.items)) {
+          const formattedItems: BillItem[] = data.items.map((item: any) => ({
+            productName: item.productName || "",
+            quantity: item.quantity || 0,
+            unit: item.unit || "box",
+            price: item.price || 0,
+            total: item.total || 0,
+            free: item.free || false,
+          }));
+          
+          // Fill with blank items to reach 15
+          while (formattedItems.length < 15) {
+            formattedItems.push({
+              productName: "",
+              quantity: 0,
+              unit: "",
+              price: 0,
+              total: 0,
+              free: false,
+            });
+          }
+          
+          setItems(formattedItems);
+        }
+        
+        toast.success("Sticky note data loaded! Complete the bill details.");
+        
+      } catch (err) {
+        console.error("Error loading sticky note data:", err);
+        toast.error("Failed to load sticky note data");
+        sessionStorage.removeItem("billFromStickyNote");
+      }
+    }
+  }, [userId, customers, products]);
+
+// =====================================================
+// IMPORTANT NOTES:
+// =====================================================
+// 1. This useEffect depends on userId, customers, and products being loaded
+// 2. It will automatically load data from sticky notes when navigating from sticky notes page
+// 3. The sessionStorage is cleared immediately after reading to prevent re-loading
+// 4. If customer is not found in the database, it creates a temporary customer object
+// 5. Shipping is automatically set to "same as billing"
+// 6. All products with their quantities and prices are pre-filled
+// =====================================================
+
   // ✅ FIXED: Load bill data if editing - only run once when all data is ready
   useEffect(() => {
     // Skip if we've already loaded the editing data

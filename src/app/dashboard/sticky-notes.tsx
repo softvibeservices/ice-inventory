@@ -3,6 +3,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   StickyNote as StickyIcon,
   Plus,
@@ -12,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  FileText,
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import type {
@@ -23,6 +25,7 @@ import StickyNoteModal from "./StickyNoteModal";
 
 export function StickyNotesPanel() {
   // ========= STATE =========
+  const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [notes, setNotes] = useState<StickyNote[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
@@ -200,6 +203,56 @@ export function StickyNotesPanel() {
     return !!note.deliveryPartnerId;
   };
 
+  // ========= NEW: CREATE BILL FROM STICKY NOTE =========
+  const handleCreateBill = (note: StickyNote) => {
+    try {
+      // Find the customer from the customers list
+      const customer = customers.find(
+        c => c._id === note.customerId || 
+        (c.name.toLowerCase() === note.customerName.toLowerCase() && 
+         c.shopName.toLowerCase() === note.shopName.toLowerCase())
+      );
+
+      // Prepare billing data with safe property access
+      const billData = {
+        customerId: customer?._id || note.customerId,
+        customerName: note.customerName,
+        shopName: note.shopName,
+        address: (customer as any)?.address || (customer as any)?.shopAddress || "",
+        contact: (customer as any)?.contact || (customer as any)?.contacts?.[0] || "",
+        items: note.items.map(item => {
+          // Find matching product to get price
+          const product = products.find(
+            p => p._id === item.productId || 
+            p.name.toLowerCase() === item.productName.toLowerCase()
+          );
+
+          return {
+            productId: item.productId || product?._id,
+            productName: item.productName,
+            quantity: item.quantity,
+            unit: item.unit || product?.unit || "box",
+            price: product?.sellingPrice || 0,
+            total: (product?.sellingPrice || 0) * item.quantity,
+            free: false,
+          };
+        }),
+        stickyNoteId: note._id, // Reference to track which sticky note was used
+      };
+
+      // Store in sessionStorage to pass to billing page
+      sessionStorage.setItem("billFromStickyNote", JSON.stringify(billData));
+
+      // Navigate to billing page
+      router.push("/dashboard/billing");
+      
+      toast.success("Opening billing page with sticky note data...");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Failed to create bill from sticky note");
+    }
+  };
+
   // ========= RENDER =========
   return (
     <>
@@ -364,23 +417,38 @@ export function StickyNotesPanel() {
                     </div>
 
                     {/* Footer: Actions */}
-                    <div className="flex items-center gap-1.5 sm:gap-2 mt-auto pt-2 border-t border-current/10">
+                    <div className="flex flex-col gap-1.5 mt-auto pt-2 border-t border-current/10">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <button
+                          onClick={() => openEditModal(note)}
+                          className={`flex-1 text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border font-medium transition-all ${
+                            isFromDelivery
+                              ? "border-blue-400 text-blue-900 bg-blue-100/80 hover:bg-blue-200 hover:scale-105"
+                              : "border-amber-400 text-amber-900 bg-amber-100/80 hover:bg-amber-200 hover:scale-105"
+                          }`}
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => openDeleteConfirm(note)}
+                          className="text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 hover:scale-105 inline-flex items-center justify-center gap-1 transition-all font-medium"
+                        >
+                          <Trash2 className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                          <span className="hidden sm:inline">Del</span>
+                        </button>
+                      </div>
+                      
+                      {/* Create Bill Button */}
                       <button
-                        onClick={() => openEditModal(note)}
-                        className={`flex-1 text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border font-medium transition-all ${
+                        onClick={() => handleCreateBill(note)}
+                        className={`w-full text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border-2 font-semibold transition-all inline-flex items-center justify-center gap-1.5 ${
                           isFromDelivery
-                            ? "border-blue-400 text-blue-900 bg-blue-100/80 hover:bg-blue-200 hover:scale-105"
-                            : "border-amber-400 text-amber-900 bg-amber-100/80 hover:bg-amber-200 hover:scale-105"
+                            ? "border-green-500 text-green-700 bg-green-50 hover:bg-green-100 hover:border-green-600 hover:scale-105"
+                            : "border-green-500 text-green-700 bg-green-50 hover:bg-green-100 hover:border-green-600 hover:scale-105"
                         }`}
                       >
-                        View
-                      </button>
-                      <button
-                        onClick={() => openDeleteConfirm(note)}
-                        className="text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 hover:scale-105 inline-flex items-center justify-center gap-1 transition-all font-medium"
-                      >
-                        <Trash2 className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                        <span className="hidden sm:inline">Del</span>
+                        <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                        Create Bill
                       </button>
                     </div>
                   </div>
@@ -443,8 +511,8 @@ export function StickyNotesPanel() {
         {/* Info Footer */}
         <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-[10px] sm:text-xs text-blue-800 leading-relaxed">
-            <strong>📋 Tip:</strong> After creating a proper bill from a sticky note, 
-            delete it to keep your workspace organized. 
+            <strong>📋 Tip:</strong> Click "Create Bill" to open the billing page with pre-filled data. 
+            After creating a proper bill from a sticky note, delete it to keep your workspace organized. 
             Notes with a <Truck className="w-2.5 h-2.5 sm:w-3 sm:h-3 inline mx-0.5" /> truck icon were created by delivery partners.
           </p>
         </div>
