@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation"; // ✅ NEW
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
@@ -92,6 +93,8 @@ type SortMode =
   | "serial-desc";
 
 export default function OrdersPage() {
+  const router = useRouter(); // ✅ NEW
+
   const [userId, setUserId] = useState<string | null>(null);
 
   const [tab, setTab] = useState<TabFilter>("Unsettled");
@@ -123,8 +126,23 @@ export default function OrdersPage() {
   const [debtOrders, setDebtOrders] = useState<Order[]>([]);
   const [discardedOrders, setDiscardedOrders] = useState<Order[]>([]);
 
+  // ✅ NEW: Handle edit button click
+  const handleEditOrder = async (order: Order) => {
+    try {
+      // Store the order data in sessionStorage for the billing page
+      sessionStorage.setItem("editingOrder", JSON.stringify({
+        orderId: order.orderId,
+        _id: order._id,
+        serialNumber: order.serialNumber,
+      }));
 
-
+      // Navigate to billing page
+      router.push("/dashboard/billing");
+    } catch (err: any) {
+      console.error("Error preparing order for edit:", err);
+      toast.error("Failed to open bill for editing");
+    }
+  };
 
   const getPackUnitForItem = (it: OrderLineItem) => {
     if (!products.length) return undefined;
@@ -143,40 +161,40 @@ export default function OrdersPage() {
     return byName?.packUnit;
   };
 
-  function parsePackUnit(packUnit?: string): 
+  function parsePackUnit(packUnit?: string):
   { value: number; unit: string } | undefined {
-  
-  if (!packUnit || typeof packUnit !== "string") return undefined;
-  
-  const s = packUnit.trim().toLowerCase().replace(/\s+/g, "");
-  
-  // Match pattern: number + unit
-  const m = s.match(/^([\d.]+)([a-z]+)$/);
-  if (!m) return undefined;
-  
-  const num = Number(m[1]);
-  if (Number.isNaN(num)) return undefined;
-  
-  const unitStr = m[2];
-  
-  // ✅ Map common abbreviations to standard units
-  const unitMap: Record<string, string> = {
-    "ml": "ml",
-    "l": "litre",
-    "litre": "litre",
-    "litres": "litre",
-    "g": "gm",
-    "gm": "gm",
-    "kg": "kg",
-    "pc": "piece",
-    "piece": "piece",
-    "box": "box",
-  };
-  
-  const mappedUnit = unitMap[unitStr] || unitStr; // ✅ Use original if not in map
-  
-  return { value: num, unit: mappedUnit };
-}
+
+    if (!packUnit || typeof packUnit !== "string") return undefined;
+
+    const s = packUnit.trim().toLowerCase().replace(/\s+/g, "");
+
+    // Match pattern: number + unit
+    const m = s.match(/^([\d.]+)([a-z]+)$/);
+    if (!m) return undefined;
+
+    const num = Number(m[1]);
+    if (Number.isNaN(num)) return undefined;
+
+    const unitStr = m[2];
+
+    // ✅ Map common abbreviations to standard units
+    const unitMap: Record<string, string> = {
+      "ml": "ml",
+      "l": "litre",
+      "litre": "litre",
+      "litres": "litre",
+      "g": "gm",
+      "gm": "gm",
+      "kg": "kg",
+      "pc": "piece",
+      "piece": "piece",
+      "box": "box",
+    };
+
+    const mappedUnit = unitMap[unitStr] || unitStr; // ✅ Use original if not in map
+
+    return { value: num, unit: mappedUnit };
+  }
 
   function computeQuantitySummaryForOrder(
     items: OrderLineItem[] | undefined,
@@ -185,27 +203,27 @@ export default function OrdersPage() {
   ): QuantitySummary {
     // ✅ Initialize empty object (not fixed keys)
     const out: QuantitySummary = {};
-  
+
     const addLine = (it: OrderLineItem) => {
       if (!it) return;
-      
+
       const unit = it.unit || "piece"; // Default fallback
       const quantity = Number(it.quantity || 0);
-      
+
       // ✅ Handle box items
       if (unit === "box") {
         out["box"] = (out["box"] || 0) + quantity;
         return;
       }
-  
+
       // Try to get packUnit from product
       let packUnitVal = undefined as ReturnType<typeof parsePackUnit> | undefined;
-      
+
       if (it.productId) {
         const prod = productsList.find((p) => p._id === it.productId);
         if (prod?.packUnit) packUnitVal = parsePackUnit(prod.packUnit);
       }
-  
+
       if (!packUnitVal) {
         const pn = (it.productName || "").trim().toLowerCase();
         if (pn) {
@@ -215,28 +233,28 @@ export default function OrdersPage() {
           if (byName?.packUnit) packUnitVal = parsePackUnit(byName.packUnit);
         }
       }
-  
+
       if (packUnitVal) {
         const total = quantity * packUnitVal.value;
         const unitKey = packUnitVal.unit;
-        
+
         // ✅ Dynamically add to any unit
         out[unitKey] = (out[unitKey] || 0) + total;
         return;
       }
-  
+
       // ✅ Fallback: use item's unit directly
       out[unit] = (out[unit] || 0) + quantity;
     };
-  
+
     (items || []).forEach(addLine);
     (freeItems || []).forEach(addLine);
-  
+
     // ✅ Round all values
     Object.keys(out).forEach(key => {
       out[key] = Math.round(out[key]);
     });
-  
+
     return out;
   }
 
@@ -392,7 +410,6 @@ export default function OrdersPage() {
 
     fetchOrders();
   }, [userId, tab, products]);
-
 
   // recompute client-side quantitySummary whenever products change
   useEffect(() => {
@@ -689,12 +706,12 @@ export default function OrdersPage() {
             onOpenSettle={openSettleModal}
             onOpenDebtSettle={openDebtSettleModal}
             onOpenView={openViewModal}
+            onEdit={handleEditOrder} // ✅ NEW
             unsettledOrders={unsettledOrders}
             settledOrders={settledOrders}
             debtOrders={debtOrders}
             discardedOrders={discardedOrders}
           />
-
         </div>
       </main>
 

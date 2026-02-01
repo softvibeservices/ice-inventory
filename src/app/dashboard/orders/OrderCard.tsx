@@ -12,15 +12,25 @@ type OrderCardProps = {
   onOpenSettle: (order: Order) => void;
   onOpenDebtSettle: (order: Order) => void;
   onOpenView: (order: Order) => void;
+  onEdit: (order: Order) => void; // ✅ NEW
 };
 
-export default function OrderCard({ order, area, tab, onDiscard, onOpenSettle, onOpenDebtSettle, onOpenView }: OrderCardProps) {
+export default function OrderCard({
+  order,
+  area,
+  tab,
+  onDiscard,
+  onOpenSettle,
+  onOpenDebtSettle,
+  onOpenView,
+  onEdit // ✅ NEW
+}: OrderCardProps) {
   // ✅ UPDATED: Dynamic quantity formatting
   const formatQtySummary = (q?: Record<string, number>) => {
     if (!q) return "-";
-    
+
     const parts: string[] = [];
-    
+
     // ✅ Iterate over all units dynamically
     Object.entries(q).forEach(([unit, qty]) => {
       if (qty > 0) {
@@ -43,7 +53,7 @@ export default function OrderCard({ order, area, tab, onDiscard, onOpenSettle, o
         }
       }
     });
-    
+
     return parts.length ? parts.join(", ") : "-";
   };
 
@@ -130,15 +140,46 @@ export default function OrderCard({ order, area, tab, onDiscard, onOpenSettle, o
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-dashed border-gray-200 mt-1">
-        <button onClick={() => onOpenView(order)} className="px-3 py-1.5 text-xs md:text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition">View</button>
+        <button
+          onClick={() => onOpenView(order)}
+          className="px-3 py-1.5 text-xs md:text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
+        >
+          View
+        </button>
+
+        {/* ✅ NEW: Edit Button - only show for Unsettled orders */}
+        {tab === "Unsettled" && (
+          <button
+            onClick={() => onEdit(order)}
+            className="px-3 py-1.5 text-xs md:text-sm rounded-md border border-blue-500 text-blue-600 hover:bg-blue-50 transition"
+          >
+            Edit Bill
+          </button>
+        )}
+
         {tab === "Unsettled" && (
           <>
-            <button onClick={() => onDiscard(order)} className="px-3 py-1.5 text-xs md:text-sm rounded-md border border-red-500 text-red-600 hover:bg-red-50 transition">Discard</button>
-            <button onClick={() => onOpenSettle(order)} className="px-3 py-1.5 text-xs md:text-sm rounded-md bg-green-600 text-white hover:bg-green-700 transition">Settle</button>
+            <button
+              onClick={() => onDiscard(order)}
+              className="px-3 py-1.5 text-xs md:text-sm rounded-md border border-red-500 text-red-600 hover:bg-red-50 transition"
+            > 
+              Discard
+            </button>
+            <button
+              onClick={() => onOpenSettle(order)}
+              className="px-3 py-1.5 text-xs md:text-sm rounded-md bg-green-600 text-white hover:bg-green-700 transition"
+            >
+              Settle
+            </button>
           </>
         )}
         {tab === "Debt" && (
-          <button onClick={() => onOpenDebtSettle(order)} className="px-3 py-1.5 text-xs md:text-sm rounded-md bg-green-600 text-white hover:bg-green-700 transition">Settle</button>
+          <button
+            onClick={() => onOpenDebtSettle(order)}
+            className="px-3 py-1.5 text-xs md:text-sm rounded-md bg-green-600 text-white hover:bg-green-700 transition"
+          >
+            Settle
+          </button>
         )}
       </div>
     </div>
