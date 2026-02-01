@@ -986,20 +986,43 @@ export default function BillingPage() {
       toast.success(
         `Bill ${isEditMode ? "updated" : "saved"} successfully! Stock updated & customer debit adjusted.`
       );
-
+  
       if (pdfExportRef.current) {
         await pdfExportRef.current.exportPDF();
       }
-
+  
       setShowConfirm(false);
-
-      // Reset edit mode
+  
+      // ✅ CRITICAL FIX: Track if we were in edit mode BEFORE resetting
+      const wasEditMode = isEditMode;
+      
+      // Reset edit mode flags
       setIsEditMode(false);
       setEditingBillId(null);
       setEditingOrderId(null);
-      setHasLoadedEditData(false); // ✅ Reset the flag for potential future edits
-
-      resetBillForm();
+      setHasLoadedEditData(false);
+  
+      // ✅ IMPORTANT: Only generate new serial if this was a NEW bill
+      if (!wasEditMode) {
+        // This was a NEW bill - reset form and generate next serial number
+        resetBillForm();
+      } else {
+        // This was an EDIT - clear form WITHOUT generating new serial
+        setBillingCustomer(null);
+        setShippingCustomer(null);
+        setSameAsBilling(false);
+        setCustomerInput("");
+        setShippingInput("");
+        setItems(Array.from({ length: 15 }, blankItem));
+        setDiscountPercent(0);
+        setRemarks("");
+        
+        // Keep the same serial number that was there before editing
+        const currentSerial = sessionStorage.getItem("billing-serial");
+        if (currentSerial) {
+          setSerialNo(currentSerial);
+        }
+      }
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || `Failed to ${isEditMode ? "update" : "save"} bill.`);
