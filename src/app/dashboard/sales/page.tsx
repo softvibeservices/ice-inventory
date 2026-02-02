@@ -14,16 +14,8 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-
-
-type QuantityTotals = {
-  piece: number;
-  box: number;
-  kg: number;
-  litre: number;
-  gm: number;
-  ml: number;
-};
+// ✅ CHANGED: Use Record<string, number> for dynamic units
+type QuantityTotals = Record<string, number>;
 
 type DailyStat = {
   date: string;
@@ -134,8 +126,31 @@ function toDateInputValue(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+// ✅ NEW: Format quantity with proper unit capitalization
+function formatQuantity(value: number, unit: string): string {
+  const roundedValue = Math.round(value);
+  
+  // Handle common units with proper formatting
+  const unitFormatMap: Record<string, string> = {
+    ml: "ml",
+    l: "L",
+    litre: "L",
+    litres: "L",
+    gm: "gm",
+    g: "gm",
+    kg: "kg",
+    piece: "pc",
+    pieces: "pc",
+    box: "box",
+    boxes: "box",
+  };
+
+  const formattedUnit = unitFormatMap[unit.toLowerCase()] || unit;
+  return `${roundedValue} ${formattedUnit}`;
+}
+
 export default function SalesPage() {
-  const router = useRouter();  
+  const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
 
   // Range filters
@@ -163,14 +178,16 @@ export default function SalesPage() {
   const [customerSortMode, setCustomerSortMode] =
     useState<CustomerSortMode>("net-desc");
 
+  // ✅ NEW: Available units from user settings
+  const [availableUnits, setAvailableUnits] = useState<string[]>([]);
+
   const handleClearFilters = () => {
-    setRangePreset("all");  // go back to default preset
-    setFrom("");            // clear date inputs
-    setTo("");              // clear date inputs
+    setRangePreset("all");
+    setFrom("");
+    setTo("");
   };
 
   useEffect(() => {
-   
     const stored = localStorage.getItem("user");
     if (!stored) {
       router.push("/login");
@@ -181,8 +198,8 @@ export default function SalesPage() {
       router.push("/dashboard");
     }
   }, []);
-  
-  // Read userId from localStorage (adjust if your app stores it differently)
+
+  // Read userId from localStorage
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -209,16 +226,33 @@ export default function SalesPage() {
     }
   }, []);
 
-  // 🔁 When preset changes, recompute from/to using LOCAL date math
+  // ✅ NEW: Fetch user settings to get available units
   useEffect(() => {
-    // "all" -> no date filters
+    if (!userId) return;
+
+    const fetchUnits = async () => {
+      try {
+        const res = await fetch(`/api/user-settings?userId=${encodeURIComponent(userId)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setAvailableUnits(data.units || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch user settings:", err);
+      }
+    };
+
+    fetchUnits();
+  }, [userId]);
+
+  // When preset changes, recompute from/to using LOCAL date math
+  useEffect(() => {
     if (rangePreset === "all") {
       setFrom("");
       setTo("");
       return;
     }
 
-    // "custom" -> keep whatever user typed
     if (rangePreset === "custom") {
       return;
     }
@@ -229,8 +263,6 @@ export default function SalesPage() {
 
     switch (rangePreset) {
       case "today": {
-        // from = today, to = today
-        // fromDate/toDate already = now
         break;
       }
       case "yesterday": {
@@ -240,27 +272,22 @@ export default function SalesPage() {
       }
       case "thisMonth": {
         fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        // toDate = today
         break;
       }
       case "thisYear": {
         fromDate = new Date(now.getFullYear(), 0, 1);
-        // toDate = today
         break;
       }
       case "7d": {
-        fromDate.setDate(fromDate.getDate() - 6); // last 7 days including today
-        // toDate = today
+        fromDate.setDate(fromDate.getDate() - 6);
         break;
       }
       case "30d": {
-        fromDate.setDate(fromDate.getDate() - 29); // last 30 days including today
-        // toDate = today
+        fromDate.setDate(fromDate.getDate() - 29);
         break;
       }
       case "90d": {
-        fromDate.setDate(fromDate.getDate() - 89); // last 90 days including today
-        // toDate = today
+        fromDate.setDate(fromDate.getDate() - 89);
         break;
       }
       default:
@@ -299,7 +326,7 @@ export default function SalesPage() {
       .finally(() => setSummaryLoading(false));
   }, [userId, from, to]);
 
-  // Fetch customers once (for this user)
+  // Fetch customers once
   useEffect(() => {
     if (!userId) return;
 
@@ -331,10 +358,9 @@ export default function SalesPage() {
         console.error(err);
       })
       .finally(() => setCustomersLoading(false));
-    // 🔧 only depend on userId so we don't reset selection repeatedly
   }, [userId]);
 
-  // Fetch customer ledger whenever selection / range changes
+  // Fetch customer ledger
   useEffect(() => {
     if (!userId || !selectedCustomerId) return;
 
@@ -412,6 +438,35 @@ export default function SalesPage() {
       }
     });
   }, [customers, customerSortMode]);
+
+  // ✅ NEW: Get sorted units for display (prioritize common units first)
+  const sortedUnits = useMemo(() => {
+    if (!summary?.quantities) return [];
+    
+    const units = Object.keys(summary.quantities);
+    const priorityOrder = ['box', 'kg', 'litre', 'l', 'piece', 'gm', 'ml'];
+    
+    return units.sort((a, b) => {
+      const aIndex = priorityOrder.indexOf(a.toLowerCase());
+      const bIndex = priorityOrder.indexOf(b.toLowerCase());
+      
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [summary?.quantities]);
+
+  // ✅ NEW: Get display columns for daily timeline (top 5 units by quantity)
+  const dailyDisplayUnits = useMemo(() => {
+    if (!summary?.quantities) return [];
+    
+    const entries = Object.entries(summary.quantities);
+    return entries
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([unit]) => unit);
+  }, [summary?.quantities]);
 
   const presetButtons: { key: RangePreset; label: string }[] = [
     { key: "today", label: "Today" },
@@ -511,7 +566,7 @@ export default function SalesPage() {
                 : "--"}
             </p>
             <span className="text-xs text-gray-400">
-              All bills (excluding discarded)
+              Delivered & settled orders only
             </span>
           </div>
 
@@ -530,7 +585,7 @@ export default function SalesPage() {
                 ? summary.totalOrders
                 : "--"}
             </p>
-            <span className="text-xs text-gray-400">In selected period</span>
+            <span className="text-xs text-gray-400">Delivered & settled</span>
           </div>
 
           {/* Business Debit / Credit */}
@@ -592,39 +647,49 @@ export default function SalesPage() {
 
         {/* Quantities + Daily timeline */}
         <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          {/* Quantities */}
+          {/* ✅ UPDATED: Dynamic Quantities Display */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 xl:col-span-1">
             <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-blue-500" />
-              Quantities Sold (Total)
+              Total Quantities Sold
             </h2>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              {([
-                ["Box", "box"],
-                ["Kg", "kg"],
-                ["Litre", "litre"],
-                ["Piece", "piece"],
-                ["Gram", "gm"],
-                ["ML", "ml"],
-              ] as const).map(([label, key]) => (
-                <div
-                  key={key}
-                  className="flex flex-col border border-gray-100 rounded-lg px-3 py-2 bg-gray-50/60"
-                >
-                  <span className="text-xs text-gray-500">{label}</span>
-                  <span className="text-base font-semibold text-gray-800">
-                    {summary ? (summary.quantities as any)[key] || 0 : "--"}
-                  </span>
+            <div className="grid grid-cols-2 gap-3 text-sm max-h-80 overflow-y-auto">
+              {summaryLoading ? (
+                <div className="col-span-2 text-center py-4 text-gray-400">
+                  Loading...
                 </div>
-              ))}
+              ) : sortedUnits.length === 0 ? (
+                <div className="col-span-2 text-center py-4 text-gray-400 text-xs">
+                  No quantities to display
+                </div>
+              ) : (
+                sortedUnits.map((unit) => {
+                  const value = summary?.quantities[unit] || 0;
+                  return (
+                    <div
+                      key={unit}
+                      className="flex flex-col border border-gray-100 rounded-lg px-3 py-2 bg-gray-50/60"
+                    >
+                      <span className="text-xs text-gray-500 capitalize">
+                        {unit === 'l' || unit === 'litre' ? 'Litre' : 
+                         unit === 'gm' || unit === 'g' ? 'Gram' : 
+                         unit.charAt(0).toUpperCase() + unit.slice(1)}
+                      </span>
+                      <span className="text-base font-semibold text-gray-800">
+                        {formatQuantity(value, unit)}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
-          {/* Daily timeline */}
+          {/* ✅ UPDATED: Daily timeline with reversed order and dynamic units */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 xl:col-span-2 overflow-hidden">
             <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-purple-500" />
-              Daily Timeline (Sales & Payments)
+              Daily Timeline (Latest First)
             </h2>
             <div className="overflow-auto max-h-72 text-xs">
               <table className="min-w-full text-left">
@@ -645,22 +710,20 @@ export default function SalesPage() {
                     <th className="px-3 py-2 font-semibold text-gray-500">
                       Bank/UPI
                     </th>
-                    <th className="px-3 py-2 font-semibold text-gray-500">
-                      Box
-                    </th>
-                    <th className="px-3 py-2 font-semibold text-gray-500">
-                      Kg
-                    </th>
-                    <th className="px-3 py-2 font-semibold text-gray-500">
-                      Litre
-                    </th>
+                    {dailyDisplayUnits.map(unit => (
+                      <th key={unit} className="px-3 py-2 font-semibold text-gray-500 capitalize">
+                        {unit === 'l' || unit === 'litre' ? 'Litre' : 
+                         unit === 'gm' || unit === 'g' ? 'Gram' : 
+                         unit.charAt(0).toUpperCase() + unit.slice(1)}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {summaryLoading && (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={5 + dailyDisplayUnits.length}
                         className="px-3 py-4 text-center text-gray-400"
                       >
                         Loading...
@@ -670,7 +733,7 @@ export default function SalesPage() {
                   {!summaryLoading && summary && summary.daily.length === 0 && (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={5 + dailyDisplayUnits.length}
                         className="px-3 py-4 text-center text-gray-400"
                       >
                         No data in this range
@@ -694,9 +757,11 @@ export default function SalesPage() {
                         <td className="px-3 py-2">
                           {formatINR(d.bankReceived)}
                         </td>
-                        <td className="px-3 py-2">{d.quantities.box}</td>
-                        <td className="px-3 py-2">{d.quantities.kg}</td>
-                        <td className="px-3 py-2">{d.quantities.litre}</td>
+                        {dailyDisplayUnits.map(unit => (
+                          <td key={unit} className="px-3 py-2">
+                            {Math.round(d.quantities[unit] || 0)}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                 </tbody>
@@ -835,7 +900,9 @@ export default function SalesPage() {
                 <div className="flex justify-end mb-2">
                   <select
                     value={ledgerSortMode}
-                    onChange={(e) => setLedgerSortMode(e.target.value as LedgerSortMode)}
+                    onChange={(e) =>
+                      setLedgerSortMode(e.target.value as LedgerSortMode)
+                    }
                     className="border border-gray-300 rounded-md px-2 py-1 text-xs text-gray-700 bg-white"
                   >
                     <option value="date-desc">Date: Latest first</option>
@@ -912,9 +979,7 @@ export default function SalesPage() {
                               </span>
                             )}
                           </td>
-                          <td className="px-3 py-2">
-                            {e.method || "-"}
-                          </td>
+                          <td className="px-3 py-2">{e.method || "-"}</td>
                           <td className="px-3 py-2 text-red-600">
                             {e.debit ? formatINR(e.debit) : "-"}
                           </td>

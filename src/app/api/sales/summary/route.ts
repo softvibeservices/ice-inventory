@@ -1,4 +1,4 @@
-// src\app\api\sales\summary\route.ts
+// src/app/api/sales/summary/route.ts
 
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
@@ -6,14 +6,9 @@ import Order from "@/models/Order";
 import Customer from "@/models/Customer";
 import User from "@/models/User";
 
-
+// ✅ CHANGED: Use Record<string, number> for dynamic units
 interface QuantityTotals {
-  piece: number;
-  box: number;
-  kg: number;
-  litre: number;
-  gm: number;
-  ml: number;
+  [unit: string]: number;
 }
 
 interface DailyStat {
@@ -49,14 +44,19 @@ function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
 }
 
 function initQuantities(): QuantityTotals {
-  return {
-    piece: 0,
-    box: 0,
-    kg: 0,
-    litre: 0,
-    gm: 0,
-    ml: 0,
-  };
+  return {};
+}
+
+// ✅ NEW: Helper to add quantities dynamically
+function addQuantities(target: QuantityTotals, source: any) {
+  if (!source || typeof source !== 'object') return;
+  
+  Object.entries(source).forEach(([unit, value]) => {
+    const numValue = Number(value || 0);
+    if (!isNaN(numValue) && numValue > 0) {
+      target[unit] = (target[unit] || 0) + numValue;
+    }
+  });
 }
 
 export async function GET(req: Request) {
@@ -65,19 +65,18 @@ export async function GET(req: Request) {
     const userId = searchParams.get("userId");
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
-    
-    // 🚫 Prevent manager access
-const user = await User.findById(userId).select("role");
-if (!user) {
-  return NextResponse.json({ error: "User not found" }, { status: 404 });
-}
-if (user.role === "manager") {
-  return NextResponse.json(
-    { error: "Access denied: Managers not allowed" },
-    { status: 403 }
-  );
-}
 
+    // 🚫 Prevent manager access
+    const user = await User.findById(userId).select("role");
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    if (user.role === "manager") {
+      return NextResponse.json(
+        { error: "Access denied: Managers not allowed" },
+        { status: 403 }
+      );
+    }
 
     if (!userId) {
       return NextResponse.json(
@@ -91,9 +90,24 @@ if (user.role === "manager") {
 
     await connectDB();
 
-    // 1) Fetch orders for this user in the date range (by createdAt),
-    //    excluding discarded orders.
-    const orderMatch: any = { userId };
+    // ✅ CRITICAL CHANGE: Only count orders that are BOTH delivered AND settled
+    // Excluding discarded orders and debt-only orders
+    const orderMatch: any = { 
+      userId,
+      discardedAt: null,
+      deliveryStatus: "Delivered", // ✅ Must be delivered
+      status: "settled", // ✅ Must be settled
+    };
+
+    // ✅ Also exclude pure debt orders (no actual payment received)
+    orderMatch.$or = [
+      { settlementMethod: "Cash" },
+      { settlementMethod: "Bank/UPI" },
+      { 
+        settlementMethod: "Debt",
+        settlementAmount: { $gt: 0 } // Only debt orders with some payment
+      }
+    ];
 
     if (from || to) {
       orderMatch.createdAt = {};
@@ -106,9 +120,6 @@ if (user.role === "manager") {
         orderMatch.createdAt.$lt = toLimit; // half-open [from, to+1day)
       }
     }
-
-    // ignore discarded orders in analytics
-    orderMatch.discardedAt = null;
 
     const orders = await Order.find(orderMatch).lean();
 
@@ -152,22 +163,10 @@ if (user.role === "manager") {
       dailyMap[key].totalSales += orderTotal;
       dailyMap[key].totalOrders += 1;
 
+      // ✅ CHANGED: Add all quantities from quantitySummary dynamically
       const q = raw.quantitySummary || {};
-      const dayQ = dailyMap[key].quantities;
-
-      dayQ.piece += Number(q.piece || 0);
-      dayQ.box += Number(q.box || 0);
-      dayQ.kg += Number(q.kg || 0);
-      dayQ.litre += Number(q.litre || 0);
-      dayQ.gm += Number(q.gm || 0);
-      dayQ.ml += Number(q.ml || 0);
-
-      quantities.piece += Number(q.piece || 0);
-      quantities.box += Number(q.box || 0);
-      quantities.kg += Number(q.kg || 0);
-      quantities.litre += Number(q.litre || 0);
-      quantities.gm += Number(q.gm || 0);
-      quantities.ml += Number(q.ml || 0);
+      addQuantities(dailyMap[key].quantities, q);
+      addQuantities(quantities, q);
     }
 
     // 3) Aggregate payments by method from settlementHistory (respecting date range if provided)
@@ -221,9 +220,21 @@ if (user.role === "manager") {
     const netReceivable = overallDebit - overallCredit;
     const outstandingDebt = netReceivable < 0 ? 0 : netReceivable;
 
+    // ✅ CHANGED: Sort daily data in DESCENDING order (latest first)
     const daily = Object.values(dailyMap).sort((a, b) =>
-      a.date.localeCompare(b.date)
+      b.date.localeCompare(a.date) // ✅ Reversed: b.date - a.date for latest first
     );
+
+    // ✅ Round all quantity values
+    Object.keys(quantities).forEach(unit => {
+      quantities[unit] = Math.round(quantities[unit]);
+    });
+
+    daily.forEach(day => {
+      Object.keys(day.quantities).forEach(unit => {
+        day.quantities[unit] = Math.round(day.quantities[unit]);
+      });
+    });
 
     return NextResponse.json({
       totalSales,
