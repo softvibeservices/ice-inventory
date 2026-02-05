@@ -21,6 +21,7 @@ type OrderListProps = {
     onOpenSettle: (order: Order) => void;
     onOpenDebtSettle: (order: Order) => void;
     onOpenView: (order: Order) => void;
+    onEdit: (order: Order) => void; // ✅ NEW
     unsettledOrders: Order[];
     settledOrders: Order[];
     debtOrders: Order[];
@@ -42,6 +43,7 @@ export default function OrderList({
     onOpenSettle,
     onOpenDebtSettle,
     onOpenView,
+    onEdit, // ✅ NEW
     unsettledOrders,
     settledOrders,
     debtOrders,
@@ -133,7 +135,7 @@ export default function OrderList({
     const totalPages = Math.ceil(displayOrders.length / ITEMS_PER_PAGE);
     const paginatedOrders = useMemo(() => {
         if (viewAll) return displayOrders;
-        
+
         const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
         const endIndex = startIndex + ITEMS_PER_PAGE;
         return displayOrders.slice(startIndex, endIndex);
@@ -417,6 +419,7 @@ export default function OrderList({
                                     onOpenSettle={onOpenSettle}
                                     onOpenDebtSettle={onOpenDebtSettle}
                                     onOpenView={onOpenView}
+                                    onEdit={onEdit} // ✅ NEW
                                 />
                             </div>
                         );

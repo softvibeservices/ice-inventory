@@ -25,21 +25,32 @@ export default function BulkUploadModal({
   const [categories, setCategories] = useState<string[]>([]);
   const [units, setUnits] = useState<string[]>([]);
   const [loadingSettings, setLoadingSettings] = useState(true);
+  const [existingProducts, setExistingProducts] = useState<any[]>([]); // ✅ NEW: Store existing products
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch categories and units from backend
+  // ✅ NEW: Fetch existing products and settings
   useEffect(() => {
-    const fetchSettings = async () => {
+    const fetchData = async () => {
       try {
         setLoadingSettings(true);
-        const res = await fetch(`/api/user-settings?userId=${encodeURIComponent(userId)}`);
-        const data = await res.json();
         
-        if (res.ok) {
-          setCategories(data.categories || []);
-          setUnits(data.units || []);
+        // Fetch settings
+        const settingsRes = await fetch(`/api/user-settings?userId=${encodeURIComponent(userId)}`);
+        const settingsData = await settingsRes.json();
+        
+        if (settingsRes.ok) {
+          setCategories(settingsData.categories || []);
+          setUnits(settingsData.units || []);
         } else {
           toast.error("Failed to load categories and units");
+        }
+
+        // ✅ NEW: Fetch existing products for duplicate detection
+        const productsRes = await fetch(`/api/products?userId=${encodeURIComponent(userId)}`);
+        const productsData = await productsRes.json();
+        
+        if (productsRes.ok) {
+          setExistingProducts(Array.isArray(productsData) ? productsData : []);
         }
       } catch (error) {
         toast.error("Failed to load settings");
@@ -49,7 +60,7 @@ export default function BulkUploadModal({
     };
 
     if (userId) {
-      fetchSettings();
+      fetchData();
     }
   }, [userId]);
 
@@ -119,6 +130,27 @@ export default function BulkUploadModal({
     reader.readAsBinaryString(file);
   };
 
+  // ✅ NEW: Check if product is duplicate
+  const isDuplicateProduct = (name: string, category: string, unit: string, packQuantity: string): boolean => {
+    const normalizedName = name.trim().toLowerCase();
+    const normalizedCategory = category.trim().toLowerCase();
+    const normalizedUnit = unit.trim().toLowerCase();
+    const normalizedPackQty = packQuantity.trim();
+
+    return existingProducts.some((existing) => {
+      const existingPackQty = existing.packQuantity !== undefined && existing.packQuantity !== null 
+        ? String(existing.packQuantity) 
+        : "";
+      
+      return (
+        existing.name.trim().toLowerCase() === normalizedName &&
+        (existing.category || "").trim().toLowerCase() === normalizedCategory &&
+        existing.unit.trim().toLowerCase() === normalizedUnit &&
+        existingPackQty === normalizedPackQty
+      );
+    });
+  };
+
   const processUploadedData = (data: any[]) => {
     try {
       const parsedProducts = data.map((row: any, index: number) => {
@@ -163,6 +195,10 @@ export default function BulkUploadModal({
           notes,
         };
 
+        // ✅ NEW: Check for duplicates
+        const isDuplicate = isDuplicateProduct(name, matchedCategory, matchedUnit, packQuantity);
+        product.isDuplicate = isDuplicate;
+
         // Validate
         product.errors = validateProduct(product);
 
@@ -170,7 +206,16 @@ export default function BulkUploadModal({
       });
 
       setProducts(parsedProducts);
-      toast.success(`${parsedProducts.length} products loaded successfully! ✅`);
+      
+      // ✅ NEW: Show warning if duplicates found
+      const duplicateCount = parsedProducts.filter(p => p.isDuplicate).length;
+      if (duplicateCount > 0) {
+        toast.error(`⚠️ ${duplicateCount} duplicate product(s) found! Please review and remove them.`, {
+          duration: 5000,
+        });
+      } else {
+        toast.success(`${parsedProducts.length} products loaded successfully! ✅`);
+      }
     } catch (error) {
       console.error("Data processing error:", error);
       toast.error("Failed to process file data");
@@ -214,6 +259,18 @@ export default function BulkUploadModal({
     setProducts((prev) => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
+      
+      // ✅ NEW: Re-check for duplicates when relevant fields change
+      if (field === "name" || field === "category" || field === "unit" || field === "packQuantity") {
+        const isDuplicate = isDuplicateProduct(
+          field === "name" ? value : updated[index].name,
+          field === "category" ? value : updated[index].category,
+          field === "unit" ? value : updated[index].unit,
+          field === "packQuantity" ? value : updated[index].packQuantity
+        );
+        updated[index].isDuplicate = isDuplicate;
+      }
+      
       // Re-validate
       updated[index].errors = validateProduct(updated[index]);
       return updated;
@@ -225,6 +282,16 @@ export default function BulkUploadModal({
   };
 
   const handleSaveAll = async () => {
+    // ✅ NEW: Check for duplicates before saving
+    const duplicateProducts = products.filter(p => p.isDuplicate);
+    if (duplicateProducts.length > 0) {
+      toast.error(
+        `Cannot save: ${duplicateProducts.length} duplicate product(s) found. Please remove them first.`,
+        { duration: 5000 }
+      );
+      return;
+    }
+
     // Final validation
     const validProducts = products.filter(
       (p) => !p.errors || Object.keys(p.errors).length === 0
@@ -249,7 +316,7 @@ export default function BulkUploadModal({
       const payload = validProducts.map((p) => ({
         userId,
         name: p.name,
-        category: p.category, // ✅ Now required
+        category: p.category,
         unit: p.unit,
         packQuantity: p.packQuantity ? Number(p.packQuantity) : undefined,
         packUnit: p.packUnit || undefined,
@@ -288,6 +355,9 @@ export default function BulkUploadModal({
   const errorCount = products.filter(
     (p) => p.errors && Object.keys(p.errors).length > 0
   ).length;
+
+  // ✅ NEW: Count duplicates
+  const duplicateCount = products.filter(p => p.isDuplicate).length;
 
   if (loadingSettings) {
     return (
@@ -363,14 +433,23 @@ export default function BulkUploadModal({
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-6 h-6 text-green-600" />
                     <span className="text-base font-bold text-gray-900">
-                      {products.length - errorCount} Valid
+                      {products.length - errorCount - duplicateCount} Valid
                     </span>
                   </div>
+                  {/* ✅ NEW: Duplicate Count Display */}
+                  {duplicateCount > 0 && (
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-6 h-6 text-orange-600" />
+                      <span className="text-base font-bold text-orange-700">
+                        {duplicateCount} Duplicate{duplicateCount > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  )}
                   {errorCount > 0 && (
                     <div className="flex items-center gap-2">
                       <AlertCircle className="w-6 h-6 text-red-600" />
                       <span className="text-base font-bold text-red-700">
-                        {errorCount} Errors
+                        {errorCount} Error{errorCount > 1 ? 's' : ''}
                       </span>
                     </div>
                   )}
@@ -410,9 +489,14 @@ export default function BulkUploadModal({
         {products.length > 0 && (
           <div className="flex items-center justify-between px-6 py-5 border-t border-gray-200 bg-gray-50">
             <div className="text-base font-medium">
-              {errorCount > 0 ? (
+              {/* ✅ NEW: Updated footer message to include duplicates */}
+              {duplicateCount > 0 ? (
+                <span className="text-orange-700">
+                  ⚠️ Remove {duplicateCount} duplicate product{duplicateCount > 1 ? 's' : ''} before saving
+                </span>
+              ) : errorCount > 0 ? (
                 <span className="text-red-700">
-                  ❌ Fix {errorCount} product{errorCount > 1 ? "s" : ""} before saving
+                  ❌ Fix {errorCount} product{errorCount > 1 ? 's' : ''} before saving
                 </span>
               ) : (
                 <span className="text-green-700 flex items-center gap-2">
@@ -431,10 +515,10 @@ export default function BulkUploadModal({
               </button>
               <button
                 onClick={handleSaveAll}
-                disabled={saving || errorCount > 0}
+                disabled={saving || errorCount > 0 || duplicateCount > 0}
                 className="px-8 py-2.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               >
-                {saving ? "Saving..." : `Save All (${products.length})`}
+                {saving ? "Saving..." : `Save All (${products.length - duplicateCount - errorCount})`}
               </button>
             </div>
           </div>

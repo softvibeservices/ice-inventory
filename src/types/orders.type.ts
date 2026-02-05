@@ -1,13 +1,13 @@
 // src/types/orders.type.ts
 
-// ✅ CHANGED: Dynamic quantities (not hardcoded units)
+// ✅ Dynamic quantities (not hardcoded units)
 export type QuantitySummary = Record<string, number>;
 
 export type OrderStatus = "Unsettled" | "settled" | "Debt";
 
 export type SettlementMethod = "Cash" | "Bank/UPI" | "Debt";
 
-// ✅ CHANGED: unit is now string (not enum)
+// ✅ unit is now string (not enum)
 export type OrderLineItem = {
   productId?: string;
   productName: string;
@@ -50,6 +50,7 @@ export type Order = {
 
   remarks?: string;
   createdAt?: string;
+  updatedAt?: string; // ✅ NEW: Added updatedAt field
 };
 
 export type CustomerLite = {

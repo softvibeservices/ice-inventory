@@ -1,5 +1,4 @@
 // src/app/dashboard/profile/page.tsx
-
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -13,6 +12,7 @@ import BasicInformationComponent from "./BasicInformationComponent";
 import BillingDetailsComponent from "./BillingDetailsComponent";
 import BankDetailsComponent from "./BankDetailsComponent";
 import ProductSettingsComponent from "./ProductSettingsComponent";
+import SerialNumberComponent from "./SerialNumberComponent";
 import type {
   ActiveTab,
   UserProfile,
@@ -33,9 +33,6 @@ export default function ProfilePage() {
     otp: "",
   });
   const [otpSent, setOtpSent] = useState<boolean>(false);
-  const [showResetSerialConfirm, setShowResetSerialConfirm] =
-    useState<boolean>(false);
-  const [resetConfirmText, setResetConfirmText] = useState<string>("");
   const [sellerId, setSellerId] = useState<string | null>(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
@@ -207,7 +204,7 @@ export default function ProfilePage() {
   return (
     <div className="flex flex-col min-h-screen bg-gray-100">
       <DashboardNavbar />
-      
+
       {/* Mobile Menu Button */}
       <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3">
         <button
@@ -253,15 +250,15 @@ export default function ProfilePage() {
             🏦 Bank Details
           </button>
           <button
-  onClick={() => setActiveTab("product-settings")}
-  className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-    activeTab === "product-settings"
-      ? "bg-teal-600 text-white"
-      : "hover:bg-gray-100 text-gray-700"
-  }`}
->
-  ⚙️ Product Settings
-</button>
+            onClick={() => setActiveTab("product-settings")}
+            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+              activeTab === "product-settings"
+                ? "bg-teal-600 text-white"
+                : "hover:bg-gray-100 text-gray-700"
+            }`}
+          >
+            ⚙️ Product Settings
+          </button>
           <button
             onClick={() => setActiveTab("delivery")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
@@ -292,15 +289,8 @@ export default function ProfilePage() {
           >
             <Lock size={18} /> Change Password
           </button>
-          <button
-            onClick={() => {
-              setResetConfirmText("");
-              setShowResetSerialConfirm(true);
-            }}
-            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium hover:bg-gray-100 text-gray-700 transition-colors"
-          >
-            🔁 Reset Bill Serial Number
-          </button>
+          {/* ✅ NEW: Replace reset serial button */}
+          <SerialNumberComponent userId={user._id} />
           <button
             onClick={() => setActiveTab("logout")}
             className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
@@ -316,7 +306,7 @@ export default function ProfilePage() {
         {/* Sidebar - Mobile (Dropdown) */}
         {isMobileSidebarOpen && (
           <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setIsMobileSidebarOpen(false)}>
-            <aside 
+            <aside
               className="absolute top-0 left-0 w-64 h-full bg-white shadow-lg p-4 space-y-2 overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
@@ -326,7 +316,7 @@ export default function ProfilePage() {
                   <X size={20} className="text-gray-600" />
                 </button>
               </div>
-              
+
               <button
                 onClick={() => handleTabChange("basic")}
                 className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
@@ -358,15 +348,15 @@ export default function ProfilePage() {
                 🏦 Bank Details
               </button>
               <button
-  onClick={() => handleTabChange("product-settings")}
-  className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-    activeTab === "product-settings"
-      ? "bg-teal-600 text-white"
-      : "hover:bg-gray-100 text-gray-700"
-  }`}
->
-  ⚙️ Product Settings
-</button>
+                onClick={() => handleTabChange("product-settings")}
+                className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+                  activeTab === "product-settings"
+                    ? "bg-teal-600 text-white"
+                    : "hover:bg-gray-100 text-gray-700"
+                }`}
+              >
+                ⚙️ Product Settings
+              </button>
               <button
                 onClick={() => handleTabChange("delivery")}
                 className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
@@ -397,16 +387,8 @@ export default function ProfilePage() {
               >
                 <Lock size={18} /> Change Password
               </button>
-              <button
-                onClick={() => {
-                  setResetConfirmText("");
-                  setShowResetSerialConfirm(true);
-                  setIsMobileSidebarOpen(false);
-                }}
-                className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium hover:bg-gray-100 text-gray-700 transition-colors"
-              >
-                🔁 Reset Bill Serial Number
-              </button>
+              {/* ✅ NEW: Replace reset serial button */}
+              <SerialNumberComponent userId={user._id} />
               <button
                 onClick={() => handleTabChange("logout")}
                 className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
@@ -444,8 +426,8 @@ export default function ProfilePage() {
             <BankDetailsComponent sellerId={sellerId} />
           )}
           {activeTab === "product-settings" && (
-  <ProductSettingsComponent userId={user._id} />
-)}
+            <ProductSettingsComponent userId={user._id} />
+          )}
 
           {/* DELIVERY PARTNERS */}
           {activeTab === "delivery" && (
@@ -564,59 +546,6 @@ export default function ProfilePage() {
           )}
         </section>
       </main>
-
-      {/* Reset Serial Confirmation Dialog */}
-      {showResetSerialConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-4 sm:p-6">
-            <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-              Reset Bill Serial Number
-            </h2>
-            <p className="text-xs sm:text-sm text-gray-700 mb-3">
-              This will <strong>completely reset</strong> the bill serial
-              number. The next bill will start from <strong>1</strong>.
-              <br />
-              <br />
-              To confirm, type <strong>CONFIRM</strong> below and press Enter.
-            </p>
-            <input
-              autoFocus
-              value={resetConfirmText}
-              onChange={(e) => setResetConfirmText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && resetConfirmText === "CONFIRM") {
-                  localStorage.setItem("reset-billing-serial", "1");
-                  toast.success("Serial number reset confirmed ✅");
-                  setShowResetSerialConfirm(false);
-                  router.push("/dashboard/billing");
-                }
-              }}
-              placeholder="Type CONFIRM"
-              className="w-full border rounded-lg p-2 sm:p-3 text-gray-900 mb-4 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
-            />
-            <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
-              <button
-                onClick={() => setShowResetSerialConfirm(false)}
-                className="w-full sm:w-auto px-4 py-2 rounded border text-gray-700 hover:bg-gray-50 transition-colors order-2 sm:order-1"
-              >
-                Cancel
-              </button>
-              <button
-                disabled={resetConfirmText !== "CONFIRM"}
-                onClick={() => {
-                  localStorage.setItem("reset-billing-serial", "1");
-                  toast.success("Serial number reset confirmed ✅");
-                  setShowResetSerialConfirm(false);
-                  router.push("/dashboard/billing");
-                }}
-                className="w-full sm:w-auto px-4 py-2 rounded bg-red-600 text-white disabled:opacity-50 hover:bg-red-700 transition-colors order-1 sm:order-2"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <Footer />
     </div>

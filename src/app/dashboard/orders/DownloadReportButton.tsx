@@ -1,7 +1,7 @@
 "use client";
 
 import { Order, CustomerLite, QuantitySummary } from "@/types/orders.type";
-import { jsPDF } from "jspdf";
+import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 type DownloadReportButtonProps = {
@@ -49,10 +49,9 @@ export default function DownloadReportButton({
 
   const formatQtySummary = (q?: QuantitySummary) => {
     if (!q) return "-";
-    
+
     const parts: string[] = [];
-    
-    // ✅ Dynamic iteration
+
     Object.entries(q).forEach(([unit, qty]) => {
       if (qty > 0) {
         if (unit === "box") {
@@ -68,17 +67,16 @@ export default function DownloadReportButton({
         } else if (unit === "ml") {
           parts.push(`${qty} ml`);
         } else {
-          // ✅ Custom units
           parts.push(`${qty} ${unit}`);
         }
       }
     });
-    
+
     return parts.length ? parts.join(", ") : "-";
   };
 
   const addPageNumbers = (doc: jsPDF) => {
-    const pageCount = doc.getNumberOfPages();
+    const pageCount = doc.internal.getNumberOfPages();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 

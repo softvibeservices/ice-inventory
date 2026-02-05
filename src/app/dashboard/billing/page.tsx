@@ -1,5 +1,4 @@
-// ice-inventory\src\app\dashboard\billing\page.tsx
-
+// src/app/dashboard/billing/page.tsx
 "use client";
 import { useEffect, useState, useRef } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
@@ -78,15 +77,23 @@ type QuantitySummary = {
 };
 
 export default function BillingPage() {
+  // At the top, add new state for editing mode
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingBillId, setEditingBillId] = useState<string | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [hasLoadedEditData, setHasLoadedEditData] = useState(false);
+  // ✅ NEW: Add state for database serial number
+  const [dbSerialNumber, setDbSerialNumber] = useState<string | null>(null);
+
   // suggestion control
   const [customerSuggestionIndex, setCustomerSuggestionIndex] = useState(0);
-  const [shippingSuggestionIndex, setShippingSuggestionIndex] = useState(0); // ✅ NEW
+  const [shippingSuggestionIndex, setShippingSuggestionIndex] = useState(0);
   const [productSuggestionIndex, setProductSuggestionIndex] = useState<number[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
-  // ✅ Control when suggestions appear
+  // Control when suggestions appear
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
-  const [showShippingSuggestions, setShowShippingSuggestions] = useState(false); // ✅ NEW
+  const [showShippingSuggestions, setShowShippingSuggestions] = useState(false);
 
   // Product suggestion dropdown (UI based)
   const [activeProductRow, setActiveProductRow] = useState<number | null>(null);
@@ -107,9 +114,9 @@ export default function BillingPage() {
   const [shippingCustomer, setShippingCustomer] = useState<Customer | null>(null);
   const [sameAsBilling, setSameAsBilling] = useState(false);
   const [customerInput, setCustomerInput] = useState<string>("");
-  const [shippingInput, setShippingInput] = useState<string>(""); // ✅ NEW
+  const [shippingInput, setShippingInput] = useState<string>("");
 
-  // ✅ Refs for focus control
+  // Refs for focus control
   const shippingInputRef = useRef<HTMLInputElement | null>(null);
   const billingInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -147,89 +154,217 @@ export default function BillingPage() {
 
   const pdfExportRef = useRef<any>(null);
 
-  // ===== Helpers =====
-  const safeJson = async (res: Response) => {
+  // ✅ NEW: Helper function to fetch serial from database
+  const fetchSerialFromDatabase = async (uid: string) => {
     try {
-      return await res.json();
-    } catch {
+      const res = await fetch(`/api/profile?userId=${encodeURIComponent(uid)}`);
+      const userData = await res.json();
+
+      if (userData && userData.lastSerialNumber) {
+        return userData.lastSerialNumber;
+      }
+      return null;
+    } catch (err) {
+      console.error("Error fetching serial from DB:", err);
       return null;
     }
   };
 
-  const generateSerial = () => {
+  // ✅ NEW: Updated generateSerial function
+  const generateSerial = async (uid: string) => {
     const now = new Date();
     const month = String(now.getMonth() + 1).padStart(2, "0");
+
+    // ✅ NEW: Try to get serial from database first
+    const dbSerial = await fetchSerialFromDatabase(uid);
+
+    if (dbSerial && dbSerial.startsWith(month)) {
+      // Database has a serial for this month - use it
+      const lastFourDigits = dbSerial.substring(2);
+      const nextNumber = parseInt(lastFourDigits, 10) + 1;
+
+      if (nextNumber > 9999) {
+        // Reset to 1 if exceeds 9999
+        const newSerial = `${month}0001`;
+        return newSerial;
+      }
+
+      const paddedNext = String(nextNumber).padStart(4, "0");
+      const newSerial = `${month}${paddedNext}`;
+      return newSerial;
+    }
+
+    // ✅ FALLBACK: If no DB serial or month changed, use localStorage
     const year = now.getFullYear();
     const key = `serial-${month}-${year}`;
-    const shouldReset =
-      localStorage.getItem("reset-billing-serial") === "1";
 
-    let last = shouldReset ? 0 : Number(localStorage.getItem(key) || "0");
-
+    let last = Number(localStorage.getItem(key) || "0");
     last = last + 1;
     if (last > 9999) last = 1;
 
     const padded = String(last).padStart(4, "0");
     localStorage.setItem(key, padded);
 
-    // 🔁 clear reset flag AFTER use
-    if (shouldReset) {
-      localStorage.removeItem("reset-billing-serial");
-      sessionStorage.removeItem("billing-serial");
-    }
-
     return `${month}${padded}`;
   };
 
-  const updateDateToToday = () => {
-    const now = new Date();
-    const formatted = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
-    setDate(formatted);
-  };
+  // ✅ NEW: Load sticky note data from sessionStorage
+  useEffect(() => {
+    // Only run if we have userId and data is loaded
+    if (!userId || customers.length === 0 || products.length === 0) return;
 
-  const resetBillForm = () => {
-    // reset all fields after saving
-    setBillingCustomer(null);
-    setShippingCustomer(null);
-    setSameAsBilling(false);
-    setCustomerInput("");
-    setShippingInput(""); // ✅ NEW
-    setItems(Array.from({ length: 15 }, blankItem));
-    setDiscountPercent(0);
-    setRemarks("");
-    const newSerial = generateSerial();
-    setSerialNo(newSerial);
+    const stickyNoteData = sessionStorage.getItem("billFromStickyNote");
 
-    try {
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("billing-serial", newSerial);
+    if (stickyNoteData) {
+      try {
+        const data = JSON.parse(stickyNoteData);
+
+        // Clear sessionStorage immediately
+        sessionStorage.removeItem("billFromStickyNote");
+
+        // Find customer by ID or match by name
+        const matchedCustomer = customers.find(
+          c => c._id === data.customerId ||
+          (c.name.toLowerCase() === data.customerName.toLowerCase() &&
+           (c as any).shopName?.toLowerCase() === data.shopName.toLowerCase())
+        );
+
+        if (matchedCustomer) {
+          setBillingCustomer(matchedCustomer);
+          setCustomerInput((matchedCustomer as any).shopName || matchedCustomer.name);
+        } else {
+          // Create a temporary customer object if not found
+          const tempCustomer: Customer = {
+            _id: data.customerId || "",
+            name: data.customerName,
+            shopName: data.shopName,
+          } as Customer;
+          setBillingCustomer(tempCustomer);
+          setCustomerInput(data.shopName || data.customerName);
+        }
+
+        // Set shipping same as billing
+        setSameAsBilling(true);
+
+        // Set line items
+        if (data.items && Array.isArray(data.items)) {
+          const formattedItems: BillItem[] = data.items.map((item: any) => ({
+            productName: item.productName || "",
+            quantity: item.quantity || 0,
+            unit: item.unit || "box",
+            price: item.price || 0,
+            total: item.total || 0,
+            free: item.free || false,
+          }));
+
+          // Fill with blank items to reach 15
+          while (formattedItems.length < 15) {
+            formattedItems.push({
+              productName: "",
+              quantity: 0,
+              unit: "",
+              price: 0,
+              total: 0,
+              free: false,
+            });
+          }
+
+          setItems(formattedItems);
+        }
+
+        toast.success("Sticky note data loaded! Complete the bill details.");
+
+      } catch (err) {
+        console.error("Error loading sticky note data:", err);
+        toast.error("Failed to load sticky note data");
+        sessionStorage.removeItem("billFromStickyNote");
       }
-    } catch {
-      // ignore
     }
-  };
+  }, [userId, customers, products]);
 
-  const focusQuantity = (index: number) => {
-    const el = quantityRefs.current[index];
-    if (el) el.focus();
-  };
+  // ✅ FIXED: Load bill data if editing - only run once when all data is ready
+  useEffect(() => {
+    // Skip if we've already loaded the editing data
+    if (hasLoadedEditData) return;
 
-  const focusProduct = (index: number) => {
-    const el = productRefs.current[index];
-    if (el) el.focus();
-  };
+    // Skip if we don't have the required data yet
+    if (!userId || customers.length === 0 || products.length === 0) return;
 
-  // Product suggestion helper
-  const getFilteredProducts = (query: string) => {
-    if (!query.trim()) return [];
-    return products
-      .filter((p) =>
-        p.name.toLowerCase().includes(query.toLowerCase())
-      )
-      .slice(0, 8);
-  };
+    const checkForEditMode = async () => {
+      try {
+        const editingData = sessionStorage.getItem("editingOrder");
+        if (!editingData) return;
 
-  // ===== Load Data =====
+        // ✅ Clear sessionStorage IMMEDIATELY and set flag to prevent re-runs
+        sessionStorage.removeItem("editingOrder");
+        setHasLoadedEditData(true);
+
+        const { orderId, _id } = JSON.parse(editingData);
+
+        // Fetch the bill data
+        const res = await fetch(`/api/bills?userId=${userId}&orderId=${orderId}`);
+        const billData = await res.json();
+
+        if (!res.ok || billData.error) {
+          throw new Error(billData.error || "Failed to load bill");
+        }
+
+        // Set editing mode
+        setIsEditMode(true);
+        setEditingBillId(billData._id);
+        setEditingOrderId(orderId);
+
+        // Populate form with bill data
+        setSerialNo(billData.serialNumber);
+        setDate(billData.billDate);
+        setDiscountPercent(billData.discountPercentage || 0);
+        setRemarks(billData.remarks || "");
+        setSameAsBilling(billData.sameAsBilling);
+
+        // Find and set billing customer
+        const billingCust = customers.find(c => c._id === billData.billingCustomer.customerId);
+        if (billingCust) {
+          setBillingCustomer(billingCust);
+          setCustomerInput(billingCust.shopName || billingCust.name);
+        }
+
+        // Find and set shipping customer
+        if (!billData.sameAsBilling) {
+          const shippingCust = customers.find(c => c._id === billData.shippingCustomer.customerId);
+          if (shippingCust) {
+            setShippingCustomer(shippingCust);
+            setShippingInput(shippingCust.shopName || shippingCust.name);
+          }
+        }
+
+        // Populate items
+        const loadedItems = billData.items.map((item: any) => ({
+          productName: item.productName,
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+          total: item.total,
+          free: item.free,
+        }));
+
+        // Fill with blank items to reach 15
+        while (loadedItems.length < 15) {
+          loadedItems.push(blankItem());
+        }
+
+        setItems(loadedItems);
+
+        toast.success("Bill loaded for editing");
+      } catch (err: any) {
+        console.error("Error loading bill for editing:", err);
+        toast.error("Failed to load bill for editing");
+      }
+    };
+
+    checkForEditMode();
+  }, [userId, customers, products, hasLoadedEditData]);
+
+  // ✅ UPDATED: Initial serial loading in useEffect
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (!stored) {
@@ -298,27 +433,29 @@ export default function BillingPage() {
       .catch(() => { });
 
     // --- Set Serial & Date (persist per tab using sessionStorage) ---
-    try {
-      const resetRequested =
-        localStorage.getItem("reset-billing-serial") === "1";
-
-      if (!resetRequested) {
+    const initializeSerial = async () => {
+      try {
         const existingSerial = sessionStorage.getItem("billing-serial");
         if (existingSerial) {
           setSerialNo(existingSerial);
           return;
         }
+
+        // ✅ NEW: Generate serial using database
+        const newSerial = await generateSerial(uid);
+        setSerialNo(newSerial);
+        sessionStorage.setItem("billing-serial", newSerial);
+      } catch (err) {
+        // Fallback to old method
+        const now = new Date();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const fallbackSerial = `${month}0001`;
+        setSerialNo(fallbackSerial);
+        sessionStorage.setItem("billing-serial", fallbackSerial);
       }
+    };
 
-      const newSerial = generateSerial();
-      setSerialNo(newSerial);
-      sessionStorage.setItem("billing-serial", newSerial);
-
-    } catch {
-      const newSerial = generateSerial();
-      setSerialNo(newSerial);
-    }
-
+    initializeSerial();
     updateDateToToday();
   }, []);
 
@@ -380,7 +517,7 @@ export default function BillingPage() {
       });
   }, [seller]);
 
-  // ✅ Auto-check "Same as Billing" when both customers are the same
+  // Auto-check "Same as Billing" when both customers are the same
   useEffect(() => {
     if (billingCustomer && shippingCustomer) {
       if (billingCustomer._id === shippingCustomer._id) {
@@ -396,6 +533,68 @@ export default function BillingPage() {
       setShippingInput(billingCustomer.shopName || billingCustomer.name || "");
     }
   }, [sameAsBilling, billingCustomer]);
+
+  // ===== Helpers =====
+  const safeJson = async (res: Response) => {
+    try {
+      return await res.json();
+    } catch {
+      return null;
+    }
+  };
+
+  const updateDateToToday = () => {
+    const now = new Date();
+    const formatted = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+    setDate(formatted);
+  };
+
+  // ✅ UPDATED: Reset bill form with database serial
+  const resetBillForm = async () => {
+    // reset all fields after saving
+    setBillingCustomer(null);
+    setShippingCustomer(null);
+    setSameAsBilling(false);
+    setCustomerInput("");
+    setShippingInput("");
+    setItems(Array.from({ length: 15 }, blankItem));
+    setDiscountPercent(0);
+    setRemarks("");
+
+    // ✅ NEW: Generate serial using database
+    if (userId) {
+      const newSerial = await generateSerial(userId);
+      setSerialNo(newSerial);
+
+      try {
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("billing-serial", newSerial);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const focusQuantity = (index: number) => {
+    const el = quantityRefs.current[index];
+    if (el) el.focus();
+  };
+
+  const focusProduct = (index: number) => {
+    const el = productRefs.current[index];
+    if (el) el.focus();
+  };
+
+  // Product suggestion helper
+  const getFilteredProducts = (query: string) => {
+    if (!query.trim()) return [];
+    return products
+      .filter((p) =>
+        p.name.toLowerCase().includes(query.toLowerCase())
+      )
+      .slice(0, 8);
+  };
 
   // ===== Utility helpers based on products =====
   const findProductByName = (name?: string | null) => {
@@ -529,7 +728,7 @@ export default function BillingPage() {
       .includes(customerInput.toLowerCase())
   );
 
-  // ✅ NEW: Shipping suggestions
+  // Shipping suggestions
   const filteredShippingCustomers = customers.filter((c) =>
     (c.shopName || c.name || "")
       .toLowerCase()
@@ -538,10 +737,10 @@ export default function BillingPage() {
 
   const onCustomerInputChange = (val: string) => {
     setCustomerInput(val);
-    
+
     // Show suggestions only when user starts typing
     setShowCustomerSuggestions(val.trim().length > 0);
-    
+
     const cleaned = val.trim().toLowerCase();
     if (!cleaned) {
       setBillingCustomer(null);
@@ -565,18 +764,18 @@ export default function BillingPage() {
     }
   };
 
-  // ✅ NEW: Shipping input change handler
+  // Shipping input change handler
   const onShippingInputChange = (val: string) => {
     setShippingInput(val);
-    
+
     // Show suggestions only when user starts typing
     setShowShippingSuggestions(val.trim().length > 0);
-    
+
     // Uncheck "Same as Billing" if user types in shipping
     if (sameAsBilling && val !== customerInput) {
       setSameAsBilling(false);
     }
-    
+
     const cleaned = val.trim().toLowerCase();
     if (!cleaned) {
       setShippingCustomer(null);
@@ -607,7 +806,7 @@ export default function BillingPage() {
       setBillingCustomer(selected);
       setCustomerInput(selected.shopName || selected.name || "");
       setShowCustomerSuggestions(false);
-      
+
       // Smart focus handling based on "Same as Billing" checkbox
       setTimeout(() => {
         if (!sameAsBilling) {
@@ -621,14 +820,14 @@ export default function BillingPage() {
     }
   };
 
-  // ✅ NEW: Handle Enter key on shipping customer
+  // Handle Enter key on shipping customer
   const handleShippingCustomerEnter = () => {
     const selected = filteredShippingCustomers[shippingSuggestionIndex];
     if (selected) {
       setShippingCustomer(selected);
       setShippingInput(selected.shopName || selected.name || "");
       setShowShippingSuggestions(false);
-      
+
       // Move to first product row
       setTimeout(() => focusProduct(0), 0);
     }
@@ -677,7 +876,7 @@ export default function BillingPage() {
     });
   };
 
-  // ===== Helper: basic validation before we open dialog / save =====
+  // Helper: basic validation before we open dialog / save
   const validateBeforeSave = () => {
     if (!billingCustomer || !billingCustomer.name?.trim()) {
       toast.error("Please select a Billing customer before saving bill.");
@@ -709,125 +908,161 @@ export default function BillingPage() {
 
   const handlePrepareBillClick = () => {
     if (!validateBeforeSave()) return;
+    toast.success("Bill is ready! Click OK to save.", { duration: 2000 });
     setShowConfirm(true);
   };
 
-  // ===== Save Order + stock + customer debit =====
-  const confirmSaveBill = async () => {
-    if (!validateBeforeSave()) {
-      setShowConfirm(false);
-      return;
-    }
+// ✅ FINAL FIX: Use nextSerialNumber from backend response
+// This completely eliminates race conditions
+// Replace your confirmSaveBill function with this version
 
-    if (!billingCustomer || !userId) {
-      setShowConfirm(false);
-      return;
-    }
+const confirmSaveBill = async () => {
+  if (!validateBeforeSave()) {
+    setShowConfirm(false);
+    return;
+  }
 
-    setIsSaving(true);
-    try {
-      const filledItems = items.filter(
-        (it) =>
-          it.productName &&
-          it.productName.trim() !== "" &&
-          it.quantity &&
-          it.quantity > 0
-      );
+  if (!billingCustomer || !userId) {
+    setShowConfirm(false);
+    return;
+  }
 
-      // Quantity summary per unit
-      const quantitySummary: QuantitySummary = {
-        piece: 0,
-        box: 0,
-        kg: 0,
-        litre: 0,
-        gm: 0,
-        ml: 0,
+  setIsSaving(true);
+  try {
+    const filledItems = items.filter(
+      (it) =>
+        it.productName &&
+        it.productName.trim() !== "" &&
+        it.quantity &&
+        it.quantity > 0
+    );
+
+    const allItems = filledItems.map((it) => {
+      const matched = findProductByName(it.productName);
+      return {
+        productId: matched?._id,
+        productName: it.productName,
+        quantity: Number(it.quantity) || 0,
+        unit: matched?.unit ?? it.unit ?? "",
+        price: it.free ? 0 : Number(it.price || 0),
+        total: it.free ? 0 : Number(it.total || 0),
+        free: it.free,
       };
+    });
 
-      filledItems.forEach((it) => {
-        const unitKey = it.unit?.toLowerCase() as keyof QuantitySummary;
-        if (quantitySummary[unitKey] !== undefined) {
-          quantitySummary[unitKey] += Number(it.quantity) || 0;
-        }
-      });
+    const orderId = isEditMode && editingOrderId ? editingOrderId : `ORD-${Date.now()}`;
 
-      // Split paid vs free
-      const paidItems = filledItems
-        .filter((it) => !it.free)
-        .map((it) => {
-          const matched = findProductByName(it.productName);
-          return {
-            productId: matched?._id,
-            productName: it.productName,
-            quantity: Number(it.quantity) || 0,
-            unit: matched?.unit ?? it.unit ?? "",
-          };
-        });
+    const billingCustomerData = {
+      customerId: billingCustomer._id,
+      name: billingCustomer.name,
+      shopName: billingCustomer.shopName || billingCustomer.name,
+      address: billingCustomer.address || billingCustomer.shopAddress || "",
+      contact: billingCustomer.contact || "",
+    };
 
-      const freeItems = filledItems
-        .filter((it) => it.free)
-        .map((it) => {
-          const matched = findProductByName(it.productName);
-          return {
-            productId: matched?._id,
-            productName: it.productName,
-            quantity: Number(it.quantity) || 0,
-            unit: matched?.unit ?? it.unit ?? "",
-          };
-        });
+    const shippingCustomerData = sameAsBilling
+      ? billingCustomerData
+      : {
+          customerId: shippingCustomer?._id,
+          name: shippingCustomer?.name || "",
+          shopName: shippingCustomer?.shopName || shippingCustomer?.name || "",
+          address: shippingCustomer?.address || shippingCustomer?.shopAddress || "",
+          contact: shippingCustomer?.contact || "",
+        };
 
-      const orderId = `ORD-${Date.now()}`;
+    const payload = {
+      userId,
+      orderId,
+      serialNumber: serialNo,
+      billDate: date,
+      billingCustomer: billingCustomerData,
+      shippingCustomer: shippingCustomerData,
+      sameAsBilling,
+      items: allItems,
+      subtotal: subTotal,
+      discountPercentage: discountPercent || 0,
+      grandTotal: discounted,
+      remarks,
+    };
 
-      const payload = {
-        userId,
-        orderId,
-        serialNumber: serialNo,
-        shopName:
-          billingCustomer.shopName || billingCustomer.name || "Unknown Shop",
-        customerId: billingCustomer._id,
-        customerName: billingCustomer.name,
-        customerAddress:
-          billingCustomer.address ||
-          billingCustomer.shopAddress ||
-          "N/A",
-        customerContact: billingCustomer.contact || "",
-        items: paidItems,
-        freeItems,
-        quantitySummary,
-        subtotal: subTotal,
-        discountPercentage: discountPercent || 0,
-        total: discounted,
-        remarks,
-      };
+    const method = isEditMode ? "PUT" : "POST";
+    const url = "/api/bills";
 
-      const res = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Failed to save bill");
-      }
-
-      toast.success(
-        "Bill saved, stock updated & customer debit adjusted successfully."
-      );
-
-      if (pdfExportRef.current) {
-        await pdfExportRef.current.exportPDF();
-      }
-
-      setShowConfirm(false);
-      resetBillForm();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || "Failed to save bill.");
-    } finally {
-      setIsSaving(false);
+    if (isEditMode && editingBillId) {
+      (payload as any).billId = editingBillId;
     }
-  };
+
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(data.error || `Failed to ${isEditMode ? "update" : "save"} bill`);
+    }
+
+    toast.success(
+      `Bill ${isEditMode ? "updated" : "saved"} successfully! Stock updated & customer debit adjusted.`
+    );
+
+    if (pdfExportRef.current) {
+      await pdfExportRef.current.exportPDF();
+    }
+
+    setShowConfirm(false);
+
+    const wasEditMode = isEditMode;
+
+    setIsEditMode(false);
+    setEditingBillId(null);
+    setEditingOrderId(null);
+    setHasLoadedEditData(false);
+
+    if (!wasEditMode && userId) {
+      // ✅ CRITICAL FIX: Use the nextSerialNumber from the backend response
+      // The backend has ALREADY calculated and returned the correct next serial
+      if (data.nextSerialNumber) {
+        setSerialNo(data.nextSerialNumber);
+        sessionStorage.setItem("billing-serial", data.nextSerialNumber);
+      } else {
+        // Fallback: generate serial (shouldn't normally happen)
+        await resetBillForm();
+      }
+      
+      // Reset form fields (but serial is already set above)
+      setBillingCustomer(null);
+      setShippingCustomer(null);
+      setSameAsBilling(false);
+      setCustomerInput("");
+      setShippingInput("");
+      setItems(Array.from({ length: 15 }, blankItem));
+      setDiscountPercent(0);
+      setRemarks("");
+    } else {
+      // This was an EDIT - clear form WITHOUT generating new serial
+      setBillingCustomer(null);
+      setShippingCustomer(null);
+      setSameAsBilling(false);
+      setCustomerInput("");
+      setShippingInput("");
+      setItems(Array.from({ length: 15 }, blankItem));
+      setDiscountPercent(0);
+      setRemarks("");
+
+      const currentSerial = sessionStorage.getItem("billing-serial");
+      if (currentSerial) {
+        setSerialNo(currentSerial);
+      }
+    }
+  } catch (err: any) {
+    console.error(err);
+    toast.error(err?.message || `Failed to ${isEditMode ? "update" : "save"} bill.`);
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   // ===== UI =====
   return (
@@ -882,6 +1117,20 @@ export default function BillingPage() {
             BILL OF SUPPLY
           </h1>
 
+          {/* Update UI to show edit mode indicator */}
+          {isEditMode && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span className="text-sm font-semibold text-blue-900">
+                  Editing Bill: {serialNo}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* BILLING / SHIPPING */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
             {/* BILLING DETAILS */}
@@ -903,7 +1152,7 @@ export default function BillingPage() {
                   }}
                   onKeyDown={(e) => {
                     if (!showCustomerSuggestions || !filteredCustomers.length) return;
-                    
+
                     if (e.key === "ArrowDown") {
                       e.preventDefault();
                       setCustomerSuggestionIndex((i) =>
@@ -949,7 +1198,7 @@ export default function BillingPage() {
                             setBillingCustomer(c);
                             setCustomerInput(c.shopName || c.name || "");
                             setShowCustomerSuggestions(false);
-                            
+
                             setTimeout(() => {
                               if (!sameAsBilling) {
                                 shippingInputRef.current?.focus();
@@ -1030,7 +1279,7 @@ export default function BillingPage() {
                       }}
                       onKeyDown={(e) => {
                         if (!showShippingSuggestions || !filteredShippingCustomers.length) return;
-                        
+
                         if (e.key === "ArrowDown") {
                           e.preventDefault();
                           setShippingSuggestionIndex((i) =>
@@ -1061,7 +1310,7 @@ export default function BillingPage() {
                     </button>
                   </div>
 
-                  {/* ✅ Shipping suggestions dropdown */}
+                  {/* Shipping suggestions dropdown */}
                   {showShippingSuggestions && filteredShippingCustomers.length > 0 && (
                     <div className="relative">
                       <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
@@ -1076,7 +1325,7 @@ export default function BillingPage() {
                                 setShippingCustomer(c);
                                 setShippingInput(c.shopName || c.name || "");
                                 setShowShippingSuggestions(false);
-                                
+
                                 setTimeout(() => focusProduct(0), 0);
                               }}
                               className={`px-3 py-2 cursor-pointer text-sm ${
@@ -1322,7 +1571,7 @@ export default function BillingPage() {
                               if (!editable) return;
                               if (e.key === "Enter") {
                                 e.preventDefault();
-                                
+
                                 // Auto-add line if on last row and has product + quantity
                                 if (isLastRow && it.productName && it.quantity > 0) {
                                   addLine();
@@ -1336,7 +1585,7 @@ export default function BillingPage() {
                               }
                               if (e.key === "Tab" && !e.shiftKey) {
                                 e.preventDefault();
-                                
+
                                 // Same auto-add behavior for Tab
                                 if (isLastRow && it.productName && it.quantity > 0) {
                                   addLine();
@@ -1457,7 +1706,7 @@ export default function BillingPage() {
                 Sort by Unit
               </button>
               <p className="text-[10px] sm:text-xs text-gray-500">
-                ✨ <strong>New:</strong> Press Enter after quantity on the last row to auto-add a new line. 
+                ✨ <strong>New:</strong> Press Enter after quantity on the last row to auto-add a new line.
                 Selecting a product auto-fills price/unit. Quantity is limited to stock.
               </p>
             </div>
@@ -1571,7 +1820,7 @@ export default function BillingPage() {
               onClick={handlePrepareBillClick}
               className="px-3 sm:px-4 py-1 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm"
             >
-              ✅ Prepare Bill
+              ✅ {isEditMode ? "Update Bill" : "Prepare Bill"}
             </button>
             <PdfExportComponent
               ref={pdfExportRef}
@@ -1597,18 +1846,21 @@ export default function BillingPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-2 sm:p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-xs sm:max-w-md w-full p-4 sm:p-6">
             <h2 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 text-gray-900">
-              Are you sure you want to save this bill?
+              Are you sure you want to {isEditMode ? "update" : "save"} this bill?
             </h2>
             <p className="text-[10px] sm:text-sm text-gray-700 mb-3 sm:mb-4">
-              On clicking <strong>OK</strong>, this bill will be saved, product
-              stock will be reduced according to the quantities in this bill,
-              and the total will be added to this customer&apos;s debit. After
-              saving, the form will reset and the serial number will increment.
+              On clicking <strong>OK</strong>, this bill will be {isEditMode ? "updated" : "saved"} to the Bill schema,
+              the order will be created, product stock will be reduced according to the
+              quantities in this bill, and the total will be added to this customer&apos;s
+              debit. After saving, the form will reset and the serial number will increment.
             </p>
             <div className="flex justify-end gap-2 sm:gap-3">
               <button
-                onClick={() => setShowConfirm(false)}
-                className="px-3 sm:px-4 py-1 sm:py-2 rounded border border-gray-300 text-[10px] sm:text-sm text-gray-700"
+                onClick={() => {
+                  // Simply close the dialog without resetting the form
+                  setShowConfirm(false);
+                }}
+                className="px-3 sm:px-4 py-1 sm:py-2 rounded border border-gray-300 text-[10px] sm:text-sm text-gray-700 hover:bg-gray-50"
                 disabled={isSaving}
               >
                 Cancel

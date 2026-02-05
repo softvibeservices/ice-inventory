@@ -1,34 +1,64 @@
-// icecream-inventory\src\models\User.ts
-
 // src/models/User.ts
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, Document, models } from "mongoose";
+import bcrypt from "bcryptjs";
 
 export interface IUser extends Document {
   name: string;
   email: string;
-  contact?: string;
+  contact: string;
+  password: string;
   shopName: string;
   shopAddress: string;
-  gstin: string;   // ✅ added GSTIN
-  password: string;
-  otp: string | null;
-  otpExpires: Date | null;
   isVerified: boolean;
+  otp?: string;
+  otpExpires?: Date;
+  role: "admin" | "manager" | "superAdmin";
+  adminId?: mongoose.Types.ObjectId;
+  status: "pending" | "approved" | "rejected" | "blocked";
+  lastSerialNumber?: string; // Store last used serial number (e.g., "020015")
+  createdAt: Date;
+  updatedAt: Date;
+  comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
-const UserSchema: Schema = new Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  contact: { type: String },
-  shopName: { type: String, required: true },
-  shopAddress: { type: String, required: true },
-  gstin: { type: String, required: true, unique: true },  // ✅ required GSTIN
-  password: { type: String, required: true },
-  otp: { type: String, default: null },
-  otpExpires: { type: Date, default: null },
-  isVerified: { type: Boolean, default: false },
-  role: { type: String, enum: ["admin", "manager"], default: "admin" }
+const UserSchema = new Schema<IUser>(
+  {
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true, lowercase: true },
+    contact: { type: String, required: true },
+    password: { type: String, required: true },
+    shopName: { type: String, required: true },
+    shopAddress: { type: String, required: true },
+    isVerified: { type: Boolean, default: false },
+    otp: { type: String },
+    otpExpires: { type: Date },
+    role: { type: String, enum: ["admin", "manager", "superAdmin"], default: "admin" },
+    adminId: { type: Schema.Types.ObjectId, ref: "User" },
+    status: { type: String, enum: ["pending", "approved", "rejected", "blocked"], default: "approved" },
+    lastSerialNumber: { type: String, default: null }, // NEW FIELD
+  },
+  { timestamps: true }
+);
+
+// Hash password before saving
+UserSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (err: any) {
+    next(err);
+  }
 });
 
-export default mongoose.models.User ||
-  mongoose.model<IUser>("User", UserSchema);
+// Compare password method
+UserSchema.methods.comparePassword = async function (
+  candidatePassword: string
+): Promise<boolean> {
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+const User = models.User || mongoose.model<IUser>("User", UserSchema);
+
+export default User;
