@@ -19,6 +19,7 @@ export async function POST(req: Request) {
       if (!user.isVerified)
         return NextResponse.json({ error: "User not verified" }, { status: 401 });
 
+      // ✅ FIX: Use plain password comparison (password is already hashed in DB via pre-save hook)
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch)
         return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
@@ -61,6 +62,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error) {
+    console.error("[login] error:", error);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
   }
 }

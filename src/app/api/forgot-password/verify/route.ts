@@ -3,11 +3,6 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
-
-function hashOtp(otp: string) {
-  return crypto.createHash("sha256").update(otp).digest("hex");
-}
 
 export async function PUT(req: Request) {
   try {
@@ -28,9 +23,8 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // ✅ FIX 1: correct field names
-    if (!user.otp || !user.otpExpires)
-    {
+    // ✅ FIX 1: Use correct field names (otp and otpExpires)
+    if (!user.otp || !user.otpExpires) {
       return NextResponse.json(
         { error: "No OTP request found. Request a new OTP." },
         { status: 400 }
@@ -39,7 +33,8 @@ export async function PUT(req: Request) {
 
     const now = new Date();
     if (user.otpExpires < now) {
-      user.otpHash = null;
+      // Clear expired OTP
+      user.otp = null;
       user.otpExpires = null;
       await user.save();
       return NextResponse.json(
@@ -48,9 +43,8 @@ export async function PUT(req: Request) {
       );
     }
 
-    // ✅ FIX 2: hash comparison
-    const incomingHash = hashOtp(String(otp));
-    if (incomingHash !== user.otp) {
+    // ✅ FIX 2: Compare plain OTP (it's stored as plain text, not hashed)
+    if (String(user.otp).trim() !== String(otp).trim()) {
       return NextResponse.json(
         { error: "Invalid OTP. Please check and try again." },
         { status: 400 }
@@ -76,15 +70,15 @@ export async function PUT(req: Request) {
       );
     }
 
-    // ✅ Update password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
+    // ✅ FIX 3: Let the pre-save hook handle password hashing
+    // Just assign the plain password - the User model's pre-save hook will hash it
+    user.password = String(newPassword);
 
     // ✅ Clear OTP after success
     user.otp = null;
     user.otpExpires = null;
 
-    await user.save();
+    await user.save(); // Pre-save hook will hash the password
 
     return NextResponse.json({
       message: "Password updated successfully",

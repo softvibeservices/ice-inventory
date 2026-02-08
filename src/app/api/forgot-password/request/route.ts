@@ -12,8 +12,7 @@ const COOLDOWN_SECONDS = 60; // don't resend within 60s to the same account
 function isValidEmail(email?: string) {
   if (!email || typeof email !== "string") return false;
   // simple but effective RFC-like regex (not exhaustive)
-  const re =
-    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
   return re.test(email.trim());
 }
 
@@ -24,9 +23,7 @@ function generateNumericOtp(len = OTP_LENGTH) {
   return n.toString().padStart(len, "0");
 }
 
-function hashOtp(otp: string) {
-  return crypto.createHash("sha256").update(otp).digest("hex");
-}
+// ❌ REMOVED: hashOtp function - we store plain OTP now
 
 function buildHtmlEmail({
   appName,
@@ -128,7 +125,10 @@ export async function POST(req: Request) {
 
     // Rate-limit: prevent requesting OTP too frequently
     const now = new Date();
-    if (user.otpRequestedAt && (now.getTime() - new Date(user.otpRequestedAt).getTime()) / 1000 < COOLDOWN_SECONDS) {
+    if (
+      user.otpRequestedAt &&
+      (now.getTime() - new Date(user.otpRequestedAt).getTime()) / 1000 < COOLDOWN_SECONDS
+    ) {
       console.info(`[ForgotPassword] cooldown hit for ${emailRaw}`);
       return NextResponse.json(
         { message: "If this email is registered, you will receive an OTP shortly." },
@@ -136,23 +136,21 @@ export async function POST(req: Request) {
       );
     }
 
-    // Generate OTP, hash it and store expiry
+    // ✅ FIX: Generate OTP and store it as PLAIN TEXT (not hashed)
     const otp = generateNumericOtp();
-    const otpHash = hashOtp(otp);
     const otpExpires = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
-    // update fields on user document (ensure schema allows these keys)
-    user.otp = hashOtp(otp);   // store HASH here
+    // ✅ Store PLAIN OTP (matching register flow and verify expectations)
+    user.otp = otp; // Store plain OTP, not hashed
     user.otpExpires = otpExpires;
     user.otpRequestedAt = now;
-    // optional: reset failed attempts counter
-    user.otpAttempts = 0;
 
     await user.save();
 
     // Build a professional HTML email
     const appName = process.env.APP_NAME || "IceCream Inventory";
-    const supportEmail = process.env.SUPPORT_EMAIL || process.env.EMAIL_USER || "support@yourdomain.com";
+    const supportEmail =
+      process.env.SUPPORT_EMAIL || process.env.EMAIL_USER || "support@yourdomain.com";
     const frontendUrl = process.env.FRONTEND_URL || "";
 
     const html = buildHtmlEmail({
@@ -178,7 +176,7 @@ export async function POST(req: Request) {
       // Log send error server-side, but still return the generic message to the client
       console.error(`[ForgotPassword] failed sending OTP to ${emailRaw}`, sendErr);
       // optionally clear otp fields on persistent failure to avoid orphan OTPs
-      // user.otpHash = undefined; user.otpExpires = undefined; await user.save();
+      // user.otp = undefined; user.otpExpires = undefined; await user.save();
     }
 
     return NextResponse.json(

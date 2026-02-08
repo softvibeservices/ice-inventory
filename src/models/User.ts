@@ -9,9 +9,11 @@ export interface IUser extends Document {
   password: string;
   shopName: string;
   shopAddress: string;
+  gstin: string;
   isVerified: boolean;
   otp?: string;
   otpExpires?: Date;
+  otpRequestedAt?: Date; // ✅ Added this field (was missing in your schema)
   role: "admin" | "manager" | "superAdmin";
   adminId?: mongoose.Types.ObjectId;
   status: "pending" | "approved" | "rejected" | "blocked";
@@ -29,20 +31,24 @@ const UserSchema = new Schema<IUser>(
     password: { type: String, required: true },
     shopName: { type: String, required: true },
     shopAddress: { type: String, required: true },
+    gstin: { type: String, required: true, unique: true }, // ✅ Added unique constraint
     isVerified: { type: Boolean, default: false },
     otp: { type: String },
     otpExpires: { type: Date },
+    otpRequestedAt: { type: Date }, // ✅ Added this field
     role: { type: String, enum: ["admin", "manager", "superAdmin"], default: "admin" },
     adminId: { type: Schema.Types.ObjectId, ref: "User" },
     status: { type: String, enum: ["pending", "approved", "rejected", "blocked"], default: "approved" },
-    lastSerialNumber: { type: String, default: null }, // NEW FIELD
+    lastSerialNumber: { type: String, default: null },
   },
   { timestamps: true }
 );
 
-// Hash password before saving
+// ✅ Hash password before saving (this prevents double hashing)
 UserSchema.pre("save", async function (next) {
+  // Only hash if password is modified
   if (!this.isModified("password")) return next();
+  
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
@@ -52,7 +58,7 @@ UserSchema.pre("save", async function (next) {
   }
 });
 
-// Compare password method
+// ✅ Compare password method
 UserSchema.methods.comparePassword = async function (
   candidatePassword: string
 ): Promise<boolean> {

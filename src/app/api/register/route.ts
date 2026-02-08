@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { transporter } from "@/lib/nodemailer";
-import bcrypt from "bcryptjs";
 import crypto from "crypto";
+
+// ❌ REMOVED: import bcrypt from "bcryptjs";
+// Password hashing is handled by the User model's pre-save hook
 
 const OTP_LENGTH = 6;
 const OTP_TTL_MINUTES = 10;
@@ -93,7 +95,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "An account with provided details already exists." }, { status: 400 });
     }
 
-    const hashedPassword = await bcrypt.hash(String(password), 10);
+    // ✅ FIX: Store plain password - it will be hashed by the pre-save hook in User model
+    // ❌ REMOVED: const hashedPassword = await bcrypt.hash(String(password), 10);
 
     // create otp (plain), expires and requested timestamp
     const otp = generateNumericOtp();
@@ -107,7 +110,7 @@ export async function POST(req: Request) {
       shopName: String(shopName).trim(),
       shopAddress: shopAddressNorm,
       gstin: gstinNorm,
-      password: hashedPassword,
+      password: String(password), // ✅ Plain password - will be hashed by pre-save hook
       isVerified: false,
       otp,
       otpExpires,
@@ -115,7 +118,7 @@ export async function POST(req: Request) {
       createdAt: now,
     });
 
-    await newUser.save();
+    await newUser.save(); // ✅ Pre-save hook will hash the password here
 
     const appName = process.env.APP_NAME || "IceCream Inventory";
     const supportEmail = process.env.SUPPORT_EMAIL || process.env.EMAIL_USER || "support@yourdomain.com";
