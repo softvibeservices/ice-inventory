@@ -216,91 +216,93 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      <main className="flex-grow container mx-auto px-4 py-4 sm:py-6 lg:py-8 flex flex-col lg:flex-row gap-4 sm:gap-6 lg:gap-8">
-        {/* Sidebar - Desktop */}
-        <aside className="hidden lg:block w-64 bg-white rounded-xl shadow-md p-4 space-y-2 h-fit sticky top-4">
-          <button
-            onClick={() => setActiveTab("basic")}
-            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-              activeTab === "basic"
-                ? "bg-blue-600 text-white"
-                : "hover:bg-gray-100 text-gray-700"
-            }`}
-          >
-            <User size={18} /> Basic Information
-          </button>
-          <button
-            onClick={() => setActiveTab("billing")}
-            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-              activeTab === "billing"
-                ? "bg-purple-600 text-white"
-                : "hover:bg-gray-100 text-gray-700"
-            }`}
-          >
-            📄 Bill Details
-          </button>
-          <button
-            onClick={() => setActiveTab("bank")}
-            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-              activeTab === "bank"
-                ? "bg-indigo-600 text-white"
-                : "hover:bg-gray-100 text-gray-700"
-            }`}
-          >
-            🏦 Bank Details
-          </button>
-          <button
-            onClick={() => setActiveTab("product-settings")}
-            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-              activeTab === "product-settings"
-                ? "bg-teal-600 text-white"
-                : "hover:bg-gray-100 text-gray-700"
-            }`}
-          >
-            ⚙️ Product Settings
-          </button>
-          <button
-            onClick={() => setActiveTab("delivery")}
-            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-              activeTab === "delivery"
-                ? "bg-yellow-600 text-white"
-                : "hover:bg-gray-100 text-gray-700"
-            }`}
-          >
-            🚚 Delivery Partners
-          </button>
-          <button
-            onClick={() => setActiveTab("managers")}
-            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-              activeTab === "managers"
-                ? "bg-orange-600 text-white"
-                : "hover:bg-gray-100 text-gray-700"
-            }`}
-          >
-            👤 Managers
-          </button>
-          <button
-            onClick={() => setActiveTab("password")}
-            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-              activeTab === "password"
-                ? "bg-green-600 text-white"
-                : "hover:bg-gray-100 text-gray-700"
-            }`}
-          >
-            <Lock size={18} /> Change Password
-          </button>
-          {/* ✅ NEW: Replace reset serial button */}
-          <SerialNumberComponent userId={user._id} />
-          <button
-            onClick={() => setActiveTab("logout")}
-            className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-              activeTab === "logout"
-                ? "bg-red-600 text-white"
-                : "hover:bg-gray-100 text-gray-700"
-            }`}
-          >
-            <LogOut size={18} /> Logout
-          </button>
+      <main className="flex-grow container mx-auto px-4 py-4 sm:py-6 lg:py-8 flex flex-col lg:flex-row gap-4 sm:gap-6 lg:gap-8 overflow-hidden">
+        {/* Sidebar - Desktop with independent scroll */}
+        <aside className="hidden lg:block w-64 bg-white rounded-xl shadow-md h-[calc(100vh-12rem)] sticky top-4 overflow-y-auto">
+          <div className="p-4 space-y-2">
+            <button
+              onClick={() => setActiveTab("basic")}
+              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+                activeTab === "basic"
+                  ? "bg-blue-600 text-white"
+                  : "hover:bg-gray-100 text-gray-700"
+              }`}
+            >
+              <User size={18} /> Basic Information
+            </button>
+            <button
+              onClick={() => setActiveTab("billing")}
+              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+                activeTab === "billing"
+                  ? "bg-purple-600 text-white"
+                  : "hover:bg-gray-100 text-gray-700"
+              }`}
+            >
+              📄 Bill Details
+            </button>
+            <button
+              onClick={() => setActiveTab("bank")}
+              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+                activeTab === "bank"
+                  ? "bg-indigo-600 text-white"
+                  : "hover:bg-gray-100 text-gray-700"
+              }`}
+            >
+              🏦 Bank Details
+            </button>
+            <button
+              onClick={() => setActiveTab("product-settings")}
+              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+                activeTab === "product-settings"
+                  ? "bg-teal-600 text-white"
+                  : "hover:bg-gray-100 text-gray-700"
+              }`}
+            >
+              ⚙️ Product Settings
+            </button>
+            <button
+              onClick={() => setActiveTab("delivery")}
+              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+                activeTab === "delivery"
+                  ? "bg-yellow-600 text-white"
+                  : "hover:bg-gray-100 text-gray-700"
+              }`}
+            >
+              🚚 Delivery Partners
+            </button>
+            <button
+              onClick={() => setActiveTab("managers")}
+              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+                activeTab === "managers"
+                  ? "bg-orange-600 text-white"
+                  : "hover:bg-gray-100 text-gray-700"
+              }`}
+            >
+              👤 Managers
+            </button>
+            <button
+              onClick={() => setActiveTab("password")}
+              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+                activeTab === "password"
+                  ? "bg-green-600 text-white"
+                  : "hover:bg-gray-100 text-gray-700"
+              }`}
+            >
+              <Lock size={18} /> Change Password
+            </button>
+            {/* ✅ NEW: Replace reset serial button */}
+            <SerialNumberComponent userId={user._id} />
+            <button
+              onClick={() => setActiveTab("logout")}
+              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+                activeTab === "logout"
+                  ? "bg-red-600 text-white"
+                  : "hover:bg-gray-100 text-gray-700"
+              }`}
+            >
+              <LogOut size={18} /> Logout
+            </button>
+          </div>
         </aside>
 
         {/* Sidebar - Mobile (Dropdown) */}
@@ -403,147 +405,149 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Content */}
-        <section className="flex-1 bg-white rounded-xl shadow-md p-4 sm:p-6">
-          {/* BASIC */}
-          {activeTab === "basic" && user && (
-            <BasicInformationComponent
-              user={user}
-              onUpdate={(updatedUser) => {
-                setUser(updatedUser);
-                setOriginalUser(updatedUser);
-              }}
-            />
-          )}
+        {/* Content - Right side with independent scroll */}
+        <section className="flex-1 bg-white rounded-xl shadow-md h-[calc(100vh-12rem)] overflow-y-auto">
+          <div className="p-4 sm:p-6">
+            {/* BASIC */}
+            {activeTab === "basic" && user && (
+              <BasicInformationComponent
+                user={user}
+                onUpdate={(updatedUser) => {
+                  setUser(updatedUser);
+                  setOriginalUser(updatedUser);
+                }}
+              />
+            )}
 
-          {/* BILLING */}
-          {activeTab === "billing" && user && (
-            <BillingDetailsComponent userId={user._id} />
-          )}
+            {/* BILLING */}
+            {activeTab === "billing" && user && (
+              <BillingDetailsComponent userId={user._id} />
+            )}
 
-          {/* BANK */}
-          {activeTab === "bank" && (
-            <BankDetailsComponent sellerId={sellerId} />
-          )}
-          {activeTab === "product-settings" && (
-            <ProductSettingsComponent userId={user._id} />
-          )}
+            {/* BANK */}
+            {activeTab === "bank" && (
+              <BankDetailsComponent sellerId={sellerId} />
+            )}
+            {activeTab === "product-settings" && (
+              <ProductSettingsComponent userId={user._id} />
+            )}
 
-          {/* DELIVERY PARTNERS */}
-          {activeTab === "delivery" && (
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
-                  🚚 Delivery Partners
+            {/* DELIVERY PARTNERS */}
+            {activeTab === "delivery" && (
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
+                    🚚 Delivery Partners
+                  </h2>
+                  <div className="text-xs sm:text-sm text-gray-500">
+                    Manage delivery partners linked to your account
+                  </div>
+                </div>
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <div className="min-w-full inline-block align-middle">
+                    <DeliveryPartnersTable />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* MANAGERS */}
+            {activeTab === "managers" && (
+              <ManagerComponent adminId={user._id} />
+            )}
+
+            {/* PASSWORD */}
+            {activeTab === "password" && (
+              <div className="space-y-4 sm:space-y-6">
+                <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-gray-800">
+                  <Lock className="w-5 h-5" /> Change Password
                 </h2>
-                <div className="text-xs sm:text-sm text-gray-500">
-                  Manage delivery partners linked to your account
-                </div>
-              </div>
-              <div className="overflow-x-auto -mx-4 sm:mx-0">
-                <div className="min-w-full inline-block align-middle">
-                  <DeliveryPartnersTable />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* MANAGERS */}
-          {activeTab === "managers" && (
-            <ManagerComponent adminId={user._id} />
-          )}
-
-          {/* PASSWORD */}
-          {activeTab === "password" && (
-            <div className="space-y-4 sm:space-y-6">
-              <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-gray-800">
-                <Lock className="w-5 h-5" /> Change Password
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label className="text-sm text-gray-600">
-                  Old Password
-                  <input
-                    className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    type="password"
-                    value={passwordForm.oldPassword}
-                    onChange={(e) =>
-                      setPasswordForm((p) => ({
-                        ...p,
-                        oldPassword: e.target.value,
-                      }))
-                    }
-                    placeholder="Old Password"
-                  />
-                </label>
-                <label className="text-sm text-gray-600">
-                  New Password
-                  <input
-                    className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    type="password"
-                    value={passwordForm.newPassword}
-                    onChange={(e) =>
-                      setPasswordForm((p) => ({
-                        ...p,
-                        newPassword: e.target.value,
-                      }))
-                    }
-                    placeholder="New Password"
-                  />
-                </label>
-                {otpSent && (
-                  <label className="text-sm text-gray-600 md:col-span-2">
-                    OTP (sent to your registered email)
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="text-sm text-gray-600">
+                    Old Password
                     <input
                       className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                      type="text"
-                      value={passwordForm.otp}
+                      type="password"
+                      value={passwordForm.oldPassword}
                       onChange={(e) =>
                         setPasswordForm((p) => ({
                           ...p,
-                          otp: e.target.value,
+                          oldPassword: e.target.value,
                         }))
                       }
-                      placeholder="Enter 6-digit OTP"
+                      placeholder="Old Password"
                     />
                   </label>
-                )}
+                  <label className="text-sm text-gray-600">
+                    New Password
+                    <input
+                      className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                      type="password"
+                      value={passwordForm.newPassword}
+                      onChange={(e) =>
+                        setPasswordForm((p) => ({
+                          ...p,
+                          newPassword: e.target.value,
+                        }))
+                      }
+                      placeholder="New Password"
+                    />
+                  </label>
+                  {otpSent && (
+                    <label className="text-sm text-gray-600 md:col-span-2">
+                      OTP (sent to your registered email)
+                      <input
+                        className="mt-1 w-full border rounded-lg p-3 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                        type="text"
+                        value={passwordForm.otp}
+                        onChange={(e) =>
+                          setPasswordForm((p) => ({
+                            ...p,
+                            otp: e.target.value,
+                          }))
+                        }
+                        placeholder="Enter 6-digit OTP"
+                      />
+                    </label>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <button
+                    onClick={changePassword}
+                    disabled={loading}
+                    className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg shadow disabled:opacity-50 transition-colors font-medium"
+                  >
+                    {loading
+                      ? otpSent
+                        ? "Verifying OTP..."
+                        : "Sending OTP..."
+                      : otpSent
+                      ? "✅ Verify OTP & Change Password"
+                      : "🔑 Send OTP to Change Password"}
+                  </button>
+                  <p className="text-xs text-gray-500">
+                    First click will send an OTP to your registered email. After
+                    entering OTP, click again to change your password.
+                  </p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <button
-                  onClick={changePassword}
-                  disabled={loading}
-                  className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg shadow disabled:opacity-50 transition-colors font-medium"
-                >
-                  {loading
-                    ? otpSent
-                      ? "Verifying OTP..."
-                      : "Sending OTP..."
-                    : otpSent
-                    ? "✅ Verify OTP & Change Password"
-                    : "🔑 Send OTP to Change Password"}
-                </button>
-                <p className="text-xs text-gray-500">
-                  First click will send an OTP to your registered email. After
-                  entering OTP, click again to change your password.
-                </p>
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* LOGOUT */}
-          {activeTab === "logout" && (
-            <div className="flex flex-col items-center justify-center gap-4 py-8 sm:py-12">
-              <h2 className="text-lg sm:text-xl font-semibold text-gray-800 text-center">
-                Ready to leave?
-              </h2>
-              <button
-                onClick={logout}
-                className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-lg shadow transition-colors font-medium"
-              >
-                🚪 Logout
-              </button>
-            </div>
-          )}
+            {/* LOGOUT */}
+            {activeTab === "logout" && (
+              <div className="flex flex-col items-center justify-center gap-4 py-8 sm:py-12">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-800 text-center">
+                  Ready to leave?
+                </h2>
+                <button
+                  onClick={logout}
+                  className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-lg shadow transition-colors font-medium"
+                >
+                  🚪 Logout
+                </button>
+              </div>
+            )}
+          </div>
         </section>
       </main>
 

@@ -48,7 +48,7 @@ export default function ProductsPage(): JSX.Element {
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
-    console.log("📦 Raw stored user:", stored);
+ 
 
     if (stored) {
       try {
@@ -57,7 +57,7 @@ export default function ProductsPage(): JSX.Element {
 
         if (parsed && parsed._id) {
           setUserId(String(parsed._id));
-          console.log("✅ UserId set to:", String(parsed._id));
+        
         } else {
           console.error("❌ No _id found in parsed user");
         }
