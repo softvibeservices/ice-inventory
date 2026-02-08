@@ -1,4 +1,3 @@
-// src/models/Manager.ts
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IManager extends Document {
@@ -8,6 +7,9 @@ export interface IManager extends Document {
   contact: string;
   password: string;
   createdAt: Date;
+  otp?: string | null;
+  otpExpires?: Date | null;
+  isPending?: boolean;
 }
 
 const ManagerSchema = new Schema({
@@ -18,8 +20,8 @@ const ManagerSchema = new Schema({
   password: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
   otp: { type: String, default: null },
-otpExpires: { type: Date, default: null },
-
+  otpExpires: { type: Date, default: null },
+  isPending: { type: Boolean, default: false },
 });
 
 export default mongoose.models.Manager ||

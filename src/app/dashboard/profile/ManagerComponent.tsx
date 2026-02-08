@@ -1,11 +1,12 @@
-// icecream-inventory\src\app\dashboard\profile\ManagerComponent.tsx
 "use client";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { UserPlus, Lock, Trash2, X, Users } from "lucide-react";
+import { UserPlus, Lock, Trash2, X, Users, Mail } from "lucide-react";
 
 export default function ManagerComponent({ adminId }: any) {
   const [list, setList] = useState([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -13,6 +14,13 @@ export default function ManagerComponent({ adminId }: any) {
     password: "",
     confirm: "",
   });
+
+  // OTP verification states for new manager
+  const [showOtpVerification, setShowOtpVerification] = useState(false);
+  const [otpForNewManager, setOtpForNewManager] = useState("");
+  const [pendingManagerData, setPendingManagerData] = useState<any>(null);
+  const [isOtpSending, setIsOtpSending] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteId, setDeleteId] = useState("");
@@ -24,8 +32,7 @@ export default function ManagerComponent({ adminId }: any) {
   const [otpSent, setOtpSent] = useState(false);
   const [otpValue, setOtpValue] = useState("");
 
-  const [isOtpSending, setIsOtpSending] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isOtpSendingForPassword, setIsOtpSendingForPassword] = useState(false);
   const [passForm, setPassForm] = useState({
     password: "",
     confirm: "",
@@ -45,7 +52,8 @@ export default function ManagerComponent({ adminId }: any) {
     load();
   }, []);
 
-  const save = async () => {
+  // Step 1: Send OTP to manager's email
+  const sendOtpToManagerEmail = async () => {
     if (!form.name || !form.email || !form.contact || !form.password) {
       return toast.error("Please fill all fields");
     }
@@ -54,26 +62,83 @@ export default function ManagerComponent({ adminId }: any) {
       return toast.error("Passwords do not match");
     }
 
-    setIsSaving(true);
-    const loadingToast = toast.loading("Saving...");
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email)) {
+      return toast.error("Please enter a valid email address");
+    }
+
+    setIsOtpSending(true);
+    const loadingToast = toast.loading("Sending OTP to manager's email...");
 
     try {
-      const res = await fetch("/api/manager", {
+      const res = await fetch("/api/manager/send-verification-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ adminId, ...form }),
+        body: JSON.stringify({ 
+          email: form.email,
+          name: form.name,
+          adminId 
+        }),
       });
 
       const data = await res.json();
       toast.dismiss(loadingToast);
 
       if (!res.ok) {
-        setIsSaving(false);
-        return toast.error(data.error);
+        setIsOtpSending(false);
+        return toast.error(data.error || "Failed to send OTP");
+      }
+
+      toast.success("OTP sent to manager's email! 📧");
+      
+      // Store pending manager data
+      setPendingManagerData({ ...form });
+      setShowOtpVerification(true);
+      setShowAddForm(false);
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error("Failed to send OTP");
+    } finally {
+      setIsOtpSending(false);
+    }
+  };
+
+  // Step 2: Verify OTP and save manager
+  const verifyOtpAndSaveManager = async () => {
+    if (!otpForNewManager.trim()) {
+      return toast.error("Please enter OTP");
+    }
+
+    if (!pendingManagerData) {
+      return toast.error("No pending manager data found");
+    }
+
+    setIsVerifyingOtp(true);
+    const loadingToast = toast.loading("Verifying OTP and saving manager...");
+
+    try {
+      const res = await fetch("/api/manager", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          adminId, 
+          ...pendingManagerData,
+          otp: otpForNewManager.trim()
+        }),
+      });
+
+      const data = await res.json();
+      toast.dismiss(loadingToast);
+
+      if (!res.ok) {
+        setIsVerifyingOtp(false);
+        return toast.error(data.error || "Failed to verify OTP");
       }
 
       toast.success("Manager added successfully! ✅");
 
+      // Reset all states
       setForm({
         name: "",
         email: "",
@@ -81,14 +146,25 @@ export default function ManagerComponent({ adminId }: any) {
         password: "",
         confirm: "",
       });
+      setShowOtpVerification(false);
+      setOtpForNewManager("");
+      setPendingManagerData(null);
+      setShowAddForm(false);
 
       load();
     } catch (error) {
       toast.dismiss(loadingToast);
       toast.error("Failed to add manager");
     } finally {
-      setIsSaving(false);
+      setIsVerifyingOtp(false);
     }
+  };
+
+  const cancelOtpVerification = () => {
+    setShowOtpVerification(false);
+    setOtpForNewManager("");
+    setPendingManagerData(null);
+    setShowAddForm(true);
   };
 
   const confirmDelete = (id: string, name: string) => {
@@ -120,8 +196,8 @@ export default function ManagerComponent({ adminId }: any) {
     }
   };
 
-  const sendOTP = async () => {
-    setIsOtpSending(true);
+  const sendOTPForPassword = async () => {
+    setIsOtpSendingForPassword(true);
 
     try {
       const res = await fetch("/api/manager/request-password-otp", {
@@ -133,7 +209,7 @@ export default function ManagerComponent({ adminId }: any) {
       const data = await res.json();
 
       if (!res.ok) {
-        setIsOtpSending(false);
+        setIsOtpSendingForPassword(false);
         return toast.error(data.error);
       }
 
@@ -142,7 +218,7 @@ export default function ManagerComponent({ adminId }: any) {
     } catch (error) {
       toast.error("Failed to send OTP");
     } finally {
-      setIsOtpSending(false);
+      setIsOtpSendingForPassword(false);
     }
   };
 
@@ -190,74 +266,192 @@ export default function ManagerComponent({ adminId }: any) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <Users className="w-6 h-6 text-orange-600" />
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
-          Manager Management
-        </h2>
-      </div>
-
-      {/* Add Manager Form */}
-      <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 sm:p-6 border border-orange-100">
-        <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-          <UserPlus size={20} className="text-orange-600" />
-          Add New Manager
-        </h3>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <input
-            className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-            placeholder="Full Name *"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <input
-            className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-            placeholder="Email *"
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-          <input
-            className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-            placeholder="Contact Number *"
-            value={form.contact}
-            onChange={(e) => setForm({ ...form, contact: e.target.value })}
-          />
-          <input
-            className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-            placeholder="Password *"
-            type="password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
-          <input
-            className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all sm:col-span-2"
-            placeholder="Confirm Password *"
-            type="password"
-            value={form.confirm}
-            onChange={(e) => setForm({ ...form, confirm: e.target.value })}
-          />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="w-6 h-6 text-orange-600" />
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
+            Manager Management
+          </h2>
         </div>
-
-        <button
-          onClick={save}
-          disabled={isSaving}
-          className="mt-4 w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {isSaving ? (
-            <>
-              <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-              Saving...
-            </>
-          ) : (
-            <>
-              <UserPlus size={18} />
-              Save Manager
-            </>
-          )}
-        </button>
+        
+        {!showAddForm && !showOtpVerification && (
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            <UserPlus size={18} />
+            Add Manager
+          </button>
+        )}
       </div>
+
+      {/* Add Manager Form - Collapsible */}
+      {showAddForm && (
+        <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4 sm:p-6 border border-orange-100 animate-fadeIn">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <UserPlus size={20} className="text-orange-600" />
+              Add New Manager
+            </h3>
+            <button
+              onClick={() => {
+                setShowAddForm(false);
+                setForm({
+                  name: "",
+                  email: "",
+                  contact: "",
+                  password: "",
+                  confirm: "",
+                });
+              }}
+              className="text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <input
+              className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+              placeholder="Full Name *"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+            <input
+              className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+              placeholder="Email *"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+            <input
+              className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+              placeholder="Contact Number *"
+              value={form.contact}
+              onChange={(e) => setForm({ ...form, contact: e.target.value })}
+            />
+            <input
+              className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+              placeholder="Password *"
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+            <input
+              className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all sm:col-span-2"
+              placeholder="Confirm Password *"
+              type="password"
+              value={form.confirm}
+              onChange={(e) => setForm({ ...form, confirm: e.target.value })}
+            />
+          </div>
+
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-xs text-blue-800 flex items-center gap-2">
+              <Mail size={14} />
+              An OTP will be sent to the manager's email for verification before account creation.
+            </p>
+          </div>
+
+          <button
+            onClick={sendOtpToManagerEmail}
+            disabled={isOtpSending}
+            className="mt-4 w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isOtpSending ? (
+              <>
+                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                Sending OTP...
+              </>
+            ) : (
+              <>
+                <Mail size={18} />
+                Send Verification OTP
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* OTP Verification Section */}
+      {showOtpVerification && (
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 sm:p-6 border border-blue-200 animate-fadeIn">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <Mail size={20} className="text-blue-600" />
+              Email Verification
+            </h3>
+            <button
+              onClick={cancelOtpVerification}
+              className="text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div className="p-4 bg-white border border-blue-200 rounded-lg">
+              <p className="text-sm text-gray-700 mb-2">
+                <strong>Manager Email:</strong> {pendingManagerData?.email}
+              </p>
+              <p className="text-xs text-gray-600">
+                A 6-digit OTP has been sent to this email address. Please enter it below to complete registration.
+              </p>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">
+                Enter OTP *
+              </label>
+              <input
+                className="w-full border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-center text-lg tracking-widest"
+                placeholder="000000"
+                value={otpForNewManager}
+                onChange={(e) => setOtpForNewManager(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                maxLength={6}
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={verifyOtpAndSaveManager}
+                disabled={isVerifyingOtp || otpForNewManager.length !== 6}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isVerifyingOtp ? (
+                  <>
+                    <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus size={18} />
+                    Verify & Add Manager
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={sendOtpToManagerEmail}
+                disabled={isOtpSending}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isOtpSending ? (
+                  <>
+                    <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    Resending...
+                  </>
+                ) : (
+                  <>
+                    <Mail size={18} />
+                    Resend OTP
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Manager List */}
       <div>
@@ -271,13 +465,13 @@ export default function ManagerComponent({ adminId }: any) {
             <Users size={48} className="mx-auto text-gray-300 mb-3" />
             <p className="text-gray-500">No managers added yet</p>
             <p className="text-sm text-gray-400 mt-1">
-              Add your first manager using the form above
+              Add your first manager using the button above
             </p>
           </div>
         ) : (
           <>
             {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto border rounded-lg">
+            <div className="hidden md:block overflow-x-auto border rounded-lg bg-white">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b">
                   <tr>
@@ -338,7 +532,7 @@ export default function ManagerComponent({ adminId }: any) {
               {list.map((m: any) => (
                 <div
                   key={m._id}
-                  className="bg-white border rounded-lg p-4 space-y-3"
+                  className="bg-white border rounded-lg p-4 space-y-3 shadow-sm"
                 >
                   <div>
                     <div className="text-xs text-gray-500 mb-1">Name</div>
@@ -385,7 +579,7 @@ export default function ManagerComponent({ adminId }: any) {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-fadeIn">
             <div className="flex items-start gap-3 mb-4">
               <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                 <Trash2 className="w-5 h-5 text-red-600" />
@@ -427,7 +621,7 @@ export default function ManagerComponent({ adminId }: any) {
       {/* Change Password Modal */}
       {showPassModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-fadeIn">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
@@ -464,11 +658,11 @@ export default function ManagerComponent({ adminId }: any) {
                     below to receive it.
                   </p>
                   <button
-                    onClick={sendOTP}
-                    disabled={isOtpSending}
+                    onClick={sendOTPForPassword}
+                    disabled={isOtpSendingForPassword}
                     className="w-full px-5 py-3 rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isOtpSending ? (
+                    {isOtpSendingForPassword ? (
                       <>
                         <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                         Sending OTP...
