@@ -84,6 +84,8 @@ export default function BillingPage() {
   const [hasLoadedEditData, setHasLoadedEditData] = useState(false);
   // ✅ NEW: Add state for database serial number
   const [dbSerialNumber, setDbSerialNumber] = useState<string | null>(null);
+  // ✅ NEW: Add state for sticky note loaded indicator
+  const [loadedFromStickyNote, setLoadedFromStickyNote] = useState(false);
 
   // suggestion control
   const [customerSuggestionIndex, setCustomerSuggestionIndex] = useState(0);
@@ -272,7 +274,9 @@ export default function BillingPage() {
           setItems(formattedItems);
         }
 
-        toast.success("Sticky note data loaded! Complete the bill details.");
+        // Removed toast - data loaded silently
+        setLoadedFromStickyNote(true);
+        setTimeout(() => setLoadedFromStickyNote(false), 3000);
 
       } catch (err) {
         console.error("Error loading sticky note data:", err);
@@ -912,157 +916,157 @@ export default function BillingPage() {
     setShowConfirm(true);
   };
 
-// ✅ FINAL FIX: Use nextSerialNumber from backend response
-// This completely eliminates race conditions
-// Replace your confirmSaveBill function with this version
+  // ✅ FINAL FIX: Use nextSerialNumber from backend response
+  // This completely eliminates race conditions
+  // Replace your confirmSaveBill function with this version
 
-const confirmSaveBill = async () => {
-  if (!validateBeforeSave()) {
-    setShowConfirm(false);
-    return;
-  }
+  const confirmSaveBill = async () => {
+    if (!validateBeforeSave()) {
+      setShowConfirm(false);
+      return;
+    }
 
-  if (!billingCustomer || !userId) {
-    setShowConfirm(false);
-    return;
-  }
+    if (!billingCustomer || !userId) {
+      setShowConfirm(false);
+      return;
+    }
 
-  setIsSaving(true);
-  try {
-    const filledItems = items.filter(
-      (it) =>
-        it.productName &&
-        it.productName.trim() !== "" &&
-        it.quantity &&
-        it.quantity > 0
-    );
+    setIsSaving(true);
+    try {
+      const filledItems = items.filter(
+        (it) =>
+          it.productName &&
+          it.productName.trim() !== "" &&
+          it.quantity &&
+          it.quantity > 0
+      );
 
-    const allItems = filledItems.map((it) => {
-      const matched = findProductByName(it.productName);
-      return {
-        productId: matched?._id,
-        productName: it.productName,
-        quantity: Number(it.quantity) || 0,
-        unit: matched?.unit ?? it.unit ?? "",
-        price: it.free ? 0 : Number(it.price || 0),
-        total: it.free ? 0 : Number(it.total || 0),
-        free: it.free,
-      };
-    });
-
-    const orderId = isEditMode && editingOrderId ? editingOrderId : `ORD-${Date.now()}`;
-
-    const billingCustomerData = {
-      customerId: billingCustomer._id,
-      name: billingCustomer.name,
-      shopName: billingCustomer.shopName || billingCustomer.name,
-      address: billingCustomer.address || billingCustomer.shopAddress || "",
-      contact: billingCustomer.contact || "",
-    };
-
-    const shippingCustomerData = sameAsBilling
-      ? billingCustomerData
-      : {
-          customerId: shippingCustomer?._id,
-          name: shippingCustomer?.name || "",
-          shopName: shippingCustomer?.shopName || shippingCustomer?.name || "",
-          address: shippingCustomer?.address || shippingCustomer?.shopAddress || "",
-          contact: shippingCustomer?.contact || "",
+      const allItems = filledItems.map((it) => {
+        const matched = findProductByName(it.productName);
+        return {
+          productId: matched?._id,
+          productName: it.productName,
+          quantity: Number(it.quantity) || 0,
+          unit: matched?.unit ?? it.unit ?? "",
+          price: it.free ? 0 : Number(it.price || 0),
+          total: it.free ? 0 : Number(it.total || 0),
+          free: it.free,
         };
+      });
 
-    const payload = {
-      userId,
-      orderId,
-      serialNumber: serialNo,
-      billDate: date,
-      billingCustomer: billingCustomerData,
-      shippingCustomer: shippingCustomerData,
-      sameAsBilling,
-      items: allItems,
-      subtotal: subTotal,
-      discountPercentage: discountPercent || 0,
-      grandTotal: discounted,
-      remarks,
-    };
+      const orderId = isEditMode && editingOrderId ? editingOrderId : `ORD-${Date.now()}`;
 
-    const method = isEditMode ? "PUT" : "POST";
-    const url = "/api/bills";
+      const billingCustomerData = {
+        customerId: billingCustomer._id,
+        name: billingCustomer.name,
+        shopName: billingCustomer.shopName || billingCustomer.name,
+        address: billingCustomer.address || billingCustomer.shopAddress || "",
+        contact: billingCustomer.contact || "",
+      };
 
-    if (isEditMode && editingBillId) {
-      (payload as any).billId = editingBillId;
-    }
+      const shippingCustomerData = sameAsBilling
+        ? billingCustomerData
+        : {
+            customerId: shippingCustomer?._id,
+            name: shippingCustomer?.name || "",
+            shopName: shippingCustomer?.shopName || shippingCustomer?.name || "",
+            address: shippingCustomer?.address || shippingCustomer?.shopAddress || "",
+            contact: shippingCustomer?.contact || "",
+          };
 
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+      const payload = {
+        userId,
+        orderId,
+        serialNumber: serialNo,
+        billDate: date,
+        billingCustomer: billingCustomerData,
+        shippingCustomer: shippingCustomerData,
+        sameAsBilling,
+        items: allItems,
+        subtotal: subTotal,
+        discountPercentage: discountPercent || 0,
+        grandTotal: discounted,
+        remarks,
+      };
 
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      throw new Error(data.error || `Failed to ${isEditMode ? "update" : "save"} bill`);
-    }
+      const method = isEditMode ? "PUT" : "POST";
+      const url = "/api/bills";
 
-    toast.success(
-      `Bill ${isEditMode ? "updated" : "saved"} successfully! Stock updated & customer debit adjusted.`
-    );
+      if (isEditMode && editingBillId) {
+        (payload as any).billId = editingBillId;
+      }
 
-    if (pdfExportRef.current) {
-      await pdfExportRef.current.exportPDF();
-    }
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    setShowConfirm(false);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Failed to ${isEditMode ? "update" : "save"} bill`);
+      }
 
-    const wasEditMode = isEditMode;
+      toast.success(
+        `Bill ${isEditMode ? "updated" : "saved"} successfully! Stock updated & customer debit adjusted.`
+      );
 
-    setIsEditMode(false);
-    setEditingBillId(null);
-    setEditingOrderId(null);
-    setHasLoadedEditData(false);
+      if (pdfExportRef.current) {
+        await pdfExportRef.current.exportPDF();
+      }
 
-    if (!wasEditMode && userId) {
-      // ✅ CRITICAL FIX: Use the nextSerialNumber from the backend response
-      // The backend has ALREADY calculated and returned the correct next serial
-      if (data.nextSerialNumber) {
-        setSerialNo(data.nextSerialNumber);
-        sessionStorage.setItem("billing-serial", data.nextSerialNumber);
+      setShowConfirm(false);
+
+      const wasEditMode = isEditMode;
+
+      setIsEditMode(false);
+      setEditingBillId(null);
+      setEditingOrderId(null);
+      setHasLoadedEditData(false);
+
+      if (!wasEditMode && userId) {
+        // ✅ CRITICAL FIX: Use the nextSerialNumber from the backend response
+        // The backend has ALREADY calculated and returned the correct next serial
+        if (data.nextSerialNumber) {
+          setSerialNo(data.nextSerialNumber);
+          sessionStorage.setItem("billing-serial", data.nextSerialNumber);
+        } else {
+          // Fallback: generate serial (shouldn't normally happen)
+          await resetBillForm();
+        }
+
+        // Reset form fields (but serial is already set above)
+        setBillingCustomer(null);
+        setShippingCustomer(null);
+        setSameAsBilling(false);
+        setCustomerInput("");
+        setShippingInput("");
+        setItems(Array.from({ length: 15 }, blankItem));
+        setDiscountPercent(0);
+        setRemarks("");
       } else {
-        // Fallback: generate serial (shouldn't normally happen)
-        await resetBillForm();
-      }
-      
-      // Reset form fields (but serial is already set above)
-      setBillingCustomer(null);
-      setShippingCustomer(null);
-      setSameAsBilling(false);
-      setCustomerInput("");
-      setShippingInput("");
-      setItems(Array.from({ length: 15 }, blankItem));
-      setDiscountPercent(0);
-      setRemarks("");
-    } else {
-      // This was an EDIT - clear form WITHOUT generating new serial
-      setBillingCustomer(null);
-      setShippingCustomer(null);
-      setSameAsBilling(false);
-      setCustomerInput("");
-      setShippingInput("");
-      setItems(Array.from({ length: 15 }, blankItem));
-      setDiscountPercent(0);
-      setRemarks("");
+        // This was an EDIT - clear form WITHOUT generating new serial
+        setBillingCustomer(null);
+        setShippingCustomer(null);
+        setSameAsBilling(false);
+        setCustomerInput("");
+        setShippingInput("");
+        setItems(Array.from({ length: 15 }, blankItem));
+        setDiscountPercent(0);
+        setRemarks("");
 
-      const currentSerial = sessionStorage.getItem("billing-serial");
-      if (currentSerial) {
-        setSerialNo(currentSerial);
+        const currentSerial = sessionStorage.getItem("billing-serial");
+        if (currentSerial) {
+          setSerialNo(currentSerial);
+        }
       }
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || `Failed to ${isEditMode ? "update" : "save"} bill.`);
+    } finally {
+      setIsSaving(false);
     }
-  } catch (err: any) {
-    console.error(err);
-    toast.error(err?.message || `Failed to ${isEditMode ? "update" : "save"} bill.`);
-  } finally {
-    setIsSaving(false);
-  }
-};
+  };
 
   // ===== UI =====
   return (
@@ -1126,6 +1130,20 @@ const confirmSaveBill = async () => {
                 </svg>
                 <span className="text-sm font-semibold text-blue-900">
                   Editing Bill: {serialNo}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Sticky Note Loaded Indicator */}
+          {loadedFromStickyNote && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-semibold text-green-900">
+                  Sticky note data loaded - Complete the remaining details
                 </span>
               </div>
             </div>
