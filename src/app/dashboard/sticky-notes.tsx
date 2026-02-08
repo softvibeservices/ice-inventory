@@ -245,7 +245,7 @@ export function StickyNotesPanel() {
       // Navigate to billing page
       router.push("/dashboard/billing");
 
-      toast.success("Opening billing page with sticky note data...");
+    
     } catch (err: any) {
       console.error(err);
       toast.error("Failed to create bill from sticky note");
