@@ -1,5 +1,4 @@
 // src/app/dashboard/sticky-notes.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -92,21 +91,21 @@ export function StickyNotesPanel() {
   // ========= SEARCH & FILTER =========
   const filteredNotes = notes.filter((note) => {
     if (!searchTerm.trim()) return true;
-    
+
     const term = searchTerm.toLowerCase();
     const shopMatch = note.shopName?.toLowerCase().includes(term);
     const customerMatch = note.customerName?.toLowerCase().includes(term);
-    const itemsMatch = note.items.some(item => 
+    const itemsMatch = note.items.some(item =>
       item.productName?.toLowerCase().includes(term)
     );
-    
+
     return shopMatch || customerMatch || itemsMatch;
   });
 
   // ========= PAGINATION =========
   const totalPages = Math.ceil(filteredNotes.length / NOTES_PER_PAGE);
-  const paginatedNotes = showAll 
-    ? filteredNotes 
+  const paginatedNotes = showAll
+    ? filteredNotes
     : filteredNotes.slice(
         (currentPage - 1) * NOTES_PER_PAGE,
         currentPage * NOTES_PER_PAGE
@@ -208,8 +207,8 @@ export function StickyNotesPanel() {
     try {
       // Find the customer from the customers list
       const customer = customers.find(
-        c => c._id === note.customerId || 
-        (c.name.toLowerCase() === note.customerName.toLowerCase() && 
+        c => c._id === note.customerId ||
+        (c.name.toLowerCase() === note.customerName.toLowerCase() &&
          c.shopName.toLowerCase() === note.shopName.toLowerCase())
       );
 
@@ -223,7 +222,7 @@ export function StickyNotesPanel() {
         items: note.items.map(item => {
           // Find matching product to get price
           const product = products.find(
-            p => p._id === item.productId || 
+            p => p._id === item.productId ||
             p.name.toLowerCase() === item.productName.toLowerCase()
           );
 
@@ -245,7 +244,7 @@ export function StickyNotesPanel() {
 
       // Navigate to billing page
       router.push("/dashboard/billing");
-      
+
       toast.success("Opening billing page with sticky note data...");
     } catch (err: any) {
       console.error(err);
@@ -256,6 +255,12 @@ export function StickyNotesPanel() {
   // ========= RENDER =========
   return (
     <>
+      {/* Google Font for handwritten style */}
+      <link
+        href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"
+        rel="stylesheet"
+      />
+
       {/* Full-Width Sticky Notes Panel */}
       <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-6">
         {/* Header Section */}
@@ -294,7 +299,7 @@ export function StickyNotesPanel() {
                 className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none bg-white placeholder-gray-400"
               />
             </div>
-            
+
             {filteredNotes.length > 0 && (
               <div className="flex items-center gap-2 sm:gap-3">
                 <button
@@ -304,7 +309,7 @@ export function StickyNotesPanel() {
                   <Eye className="w-3.5 h-3.5" />
                   {showAll ? `Show Pages (${filteredNotes.length})` : `View All (${filteredNotes.length})`}
                 </button>
-                
+
                 <span className="text-xs sm:text-sm font-medium text-gray-600 whitespace-nowrap">
                   {filteredNotes.length} note{filteredNotes.length !== 1 ? 's' : ''}
                 </span>
@@ -326,7 +331,7 @@ export function StickyNotesPanel() {
               {searchTerm ? "No matching sticky notes" : "No sticky notes yet"}
             </p>
             <p className="text-xs sm:text-sm text-amber-700/80 max-w-md">
-              {searchTerm 
+              {searchTerm
                 ? "Try adjusting your search terms or clear the search to see all notes"
                 : "Start capturing phone orders by clicking the 'Add New Sticky Note' button above"}
             </p>
@@ -339,26 +344,55 @@ export function StickyNotesPanel() {
                 const boxTotal = computeNoteBoxTotal(note);
                 const tiltClass = index % 3 === 0 ? "hover:rotate-[-2deg]" : index % 3 === 1 ? "hover:rotate-[2deg]" : "hover:rotate-[-1deg]";
                 const isFromDelivery = isDeliveryPartnerNote(note);
-                
+
                 return (
                   <div
                     key={note._id}
-                    className={`relative border ${
-                      isFromDelivery 
-                        ? "border-blue-300 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50" 
-                        : "border-amber-300 bg-gradient-to-br from-amber-50 via-amber-100 to-amber-50"
-                    } rounded-xl px-3 sm:px-4 py-3 sm:py-4 flex flex-col gap-2 shadow-md hover:shadow-2xl transition-all duration-300 ${tiltClass} group`}
+                    className={`relative ${
+                      isFromDelivery
+                        ? "bg-gradient-to-br from-blue-100 via-blue-50 to-blue-100"
+                        : "bg-gradient-to-br from-yellow-100 via-yellow-50 to-amber-100"
+                    } rounded-sm px-4 sm:px-5 py-5 sm:py-6 pt-8 sm:pt-10 flex flex-col gap-2 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_8px_10px_-2px_rgba(0,0,0,0.05)] hover:shadow-[0_10px_20px_-5px_rgba(0,0,0,0.15),0_15px_25px_-5px_rgba(0,0,0,0.1)] transition-all duration-300 ${tiltClass} group border-t-4 ${
+                      isFromDelivery ? "border-t-blue-400" : "border-t-amber-400"
+                    }`}
+                    style={{
+                      transform: `rotate(${index % 3 === 0 ? '-1' : index % 3 === 1 ? '1' : '-0.5'}deg)`,
+                    }}
                   >
-                    {/* Pin on top */}
-                    <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10">
-                      <div className={`w-7 sm:w-8 h-1.5 sm:h-2 rounded-full ${
-                        isFromDelivery ? "bg-blue-400 shadow-blue-300" : "bg-amber-400 shadow-amber-300"
-                      } shadow-md`} />
+                    {/* Realistic Push Pin */}
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
+                      <div className="relative">
+                        {/* Pin Head (circular top) */}
+                        <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full ${
+                          isFromDelivery ? "bg-blue-500" : "bg-red-500"
+                        } shadow-lg flex items-center justify-center`}>
+                          <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full ${
+                            isFromDelivery ? "bg-blue-400" : "bg-red-400"
+                          }`} />
+                        </div>
+                        {/* Pin Needle (small shadow below) */}
+                        <div className={`absolute top-5 left-1/2 -translate-x-1/2 w-0.5 h-2 ${
+                          isFromDelivery ? "bg-blue-600/40" : "bg-red-600/40"
+                        } blur-[1px]`} />
+                      </div>
                     </div>
+
+                    {/* Paper texture overlay */}
+                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none rounded-sm"
+                      style={{
+                        backgroundImage: `repeating-linear-gradient(
+                          0deg,
+                          transparent,
+                          transparent 2px,
+                          rgba(0,0,0,0.03) 2px,
+                          rgba(0,0,0,0.03) 4px
+                        )`
+                      }}
+                    />
 
                     {/* Delivery Partner Badge */}
                     {isFromDelivery && (
-                      <div className="absolute -top-2 -right-2 bg-blue-500 text-white rounded-full p-1 sm:p-1.5 shadow-lg z-10">
+                      <div className="absolute top-2 right-2 bg-blue-600 text-white rounded-full p-1.5 sm:p-2 shadow-md z-10 border-2 border-white">
                         <Truck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                       </div>
                     )}
@@ -366,14 +400,16 @@ export function StickyNotesPanel() {
                     {/* Header: Shop & Customer */}
                     <div className="flex items-start justify-between gap-2 mt-1 sm:mt-2">
                       <div className="flex-1 min-w-0">
-                        <p className={`text-xs sm:text-sm font-bold truncate ${
-                          isFromDelivery ? "text-blue-900" : "text-amber-900"
-                        }`} title={note.shopName}>
+                        <p className={`text-sm sm:text-base font-bold truncate ${
+                          isFromDelivery ? "text-blue-900" : "text-gray-800"
+                        }`} title={note.shopName}
+                          style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}>
                           {note.shopName}
                         </p>
-                        <p className={`text-[10px] sm:text-xs truncate ${
-                          isFromDelivery ? "text-blue-800" : "text-amber-800"
-                        }`} title={note.customerName}>
+                        <p className={`text-xs sm:text-sm truncate ${
+                          isFromDelivery ? "text-blue-700" : "text-gray-700"
+                        }`} title={note.customerName}
+                          style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}>
                           {note.customerName}
                         </p>
                         {isFromDelivery && (
@@ -383,24 +419,26 @@ export function StickyNotesPanel() {
                           </p>
                         )}
                       </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className={`text-[9px] sm:text-[10px] ${
+                      <div className="text-right flex-shrink-0 bg-white/60 px-2 py-1 rounded-md shadow-sm">
+                        <p className={`text-[9px] sm:text-[10px] font-medium ${
                           isFromDelivery ? "text-blue-700" : "text-amber-700"
                         }`}>
                           Boxes
                         </p>
-                        <p className={`text-sm sm:text-base font-bold ${
+                        <p className={`text-lg sm:text-xl font-bold ${
                           isFromDelivery ? "text-blue-900" : "text-amber-900"
-                        }`}>
+                        }`}
+                          style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}>
                           {boxTotal}
                         </p>
                       </div>
                     </div>
 
                     {/* Items Preview */}
-                    <div className={`text-[9px] sm:text-[10px] ${
-                      isFromDelivery ? "text-blue-800/80" : "text-amber-800/80"
-                    } mb-1 flex-1`}>
+                    <div className={`text-[10px] sm:text-xs ${
+                      isFromDelivery ? "text-blue-800" : "text-gray-700"
+                    } mb-1 flex-1 leading-relaxed`}
+                      style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}>
                       <p className="font-medium mb-0.5">
                         {note.items.length} item{note.items.length > 1 ? "s" : ""}:
                       </p>
@@ -437,7 +475,7 @@ export function StickyNotesPanel() {
                           <span className="hidden sm:inline">Del</span>
                         </button>
                       </div>
-                      
+
                       {/* Create Bill Button */}
                       <button
                         onClick={() => handleCreateBill(note)}
@@ -466,7 +504,7 @@ export function StickyNotesPanel() {
                 >
                   <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
-                
+
                 <div className="flex items-center gap-2">
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                     let pageNum: number;
@@ -479,7 +517,7 @@ export function StickyNotesPanel() {
                     } else {
                       pageNum = currentPage - 2 + i;
                     }
-                    
+
                     return (
                       <button
                         key={pageNum}
@@ -495,7 +533,7 @@ export function StickyNotesPanel() {
                     );
                   })}
                 </div>
-                
+
                 <button
                   onClick={() => handlePageChange(currentPage + 1)}
                   disabled={currentPage === totalPages}
@@ -511,8 +549,8 @@ export function StickyNotesPanel() {
         {/* Info Footer */}
         <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-[10px] sm:text-xs text-blue-800 leading-relaxed">
-            <strong>📋 Tip:</strong> Click "Create Bill" to open the billing page with pre-filled data. 
-            After creating a proper bill from a sticky note, delete it to keep your workspace organized. 
+            <strong>📋 Tip:</strong> Click "Create Bill" to open the billing page with pre-filled data.
+            After creating a proper bill from a sticky note, delete it to keep your workspace organized.
             Notes with a <Truck className="w-2.5 h-2.5 sm:w-3 sm:h-3 inline mx-0.5" /> truck icon were created by delivery partners.
           </p>
         </div>
