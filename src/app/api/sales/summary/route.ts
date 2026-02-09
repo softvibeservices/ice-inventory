@@ -6,13 +6,12 @@ import Order from "@/models/Order";
 import Customer from "@/models/Customer";
 import User from "@/models/User";
 
-// ✅ CHANGED: Use Record<string, number> for dynamic units
 interface QuantityTotals {
   [unit: string]: number;
 }
 
 interface DailyStat {
-  date: string; // yyyy-mm-dd
+  date: string;
   totalSales: number;
   totalOrders: number;
   quantities: QuantityTotals;
@@ -27,7 +26,6 @@ function parseDateParam(value: string | null): Date | null {
   return d;
 }
 
-// INCLUSIVE helper, same logic as customer-ledger
 function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
   if (!date) return false;
   const ts = date.getTime();
@@ -47,7 +45,6 @@ function initQuantities(): QuantityTotals {
   return {};
 }
 
-// ✅ NEW: Helper to add quantities dynamically
 function addQuantities(target: QuantityTotals, source: any) {
   if (!source || typeof source !== 'object') return;
   
@@ -66,7 +63,16 @@ export async function GET(req: Request) {
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
 
-    // 🚫 Prevent manager access
+    if (!userId) {
+      return NextResponse.json(
+        { error: "userId is required" },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    // 🔒 Security: Block manager access
     const user = await User.findById(userId).select("role");
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -78,46 +84,27 @@ export async function GET(req: Request) {
       );
     }
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: "userId is required" },
-        { status: 400 }
-      );
-    }
-
     const from = parseDateParam(fromParam);
     const to = parseDateParam(toParam);
 
-    await connectDB();
-
-    // ✅ CRITICAL CHANGE: Only count orders that are BOTH delivered AND settled
-    // Excluding discarded orders and debt-only orders
+    // ✅ CRITICAL: Only count orders that are BOTH settled AND delivered
     const orderMatch: any = { 
       userId,
       discardedAt: null,
-      deliveryStatus: "Delivered", // ✅ Must be delivered
-      status: "settled", // ✅ Must be settled
+      status: "settled",
+      deliveryStatus: "Delivered",
     };
 
-    // ✅ Also exclude pure debt orders (no actual payment received)
-    orderMatch.$or = [
-      { settlementMethod: "Cash" },
-      { settlementMethod: "Bank/UPI" },
-      { 
-        settlementMethod: "Debt",
-        settlementAmount: { $gt: 0 } // Only debt orders with some payment
-      }
-    ];
-
+    // Date range filter
     if (from || to) {
       orderMatch.createdAt = {};
       if (from) {
-        orderMatch.createdAt.$gte = from; // inclusive start
+        orderMatch.createdAt.$gte = from;
       }
       if (to) {
         const toLimit = new Date(to);
-        toLimit.setDate(toLimit.getDate() + 1); // end of "to" day
-        orderMatch.createdAt.$lt = toLimit; // half-open [from, to+1day)
+        toLimit.setDate(toLimit.getDate() + 1);
+        orderMatch.createdAt.$lt = toLimit;
       }
     }
 
@@ -139,12 +126,9 @@ export async function GET(req: Request) {
       return dateObj.toISOString().slice(0, 10);
     };
 
-    // 2) Aggregate sales + quantities by createdAt
+    // Aggregate sales + quantities by createdAt
     for (const raw of orders as any[]) {
-      const createdAt = raw.createdAt
-        ? new Date(raw.createdAt)
-        : new Date();
-
+      const createdAt = raw.createdAt ? new Date(raw.createdAt) : new Date();
       const key = getDayKey(createdAt);
 
       if (!dailyMap[key]) {
@@ -163,13 +147,13 @@ export async function GET(req: Request) {
       dailyMap[key].totalSales += orderTotal;
       dailyMap[key].totalOrders += 1;
 
-      // ✅ CHANGED: Add all quantities from quantitySummary dynamically
+      // ✅ Add all quantities from quantitySummary dynamically
       const q = raw.quantitySummary || {};
       addQuantities(dailyMap[key].quantities, q);
       addQuantities(quantities, q);
     }
 
-    // 3) Aggregate payments by method from settlementHistory (respecting date range if provided)
+    // Aggregate payments by method from settlementHistory
     for (const raw of orders as any[]) {
       const history: any[] = Array.isArray(raw.settlementHistory)
         ? raw.settlementHistory
@@ -179,7 +163,6 @@ export async function GET(req: Request) {
         if (entry.action !== "Settled") continue;
 
         const at = entry.at ? new Date(entry.at) : new Date();
-        // if from/to given, respect them; otherwise count everything
         if ((from || to) && !isWithinRange(at, from, to)) continue;
 
         const amount = Number(entry.amountPaid || 0) || 0;
@@ -207,7 +190,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // 4) Overall credit / debit from customers (global, not date-limited)
+    // Overall credit/debit from customers (global, not date-limited)
     const customers = await Customer.find({ userId }).lean();
     let overallDebit = 0;
     let overallCredit = 0;
@@ -220,12 +203,12 @@ export async function GET(req: Request) {
     const netReceivable = overallDebit - overallCredit;
     const outstandingDebt = netReceivable < 0 ? 0 : netReceivable;
 
-    // ✅ CHANGED: Sort daily data in DESCENDING order (latest first)
+    // Sort daily data in DESCENDING order (latest first)
     const daily = Object.values(dailyMap).sort((a, b) =>
-      b.date.localeCompare(a.date) // ✅ Reversed: b.date - a.date for latest first
+      b.date.localeCompare(a.date)
     );
 
-    // ✅ Round all quantity values
+    // Round all quantity values
     Object.keys(quantities).forEach(unit => {
       quantities[unit] = Math.round(quantities[unit]);
     });
@@ -257,4 +240,4 @@ export async function GET(req: Request) {
       { status: 500 }
     );
   }
-}
+} 

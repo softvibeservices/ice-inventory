@@ -1,22 +1,23 @@
-// src\app\api\sales\customer-ledger\route.ts
+// src/app/api/sales/customer-ledger/route.ts
+
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Customer, { ICustomer } from "@/models/Customer";
-import User from "@/models/User"; // 🔒 security import
+import User from "@/models/User";
 
 type LedgerType = "Sale" | "Payment" | "Adjustment";
 
 interface LedgerEntry {
   id: string;
   type: LedgerType;
-  at: string; // ISO string
+  at: string;
   orderId?: string;
   serialNumber?: string;
   method?: string;
   note?: string;
-  debit?: number; // customer owes more
-  credit?: number; // customer pays you / adjustment
+  debit?: number;
+  credit?: number;
 }
 
 function parseDateParam(value: string | null): Date | null {
@@ -26,18 +27,15 @@ function parseDateParam(value: string | null): Date | null {
   return d;
 }
 
-// INCLUSIVE date range helper
 function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
   if (!date) return false;
   const ts = date.getTime();
 
-  // from: inclusive, start of that day
   if (from && ts < from.getTime()) return false;
 
-  // to: inclusive – we treat it as end of that day by adding 1 day
   if (to) {
     const toLimit = new Date(to);
-    toLimit.setDate(toLimit.getDate() + 1); // make "to" inclusive
+    toLimit.setDate(toLimit.getDate() + 1);
     if (ts >= toLimit.getTime()) return false;
   }
 
@@ -61,7 +59,7 @@ export async function GET(req: Request) {
 
     await connectDB();
 
-    // 🔒 SECURITY CHECK — BLOCK MANAGER ACCESS
+    // 🔒 Security: Block manager access
     const user = await User.findById(userId).select("role");
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
