@@ -8,7 +8,9 @@ export interface Order {
   total?: number;
   status?: "Unsettled" | "settled";
   settlementMethod?: string | null;
+  settlementAmount?: number; // ✅ Added for payment tracking
   deliveryStatus?: "Pending" | "On the Way" | "Delivered";
+  discardedAt?: Date | string | null; // ✅ Added to filter out discarded orders
   createdAt?: string;
 }
 
@@ -23,7 +25,7 @@ export interface Product {
   packUnit?: string;
   sellingPrice: number;
   mrp?: number;
-  minStock?: number; // ✅ Fixed: Changed from 'undefined' to '?: number'
+  minStock?: number;
   notes?: string;
   createdAt?: string;
   updatedAt?: string;

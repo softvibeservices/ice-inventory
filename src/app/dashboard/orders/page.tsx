@@ -2,12 +2,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation"; // ✅ NEW
+import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
 import OrderList from "./OrderList";
 import OrderModals from "./OrderModals";
+import DiscardConfirmationModal from "./DiscardConfirmationModal";
 
 type QuantitySummary = Record<string, number>;
 
@@ -93,7 +94,7 @@ type SortMode =
   | "serial-desc";
 
 export default function OrdersPage() {
-  const router = useRouter(); // ✅ NEW
+  const router = useRouter();
 
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -121,12 +122,14 @@ export default function OrdersPage() {
   // view modal state
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
 
+  // discard modal state
+  const [discardOrderToConfirm, setDiscardOrderToConfirm] = useState<Order | null>(null);
+
   const [unsettledOrders, setUnsettledOrders] = useState<Order[]>([]);
   const [settledOrders, setSettledOrders] = useState<Order[]>([]);
   const [debtOrders, setDebtOrders] = useState<Order[]>([]);
   const [discardedOrders, setDiscardedOrders] = useState<Order[]>([]);
 
-  // ✅ NEW: Handle edit button click
   const handleEditOrder = async (order: Order) => {
     try {
       // Store the order data in sessionStorage for the billing page
@@ -141,6 +144,39 @@ export default function OrdersPage() {
     } catch (err: any) {
       console.error("Error preparing order for edit:", err);
       toast.error("Failed to open bill for editing");
+    }
+  };
+
+  const handleChangeDeliveryStatus = async (
+    order: Order,
+    newStatus: "Pending" | "On the Way" | "Delivered"
+  ) => {
+    try {
+      const response = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "changeDeliveryStatus",
+          orderId: order._id,
+          userId: order.userId,
+          deliveryStatus: newStatus,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.error || "Failed to update delivery status");
+        return;
+      }
+
+      toast.success(`Delivery status changed to ${newStatus}`);
+
+      // Refresh orders to get updated data
+      await fetchOrders();
+    } catch (error: any) {
+      console.error("Error changing delivery status:", error);
+      toast.error(error?.message || "Failed to update delivery status");
     }
   };
 
@@ -177,7 +213,7 @@ export default function OrdersPage() {
 
     const unitStr = m[2];
 
-    // ✅ Map common abbreviations to standard units
+    // Map common abbreviations to standard units
     const unitMap: Record<string, string> = {
       "ml": "ml",
       "l": "litre",
@@ -191,7 +227,7 @@ export default function OrdersPage() {
       "box": "box",
     };
 
-    const mappedUnit = unitMap[unitStr] || unitStr; // ✅ Use original if not in map
+    const mappedUnit = unitMap[unitStr] || unitStr; // Use original if not in map
 
     return { value: num, unit: mappedUnit };
   }
@@ -201,7 +237,7 @@ export default function OrdersPage() {
     freeItems: OrderLineItem[] | undefined,
     productsList: Product[]
   ): QuantitySummary {
-    // ✅ Initialize empty object (not fixed keys)
+    // Initialize empty object (not fixed keys)
     const out: QuantitySummary = {};
 
     const addLine = (it: OrderLineItem) => {
@@ -210,7 +246,7 @@ export default function OrdersPage() {
       const unit = it.unit || "piece"; // Default fallback
       const quantity = Number(it.quantity || 0);
 
-      // ✅ Handle box items
+      // Handle box items
       if (unit === "box") {
         out["box"] = (out["box"] || 0) + quantity;
         return;
@@ -238,19 +274,19 @@ export default function OrdersPage() {
         const total = quantity * packUnitVal.value;
         const unitKey = packUnitVal.unit;
 
-        // ✅ Dynamically add to any unit
+        // Dynamically add to any unit
         out[unitKey] = (out[unitKey] || 0) + total;
         return;
       }
 
-      // ✅ Fallback: use item's unit directly
+      // Fallback: use item's unit directly
       out[unit] = (out[unit] || 0) + quantity;
     };
 
     (items || []).forEach(addLine);
     (freeItems || []).forEach(addLine);
 
-    // ✅ Round all values
+    // Round all values
     Object.keys(out).forEach(key => {
       out[key] = Math.round(out[key]);
     });
@@ -348,66 +384,66 @@ export default function OrdersPage() {
   }, [userId]);
 
   // ===== fetch orders whenever tab or userId changes =====
-  useEffect(() => {
+  const fetchOrders = async () => {
     if (!userId) return;
 
-    const fetchOrders = async () => {
-      try {
-        setLoading(true);
+    try {
+      setLoading(true);
 
-        const params = new URLSearchParams({ userId });
-        const res = await fetch(`/api/orders?${params.toString()}`);
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || "Failed to fetch orders");
-        }
-
-        const all: Order[] = Array.isArray(data) ? data : [];
-
-        const computed = all.map((o) => ({
-          ...o,
-          quantitySummary: computeQuantitySummaryForOrder(
-            o.items,
-            o.freeItems,
-            products
-          ),
-        }));
-
-        const unsettled = computed.filter(
-          (o) => o.status === "Unsettled" && !o.discardedAt
-        );
-        const settled = computed.filter(
-          (o) =>
-            o.status === "settled" &&
-            !o.discardedAt &&
-            o.settlementMethod !== "Debt"
-        );
-        const debt = computed.filter(
-          (o) =>
-            o.status === "settled" &&
-            !o.discardedAt &&
-            o.settlementMethod === "Debt"
-        );
-        const discarded = computed.filter((o) => !!o.discardedAt);
-
-        setUnsettledOrders(unsettled);
-        setSettledOrders(settled);
-        setDebtOrders(debt);
-        setDiscardedOrders(discarded);
-
-        // set orders for current tab
-        if (tab === "Settled") setOrders(settled);
-        else if (tab === "Debt") setOrders(debt);
-        else if (tab === "Discarded") setOrders(discarded);
-        else setOrders(unsettled);
-      } catch (err: any) {
-        console.error(err);
-        toast.error(err?.message || "Failed to load orders");
-      } finally {
-        setLoading(false);
+      const params = new URLSearchParams({ userId });
+      const res = await fetch(`/api/orders?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch orders");
       }
-    };
 
+      const all: Order[] = Array.isArray(data) ? data : [];
+
+      const computed = all.map((o) => ({
+        ...o,
+        quantitySummary: computeQuantitySummaryForOrder(
+          o.items,
+          o.freeItems,
+          products
+        ),
+      }));
+
+      const unsettled = computed.filter(
+        (o) => o.status === "Unsettled" && !o.discardedAt
+      );
+      const settled = computed.filter(
+        (o) =>
+          o.status === "settled" &&
+          !o.discardedAt &&
+          o.settlementMethod !== "Debt"
+      );
+      const debt = computed.filter(
+        (o) =>
+          o.status === "settled" &&
+          !o.discardedAt &&
+          o.settlementMethod === "Debt"
+      );
+      const discarded = computed.filter((o) => !!o.discardedAt);
+
+      setUnsettledOrders(unsettled);
+      setSettledOrders(settled);
+      setDebtOrders(debt);
+      setDiscardedOrders(discarded);
+
+      // set orders for current tab
+      if (tab === "Settled") setOrders(settled);
+      else if (tab === "Debt") setOrders(debt);
+      else if (tab === "Discarded") setOrders(discarded);
+      else setOrders(unsettled);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to load orders");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchOrders();
   }, [userId, tab, products]);
 
@@ -473,40 +509,41 @@ export default function OrdersPage() {
   };
 
   // ===== actions: discard, open settle, confirm settle =====
-  const handleDiscard = async (order: Order) => {
-    if (!userId) {
-      toast.error("User not loaded");
-      return;
-    }
+  const handleDiscard = (order: Order) => {
+    setDiscardOrderToConfirm(order);
+  };
 
-    const ok = window.confirm(
-      `Discard order ${order.serialNumber}? This will revert stock and customer debit.`
-    );
-    if (!ok) return;
+  const handleConfirmDiscard = async () => {
+    if (!discardOrderToConfirm) return;
 
     try {
-      const res = await fetch("/api/orders", {
+      const response = await fetch("/api/orders", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "discard",
-          orderId: order._id,
-          userId,
+          orderId: discardOrderToConfirm._id,
+          userId: discardOrderToConfirm.userId,
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to discard order");
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.error || "Failed to discard order");
+        return;
       }
 
-      toast.success("Order discarded and stock/debit reverted.");
+      toast.success(`Order ${discardOrderToConfirm.serialNumber} discarded successfully`);
 
-      setOrders((prev) => prev.filter((o) => o._id !== order._id));
-      setTab("Discarded");
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.message || "Failed to discard order");
+      // Close modal
+      setDiscardOrderToConfirm(null);
+
+      // Refresh orders
+      await fetchOrders();
+    } catch (error: any) {
+      console.error("Error discarding order:", error);
+      toast.error(error?.message || "Failed to discard order");
     }
   };
 
@@ -706,7 +743,8 @@ export default function OrdersPage() {
             onOpenSettle={openSettleModal}
             onOpenDebtSettle={openDebtSettleModal}
             onOpenView={openViewModal}
-            onEdit={handleEditOrder} // ✅ NEW
+            onEdit={handleEditOrder}
+            onChangeDeliveryStatus={handleChangeDeliveryStatus}
             unsettledOrders={unsettledOrders}
             settledOrders={settledOrders}
             debtOrders={debtOrders}
@@ -736,6 +774,12 @@ export default function OrdersPage() {
         onCloseView={closeViewModal}
         getPackUnitForItem={getPackUnitForItem}
         parsePackUnit={parsePackUnit}
+      />
+
+      <DiscardConfirmationModal
+        order={discardOrderToConfirm}
+        onConfirm={handleConfirmDiscard}
+        onCancel={() => setDiscardOrderToConfirm(null)}
       />
     </div>
   );

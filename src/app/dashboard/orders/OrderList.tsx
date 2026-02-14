@@ -21,7 +21,8 @@ type OrderListProps = {
     onOpenSettle: (order: Order) => void;
     onOpenDebtSettle: (order: Order) => void;
     onOpenView: (order: Order) => void;
-    onEdit: (order: Order) => void; // ✅ NEW
+    onEdit: (order: Order) => void;
+    onChangeDeliveryStatus: (order: Order, newStatus: "Pending" | "On the Way" | "Delivered") => void; // ✅ NEW
     unsettledOrders: Order[];
     settledOrders: Order[];
     debtOrders: Order[];
@@ -43,7 +44,8 @@ export default function OrderList({
     onOpenSettle,
     onOpenDebtSettle,
     onOpenView,
-    onEdit, // ✅ NEW
+    onEdit,
+    onChangeDeliveryStatus, // ✅ NEW
     unsettledOrders,
     settledOrders,
     debtOrders,
@@ -419,7 +421,8 @@ export default function OrderList({
                                     onOpenSettle={onOpenSettle}
                                     onOpenDebtSettle={onOpenDebtSettle}
                                     onOpenView={onOpenView}
-                                    onEdit={onEdit} // ✅ NEW
+                                    onEdit={onEdit}
+                                    onChangeDeliveryStatus={onChangeDeliveryStatus} // ✅ NEW
                                 />
                             </div>
                         );

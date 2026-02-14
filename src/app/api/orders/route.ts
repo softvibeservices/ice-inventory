@@ -152,18 +152,19 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PATCH: discard / settle / settleDebt
+// PATCH: discard / settle / settleDebt / changeDeliveryStatus
 export async function PATCH(req: NextRequest) {
   await connectDB();
 
   try {
     const body = await req.json();
     const {
-      action, // 'discard' | 'settle' | 'settleDebt'
+      action, // 'discard' | 'settle' | 'settleDebt' | 'changeDeliveryStatus'
       orderId, // Mongo _id of order
       userId,
       method, // 'Cash' | 'Bank/UPI' | 'Debt'
       amount, // number
+      deliveryStatus, // ✅ NEW: 'Pending' | 'On the Way' | 'Delivered'
     } = body;
 
     if (!orderId || !userId || !action) {
@@ -191,13 +192,6 @@ export async function PATCH(req: NextRequest) {
 
     /**
      * Adjust customer's debit / credit for a payment against THIS order only.
-     *
-     * - payAmount: amount received now (Cash / Bank / UPI)
-     * - remainingForThisOrder: how much is still pending for this order BEFORE this payment
-     *
-     * We:
-     *   1. Reduce customer's debit by at most `remainingForThisOrder`
-     *   2. Any extra (payAmount - appliedToDebit) goes to customer's CREDIT
      */
     const adjustCustomerForPayment = async (
       payAmount: number,
@@ -210,14 +204,13 @@ export async function PATCH(req: NextRequest) {
 
       const currentDebit = Number(customer.debit || 0);
 
-      // we won't reduce more debit than exists, or more than remaining for this order
       const appliedToDebit = Math.min(
         payAmount,
         Math.max(0, remainingForThisOrder),
         Math.max(0, currentDebit)
       );
 
-      const extraToCredit = payAmount - appliedToDebit; // if >0, goes to credit
+      const extraToCredit = payAmount - appliedToDebit;
 
       const debitChange = -appliedToDebit;
       const creditChange = extraToCredit > 0 ? extraToCredit : 0;
@@ -227,9 +220,60 @@ export async function PATCH(req: NextRequest) {
       });
     };
 
+    // ✅ NEW: Helper to check if order should move to Settled tab
+    const shouldMoveToSettled = (totalPaid: number, deliveryStatus: string) => {
+      const isFullyPaid = totalPaid >= billTotal;
+      const isDelivered = deliveryStatus === "Delivered";
+      return isFullyPaid && isDelivered;
+    };
+
+    // ===== NEW: CHANGE DELIVERY STATUS =====
+    if (action === "changeDeliveryStatus") {
+      if (!deliveryStatus || !["Pending", "On the Way", "Delivered"].includes(deliveryStatus)) {
+        return NextResponse.json(
+          { error: "Invalid delivery status." },
+          { status: 400 }
+        );
+      }
+
+      const oldStatus = order.deliveryStatus || "Pending";
+      order.deliveryStatus = deliveryStatus;
+
+      // Update timestamps based on status
+      if (deliveryStatus === "On the Way" && !order.deliveryOnTheWayAt) {
+        order.deliveryOnTheWayAt = new Date();
+      }
+      if (deliveryStatus === "Delivered" && !order.deliveryCompletedAt) {
+        order.deliveryCompletedAt = new Date();
+      }
+
+      // ✅ CRITICAL: Check if order should move to Settled tab
+      const totalPaid = typeof order.settlementAmount === "number" ? order.settlementAmount : 0;
+      
+      // If order was in Debt (status="settled", method="Debt") and now becomes fully paid + delivered
+      if (order.status === "settled" && order.settlementMethod === "Debt") {
+        if (shouldMoveToSettled(totalPaid, deliveryStatus)) {
+          // Move to Settled tab by changing method from "Debt" to last payment method
+          // Find last payment method from settlement history
+          const lastPayment = [...(order.settlementHistory || [])]
+            .reverse()
+            .find((h: any) => h.method && h.method !== "Debt");
+          
+          order.settlementMethod = lastPayment?.method || "Cash";
+        }
+      }
+
+      await order.save();
+
+      return NextResponse.json({ 
+        success: true, 
+        order,
+        message: `Delivery status changed from ${oldStatus} to ${deliveryStatus}` 
+      }, { status: 200 });
+    }
+
     // ===== DISCARD =====
     if (action === "discard") {
-      // Only Unsettled orders can be discarded
       if (order.status !== "Unsettled") {
         return NextResponse.json(
           { error: "Only Unsettled orders can be discarded." },
@@ -253,7 +297,7 @@ export async function PATCH(req: NextRequest) {
         .map((it: any) =>
           Product.findOneAndUpdate(
             { _id: it.productId, userId },
-            { $inc: { quantity: Math.abs(it.quantity) } }, // add back
+            { $inc: { quantity: Math.abs(it.quantity) } },
             { new: true }
           )
         );
@@ -265,7 +309,7 @@ export async function PATCH(req: NextRequest) {
       // 2) revert debit / totalSales
       await adjustCustomerForDiscard();
 
-      // 3) mark as "settled" but discarded, and store history
+      // 3) mark as "settled" but discarded
       order.status = "settled";
       order.discardedAt = new Date();
       order.settlementMethod = "Discarded";
@@ -293,9 +337,6 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
-      // Allow "settle" when:
-      //  - status is Unsettled (normal case), OR
-      //  - already settled but with settlementMethod = "Debt" (you might call this in some flows)
       if (
         order.status !== "Unsettled" &&
         !(order.status === "settled" && order.settlementMethod === "Debt")
@@ -306,16 +347,15 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
-      // Debt -> no payment now, whole amount remains pending
+      // Debt -> no payment now
       if (method === "Debt") {
         order.status = "settled";
         order.settlementMethod = "Debt";
-        // first time settle from Unsettled -> nothing paid yet
         const previousPaid =
           typeof order.settlementAmount === "number"
             ? order.settlementAmount
             : 0;
-        order.settlementAmount = previousPaid; // typically 0
+        order.settlementAmount = previousPaid;
         order.settledAt = new Date();
 
         order.settlementHistory = order.settlementHistory || [];
@@ -332,7 +372,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ success: true, order }, { status: 200 });
       }
 
-      // Cash / Bank: may be full / partial / over
+      // Cash / Bank: payment amount
       const payAmount = Math.max(0, Number(amount || 0));
       if (payAmount <= 0) {
         return NextResponse.json(
@@ -341,7 +381,6 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
-      // previousPaid can be 0 (normal Unsettled) or some amount (if it was already Debt and you continue via this path)
       const previousPaid =
         typeof order.settlementAmount === "number"
           ? order.settlementAmount
@@ -351,23 +390,28 @@ export async function PATCH(req: NextRequest) {
       await adjustCustomerForPayment(payAmount, remainingForThisOrder);
 
       const totalPaid = previousPaid + payAmount;
-      const fullyPaid = totalPaid >= billTotal;
+      
+      // ✅ CRITICAL: Check if should move to Settled tab
+      const currentDeliveryStatus = order.deliveryStatus || "Pending";
+      const moveToSettled = shouldMoveToSettled(totalPaid, currentDeliveryStatus);
 
       order.status = "settled";
-      // If fully paid -> Cash/Bank; if partial -> keep as Debt so it stays in Debt tab
-      order.settlementMethod = fullyPaid ? method : "Debt";
+      // ✅ NEW LOGIC: Only move to Settled tab if BOTH fully paid AND delivered
+      order.settlementMethod = moveToSettled ? method : "Debt";
       order.settlementAmount = totalPaid;
       order.settledAt = new Date();
 
       order.settlementHistory = order.settlementHistory || [];
       order.settlementHistory.push({
         action: "Settled",
-        method, // actual payment method
+        method,
         amountPaid: payAmount,
         at: new Date(),
-        note: fullyPaid
-          ? "Fully settled from Unsettled tab"
-          : "Partial payment from Unsettled tab, remaining kept as Debt",
+        note: moveToSettled
+          ? "Fully settled and delivered - moved to Settled tab"
+          : totalPaid >= billTotal
+          ? "Fully paid but not delivered yet - kept in Debt tab"
+          : "Partial payment - kept in Debt tab",
       });
 
       await order.save();
@@ -377,7 +421,6 @@ export async function PATCH(req: NextRequest) {
 
     // ===== SETTLE DEBT (FROM DEBT TAB) =====
     if (action === "settleDebt") {
-      // This should only be allowed for orders previously marked as Debt
       if (order.settlementMethod !== "Debt") {
         return NextResponse.json(
           { error: "Only Debt orders can be settled from the Debt tab." },
@@ -407,17 +450,19 @@ export async function PATCH(req: NextRequest) {
 
       const remainingForThisOrder = Math.max(0, billTotal - prevPaid);
 
-      // Apply only up to remaining for THIS order to debit; extra to credit
       await adjustCustomerForPayment(payAmount, remainingForThisOrder);
 
       const newTotalPaid = prevPaid + payAmount;
-      const fullyPaid = newTotalPaid >= billTotal;
+      
+      // ✅ CRITICAL: Check if should move to Settled tab
+      const currentDeliveryStatus = order.deliveryStatus || "Pending";
+      const moveToSettled = shouldMoveToSettled(newTotalPaid, currentDeliveryStatus);
 
-      order.status = "settled"; // stays settled
+      order.status = "settled";
       order.settlementAmount = newTotalPaid;
 
-      // if fully paid, move to Settled tab by changing method away from "Debt"
-      order.settlementMethod = fullyPaid ? method : "Debt";
+      // ✅ NEW LOGIC: Only move to Settled tab if BOTH fully paid AND delivered
+      order.settlementMethod = moveToSettled ? method : "Debt";
       order.settledAt = new Date();
 
       order.settlementHistory = order.settlementHistory || [];
@@ -426,9 +471,11 @@ export async function PATCH(req: NextRequest) {
         method,
         amountPaid: payAmount,
         at: new Date(),
-        note: fullyPaid
-          ? "Debt fully settled"
-          : "Partial payment recorded, still Debt",
+        note: moveToSettled
+          ? "Debt fully settled and delivered - moved to Settled tab"
+          : newTotalPaid >= billTotal
+          ? "Debt fully paid but not delivered yet - kept in Debt tab"
+          : "Partial payment - still in Debt tab",
       });
 
       await order.save();
@@ -436,7 +483,6 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true, order }, { status: 200 });
     }
 
-    // ===== INVALID ACTION =====
     return NextResponse.json({ error: "Invalid action." }, { status: 400 });
   } catch (err: any) {
     console.error("Error updating order:", err);
