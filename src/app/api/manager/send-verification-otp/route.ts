@@ -1,7 +1,7 @@
-// ice-inventory\src\app\api\manager\send-verification-otp\route.ts
+// src/app/api/manager/send-verification-otp/route.ts
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import Manager from "@/models/Manager";
+import User from "@/models/User";
 import { transporter } from "@/lib/nodemailer";
 
 export async function POST(req: Request) {
@@ -17,10 +17,11 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if verified manager with this email already exists (isPending = false)
-    const existingVerifiedManager = await Manager.findOne({ 
+    // Check if verified manager with this email already exists
+    const existingVerifiedManager = await User.findOne({ 
       adminId, 
       email,
+      role: "manager",
       isPending: { $ne: true }
     });
     
@@ -39,22 +40,25 @@ export async function POST(req: Request) {
       email,
       name,
       adminId,
+      role: "manager", // ✅ Set role
       otp,
       otpExpires: new Date(Date.now() + 1000 * 60 * 10), // 10 minutes
       isPending: true,
+      isVerified: false, // ✅ Not verified yet
       password: 'TEMP_PASSWORD', // Temporary placeholder
       contact: 'TEMP_CONTACT', // Temporary placeholder
     };
 
     // Delete any existing pending entry for this email
-    await Manager.deleteMany({ 
+    await User.deleteMany({ 
       email, 
-      adminId, 
+      adminId,
+      role: "manager",
       isPending: true 
     });
 
     // Create new pending entry
-    await Manager.create(tempData);
+    await User.create(tempData);
 
     // Send email
     await transporter.sendMail({

@@ -1,9 +1,7 @@
-// icecream-inventory\src\app\api\login\route.ts
-
+// src/app/api/login/route.ts
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
-import Manager from "@/models/Manager";
 import bcrypt from "bcryptjs";
 
 export async function POST(req: Request) {
@@ -12,53 +10,45 @@ export async function POST(req: Request) {
 
     await connectDB();
 
-    // ⬇ 1️⃣ CHECK USER SCHEMA (ADMIN)
+    // Find user (admin or manager)
     const user = await User.findOne({ email });
 
-    if (user) {
-      if (!user.isVerified)
-        return NextResponse.json({ error: "User not verified" }, { status: 401 });
-
-      // ✅ FIX: Use plain password comparison (password is already hashed in DB via pre-save hook)
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch)
-        return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
-
-      const userObj = {
-        _id: user._id.toString(), // admin uses own id
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      };
-
-      return NextResponse.json({
-        message: "Login successful",
-        user: userObj,
-      });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // ⬇ 2️⃣ CHECK MANAGER SCHEMA
-    const manager = await Manager.findOne({ email });
+    // Check if verified
+    if (!user.isVerified) {
+      return NextResponse.json({ error: "User not verified" }, { status: 401 });
+    }
 
-    if (!manager)
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    // Check if pending
+    if (user.isPending) {
+      return NextResponse.json({ error: "Account setup incomplete" }, { status: 401 });
+    }
 
-    const isMatch = await bcrypt.compare(password, manager.password);
-    if (!isMatch)
+    // Compare password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
 
-    // Return manager as admin id + store managerId separately
-    const managerObj = {
-      _id: manager.adminId.toString(),    // 👈 IMPORTANT: replace id with admin id
-      managerId: manager._id.toString(),  // 👈 store manager id separately
-      email: manager.email,
-      name: manager.name,
-      role: "manager",
+    // Prepare response based on role
+    let userObj: any = {
+      _id: user.role === "manager" && user.adminId ? user.adminId.toString() : user._id.toString(),
+      email: user.email,
+      name: user.name,
+      role: user.role,
     };
+
+    // Add managerId if manager
+    if (user.role === "manager") {
+      userObj.managerId = user._id.toString();
+    }
 
     return NextResponse.json({
       message: "Login successful",
-      user: managerObj,
+      user: userObj,
     });
 
   } catch (error) {

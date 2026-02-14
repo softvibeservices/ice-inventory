@@ -5,12 +5,8 @@ import User from "@/models/User";
 import { transporter } from "@/lib/nodemailer";
 import crypto from "crypto";
 
-// ❌ REMOVED: import bcrypt from "bcryptjs";
-// Password hashing is handled by the User model's pre-save hook
-
 const OTP_LENGTH = 6;
 const OTP_TTL_MINUTES = 10;
-const COOLDOWN_SECONDS = 60;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 const CONTACT_RE = /^[0-9]{10}$/;
@@ -41,7 +37,6 @@ function buildRegisterEmailHtml({
 }) {
   const safeApp = appName || "IceCream Inventory";
   const safeSupport = supportEmail || "support@yourdomain.com";
-  const safeFrontend = frontendUrl || "";
   return `<!doctype html>
   <html>
     <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
@@ -73,6 +68,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { name, email, contact, shopName, shopAddress, gstin, password } = body ?? {};
 
+    // ✅ Admin registration requires all fields
     if (!name || !email || !contact || !shopName || !shopAddress || !gstin || !password) {
       return NextResponse.json({ error: "All fields are required." }, { status: 400 });
     }
@@ -89,16 +85,16 @@ export async function POST(req: Request) {
 
     await connectDB();
 
-    // if user already exists -> return generic message
-    const exists = await User.findOne({ $or: [{ email: emailNorm }, { gstin: gstinNorm }] });
+    // Check if admin with this email or GSTIN already exists
+    const exists = await User.findOne({ 
+      $or: [{ email: emailNorm }, { gstin: gstinNorm }],
+      role: { $ne: "manager" } // Don't check against managers
+    });
+    
     if (exists) {
       return NextResponse.json({ error: "An account with provided details already exists." }, { status: 400 });
     }
 
-    // ✅ FIX: Store plain password - it will be hashed by the pre-save hook in User model
-    // ❌ REMOVED: const hashedPassword = await bcrypt.hash(String(password), 10);
-
-    // create otp (plain), expires and requested timestamp
     const otp = generateNumericOtp();
     const otpExpires = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
     const now = new Date();
@@ -110,15 +106,17 @@ export async function POST(req: Request) {
       shopName: String(shopName).trim(),
       shopAddress: shopAddressNorm,
       gstin: gstinNorm,
-      password: String(password), // ✅ Plain password - will be hashed by pre-save hook
+      password: String(password),
+      role: "admin", // ✅ Explicitly set role
       isVerified: false,
+      isPending: false,
       otp,
       otpExpires,
       otpRequestedAt: now,
       createdAt: now,
     });
 
-    await newUser.save(); // ✅ Pre-save hook will hash the password here
+    await newUser.save();
 
     const appName = process.env.APP_NAME || "IceCream Inventory";
     const supportEmail = process.env.SUPPORT_EMAIL || process.env.EMAIL_USER || "support@yourdomain.com";
@@ -144,7 +142,6 @@ export async function POST(req: Request) {
       });
     } catch (mailErr) {
       console.error("[register] sendMail failed", mailErr);
-      // still respond created but inform user
       return NextResponse.json({
         message: "Account created but verification email could not be sent. Please contact support.",
       }, { status: 201 });

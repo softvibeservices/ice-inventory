@@ -1,6 +1,5 @@
 // src/lib/managerAuth.ts
 import { connectDB } from "@/lib/mongodb";
-import Manager from "@/models/Manager";
 import User from "@/models/User";
 
 export interface ManagerAuthResult {
@@ -21,12 +20,23 @@ export async function verifyManager(
     await connectDB();
 
     // Check if manager exists
-    const manager = await Manager.findById(managerId);
+    const manager = await User.findOne({
+      _id: managerId,
+      role: "manager"
+    });
     
     if (!manager) {
       return {
         isValid: false,
         error: "Manager account not found. You may have been removed by the admin.",
+      };
+    }
+
+    // Check if not pending
+    if (manager.isPending) {
+      return {
+        isValid: false,
+        error: "Manager account setup incomplete.",
       };
     }
 
@@ -38,7 +48,7 @@ export async function verifyManager(
       };
     }
 
-    // Optionally verify the admin still exists
+    // Verify the admin still exists
     const admin = await User.findById(manager.adminId);
     if (!admin) {
       return {

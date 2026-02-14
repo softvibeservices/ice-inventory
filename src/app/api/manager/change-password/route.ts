@@ -1,8 +1,7 @@
 // src/app/api/manager/change-password/route.ts
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import Manager from "@/models/Manager";
+import User from "@/models/User";
 import bcrypt from "bcryptjs";
 
 export async function PUT(req: Request) {
@@ -18,7 +17,12 @@ export async function PUT(req: Request) {
       );
     }
 
-    const manager = await Manager.findById(managerId);
+    const manager = await User.findOne({
+      _id: managerId,
+      role: "manager",
+      adminId
+    });
+
     if (!manager) {
       return NextResponse.json({ error: "Manager not found" }, { status: 404 });
     }

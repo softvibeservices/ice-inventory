@@ -7,17 +7,18 @@ export interface IUser extends Document {
   email: string;
   contact: string;
   password: string;
-  shopName: string;
-  shopAddress: string;
-  gstin: string;
+  shopName?: string;
+  shopAddress?: string;
+  gstin?: string;
   isVerified: boolean;
   otp?: string;
   otpExpires?: Date;
-  otpRequestedAt?: Date; // ✅ Added this field (was missing in your schema)
+  otpRequestedAt?: Date;
   role: "admin" | "manager" | "superAdmin";
   adminId?: mongoose.Types.ObjectId;
   status: "pending" | "approved" | "rejected" | "blocked";
-  lastSerialNumber?: string; // Store last used serial number (e.g., "020015")
+  lastSerialNumber?: string;
+  isPending?: boolean;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -29,24 +30,27 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, unique: true, lowercase: true },
     contact: { type: String, required: true },
     password: { type: String, required: true },
-    shopName: { type: String, required: true },
-    shopAddress: { type: String, required: true },
-    gstin: { type: String, required: true, unique: true }, // ✅ Added unique constraint
+    shopName: { type: String },
+    shopAddress: { type: String },
+    gstin: { type: String }, // Removed sparse from here
     isVerified: { type: Boolean, default: false },
     otp: { type: String },
     otpExpires: { type: Date },
-    otpRequestedAt: { type: Date }, // ✅ Added this field
+    otpRequestedAt: { type: Date },
     role: { type: String, enum: ["admin", "manager", "superAdmin"], default: "admin" },
     adminId: { type: Schema.Types.ObjectId, ref: "User" },
     status: { type: String, enum: ["pending", "approved", "rejected", "blocked"], default: "approved" },
     lastSerialNumber: { type: String, default: null },
+    isPending: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
-// ✅ Hash password before saving (this prevents double hashing)
+// ✅ CREATE SPARSE UNIQUE INDEX (allows multiple nulls)
+UserSchema.index({ gstin: 1 }, { unique: true, sparse: true });
+
+// Hash password before saving
 UserSchema.pre("save", async function (next) {
-  // Only hash if password is modified
   if (!this.isModified("password")) return next();
   
   try {
@@ -58,7 +62,7 @@ UserSchema.pre("save", async function (next) {
   }
 });
 
-// ✅ Compare password method
+// Compare password method
 UserSchema.methods.comparePassword = async function (
   candidatePassword: string
 ): Promise<boolean> {

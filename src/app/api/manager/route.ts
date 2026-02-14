@@ -1,7 +1,7 @@
-// src\app\api\manager\route.ts
+// src/app/api/manager/route.ts
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import Manager from "@/models/Manager";
+import User from "@/models/User";
 import bcrypt from "bcryptjs";
 
 // CREATE MANAGER with OTP verification
@@ -18,9 +18,10 @@ export async function POST(req: Request) {
     await connectDB();
 
     // Find the pending manager entry with OTP
-    const pendingManager = await Manager.findOne({ 
+    const pendingManager = await User.findOne({ 
       adminId, 
       email, 
+      role: "manager",
       isPending: true 
     });
 
@@ -32,8 +33,7 @@ export async function POST(req: Request) {
 
     // Check OTP expiry
     if (pendingManager.otpExpires && pendingManager.otpExpires < new Date()) {
-      // Delete expired pending entry
-      await Manager.findByIdAndDelete(pendingManager._id);
+      await User.findByIdAndDelete(pendingManager._id);
       return NextResponse.json({ 
         error: "OTP has expired. Please request a new one." 
       }, { status: 400 });
@@ -46,16 +46,16 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // Check if verified manager already exists (non-pending)
-    const existingManager = await Manager.findOne({ 
+    // Check if verified manager already exists
+    const existingManager = await User.findOne({ 
       adminId, 
       email,
+      role: "manager",
       isPending: { $ne: true }
     });
 
     if (existingManager) {
-      // Delete the pending entry since verified manager exists
-      await Manager.findByIdAndDelete(pendingManager._id);
+      await User.findByIdAndDelete(pendingManager._id);
       return NextResponse.json({ 
         error: "Manager already exists" 
       }, { status: 409 });
@@ -65,12 +65,13 @@ export async function POST(req: Request) {
     const hashed = await bcrypt.hash(password, 10);
 
     // Update the pending entry to create actual manager
-    const manager = await Manager.findByIdAndUpdate(
+    const manager = await User.findByIdAndUpdate(
       pendingManager._id,
       {
         name,
         contact,
         password: hashed,
+        isVerified: true, // ✅ Set verified when OTP is confirmed
         isPending: false,
         otp: null,
         otpExpires: null,
@@ -87,7 +88,7 @@ export async function POST(req: Request) {
   }
 }
 
-// GET MANAGER LIST - Only return non-pending managers
+// GET MANAGER LIST
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -99,9 +100,10 @@ export async function GET(req: Request) {
 
     await connectDB();
     
-    // Only fetch verified managers (isPending is false or doesn't exist)
-    const managers = await Manager.find({ 
+    // Fetch verified managers only
+    const managers = await User.find({ 
       adminId,
+      role: "manager",
       $or: [
         { isPending: false },
         { isPending: { $exists: false } }
@@ -126,8 +128,8 @@ export async function PUT(req: Request) {
 
     await connectDB();
 
-    const updated = await Manager.findOneAndUpdate(
-      { _id: id, adminId, isPending: { $ne: true } },
+    const updated = await User.findOneAndUpdate(
+      { _id: id, adminId, role: "manager", isPending: { $ne: true } },
       { name, email, contact },
       { new: true, select: '-password' }
     );
@@ -154,9 +156,10 @@ export async function DELETE(req: Request) {
 
     await connectDB();
 
-    const deleted = await Manager.findOneAndDelete({ 
+    const deleted = await User.findOneAndDelete({ 
       _id: id, 
       adminId,
+      role: "manager",
       isPending: { $ne: true }
     });
 

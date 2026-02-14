@@ -1,3 +1,5 @@
+// ice-inventory\src\models\Manager.ts
+
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IManager extends Document {

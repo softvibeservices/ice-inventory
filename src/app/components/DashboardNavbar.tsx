@@ -1,5 +1,4 @@
 // src/app/components/DashboardNavbar.tsx
-// ✅ UPDATED: Better notification badge with red styling and count
 
 "use client";
 
@@ -20,6 +19,7 @@ import {
   LogOut,
   Menu,
   X,
+  Map,
 } from "lucide-react";
 
 export default function DashboardNavbar() {
@@ -54,11 +54,11 @@ export default function DashboardNavbar() {
     { href: "/dashboard/customers", label: "Customers", icon: Users },
     { href: "/dashboard/billing", label: "Billing", icon: FileText },
     { href: "/dashboard/orders", label: "Orders", icon: ClipboardList },
+    { href: "/dashboard/delivery/live-map", label: "Live Map", icon: Map },
     ...(role === "manager"
       ? []
       : [
           { href: "/dashboard/sales", label: "Sales", icon: BarChart3 },
-          { href: "/dashboard/delivery/live-map", label: "Live Map", icon: LayoutDashboard },
         ]),
   ];
 
@@ -166,7 +166,7 @@ export default function DashboardNavbar() {
 
           {/* RIGHT */}
           <div className="ml-auto flex items-center gap-3">
-            {/* ✅ ENHANCED NOTIFICATION BELL */}
+            {/* NOTIFICATION BELL (Admin only) */}
             {role !== "manager" && (
               <Link href={requestsHref} className="relative group">
                 <div className="relative">
@@ -180,10 +180,7 @@ export default function DashboardNavbar() {
                   />
                   {pendingCount > 0 && (
                     <>
-                      {/* ✅ ANIMATED PULSE RING */}
                       <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full animate-ping opacity-75"></span>
-                      
-                      {/* ✅ COUNT BADGE */}
                       <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-lg border border-red-400">
                         {pendingCount > 99 ? "99+" : pendingCount}
                       </span>
@@ -191,7 +188,6 @@ export default function DashboardNavbar() {
                   )}
                 </div>
                 
-                {/* ✅ HOVER TOOLTIP */}
                 {pendingCount > 0 && (
                   <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white text-xs px-3 py-1 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     {pendingCount} pending request{pendingCount > 1 ? 's' : ''}
@@ -200,6 +196,7 @@ export default function DashboardNavbar() {
               </Link>
             )}
 
+            {/* PROFILE (Admin only) */}
             {role !== "manager" && (
               <Link href="/dashboard/profile">
                 <UserCircle
@@ -211,6 +208,17 @@ export default function DashboardNavbar() {
                   }`}
                 />
               </Link>
+            )}
+
+            {/* ✅ LOGOUT BUTTON (Desktop - Manager only) */}
+            {role === "manager" && (
+              <button
+                onClick={() => setShowDialog(true)}
+                className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
+              >
+                <LogOut size={18} />
+                <span className="hidden xl:inline">Logout</span>
+              </button>
             )}
 
             {/* MOBILE MENU BUTTON */}
@@ -244,7 +252,7 @@ export default function DashboardNavbar() {
                 </Link>
               ))}
 
-              {/* Mobile Profile & Logout */}
+              {/* Mobile Admin-only items */}
               {role !== "manager" && (
                 <>
                   <Link
@@ -256,7 +264,6 @@ export default function DashboardNavbar() {
                     Profile
                   </Link>
                   
-                  {/* ✅ ENHANCED MOBILE NOTIFICATION LINK */}
                   <Link
                     href={requestsHref}
                     onClick={() => setMobileOpen(false)}
@@ -277,16 +284,19 @@ export default function DashboardNavbar() {
                 </>
               )}
 
-              <button
-                onClick={() => {
-                  setMobileOpen(false);
-                  setShowDialog(true);
-                }}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
-              >
-                <LogOut size={18} />
-                Logout
-              </button>
+              {/* ✅ LOGOUT (Mobile - Manager only) */}
+              {role === "manager" && (
+                <button
+                  onClick={() => {
+                    setMobileOpen(false);
+                    setShowDialog(true);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
+                >
+                  <LogOut size={18} />
+                  Logout
+                </button>
+              )}
             </div>
           </div>
         )}

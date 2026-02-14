@@ -1,8 +1,6 @@
 // src/app/api/manager/request-password-otp/route.ts
-
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import Manager from "@/models/Manager";
 import User from "@/models/User";
 import { transporter } from "@/lib/nodemailer";
 
@@ -19,7 +17,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const manager = await Manager.findById(managerId);
+    const manager = await User.findOne({
+      _id: managerId,
+      role: "manager",
+      adminId
+    });
+
     if (!manager) {
       return NextResponse.json({ error: "Manager not found" }, { status: 404 });
     }
@@ -36,7 +39,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Admin not found" }, { status: 404 });
     }
 
-    const adminEmail = admin.email ?? admin.userEmail;
+    const adminEmail = admin.email;
     if (!adminEmail) {
       return NextResponse.json(
         { error: "Admin email missing in user record" },
