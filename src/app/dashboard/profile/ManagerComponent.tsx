@@ -1,7 +1,9 @@
+// src/app/dashboard/profile/ManagerComponent.tsx
+
 "use client";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { UserPlus, Lock, Trash2, X, Users, Mail } from "lucide-react";
+import { UserPlus, Trash2, X, Users, Mail } from "lucide-react";
 
 export default function ManagerComponent({ adminId }: any) {
   const [list, setList] = useState([]);
@@ -26,18 +28,6 @@ export default function ManagerComponent({ adminId }: any) {
   const [deleteId, setDeleteId] = useState("");
   const [deletingManagerName, setDeletingManagerName] = useState("");
 
-  const [showPassModal, setShowPassModal] = useState(false);
-  const [selectedManagerId, setSelectedManagerId] = useState("");
-  const [selectedManagerName, setSelectedManagerName] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpValue, setOtpValue] = useState("");
-
-  const [isOtpSendingForPassword, setIsOtpSendingForPassword] = useState(false);
-  const [passForm, setPassForm] = useState({
-    password: "",
-    confirm: "",
-  });
-
   const load = async () => {
     try {
       const res = await fetch(`/api/manager?adminId=${adminId}`);
@@ -52,20 +42,75 @@ export default function ManagerComponent({ adminId }: any) {
     load();
   }, []);
 
-  // Step 1: Send OTP to manager's email
-  const sendOtpToManagerEmail = async () => {
-    if (!form.name || !form.email || !form.contact || !form.password) {
-      return toast.error("Please fill all fields");
+  // ✅ IMPROVED: Handle contact input (only numbers)
+  const handleContactChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, ""); // Remove non-digits
+    if (value.length <= 10) {
+      setForm({ ...form, contact: value });
+    }
+  };
+
+  // ✅ IMPROVED: Comprehensive validation
+  const validateForm = (): boolean => {
+    // Check if all fields are filled
+    if (!form.name.trim()) {
+      toast.error("Please enter manager's name");
+      return false;
     }
 
-    if (form.password !== form.confirm) {
-      return toast.error("Passwords do not match");
+    if (!form.email.trim()) {
+      toast.error("Please enter manager's email");
+      return false;
     }
 
-    // Basic email validation
+    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(form.email)) {
-      return toast.error("Please enter a valid email address");
+      toast.error("Please enter a valid email address");
+      return false;
+    }
+
+    // Contact validation
+    if (!form.contact.trim()) {
+      toast.error("Please enter contact number");
+      return false;
+    }
+
+    if (form.contact.length !== 10) {
+      toast.error("Contact number must be exactly 10 digits");
+      return false;
+    }
+
+    // Password validation
+    if (!form.password) {
+      toast.error("Please enter a password");
+      return false;
+    }
+
+    if (form.password.length < 6) {
+      toast.error("Password must be at least 6 characters long");
+      return false;
+    }
+
+    if (!form.confirm) {
+      toast.error("Please confirm your password");
+      return false;
+    }
+
+    // ✅ FIX: Check password match
+    if (form.password !== form.confirm) {
+      toast.error("Passwords do not match");
+      return false;
+    }
+
+    return true;
+  };
+
+  // Step 1: Send OTP to manager's email
+  const sendOtpToManagerEmail = async () => {
+    // ✅ IMPROVED: Use validation function
+    if (!validateForm()) {
+      return;
     }
 
     setIsOtpSending(true);
@@ -108,6 +153,10 @@ export default function ManagerComponent({ adminId }: any) {
   const verifyOtpAndSaveManager = async () => {
     if (!otpForNewManager.trim()) {
       return toast.error("Please enter OTP");
+    }
+
+    if (otpForNewManager.length !== 6) {
+      return toast.error("OTP must be 6 digits");
     }
 
     if (!pendingManagerData) {
@@ -196,73 +245,6 @@ export default function ManagerComponent({ adminId }: any) {
     }
   };
 
-  const sendOTPForPassword = async () => {
-    setIsOtpSendingForPassword(true);
-
-    try {
-      const res = await fetch("/api/manager/request-password-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ managerId: selectedManagerId, adminId }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setIsOtpSendingForPassword(false);
-        return toast.error(data.error);
-      }
-
-      toast.success("OTP sent to admin email! 📧");
-      setOtpSent(true);
-    } catch (error) {
-      toast.error("Failed to send OTP");
-    } finally {
-      setIsOtpSendingForPassword(false);
-    }
-  };
-
-  const changeManagerPassword = async () => {
-    if (passForm.password !== passForm.confirm) {
-      return toast.error("Passwords do not match");
-    }
-
-    if (!otpValue.trim()) {
-      return toast.error("Please enter OTP");
-    }
-
-    const loadingToast = toast.loading("Updating password...");
-
-    try {
-      const res = await fetch("/api/manager/change-password", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          managerId: selectedManagerId,
-          otp: otpValue.trim(),
-          password: passForm.password,
-          adminId,
-        }),
-      });
-
-      const data = await res.json();
-      toast.dismiss(loadingToast);
-
-      if (!res.ok) return toast.error(data.error);
-
-      toast.success("Password updated! 🔑");
-
-      setShowPassModal(false);
-      setOtpSent(false);
-      setOtpValue("");
-      setPassForm({ password: "", confirm: "" });
-      setSelectedManagerName("");
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      toast.error("Failed to update password");
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -324,15 +306,18 @@ export default function ManagerComponent({ adminId }: any) {
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
+            {/* ✅ IMPROVED: Contact input with number-only validation */}
             <input
               className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-              placeholder="Contact Number *"
+              placeholder="Contact Number (10 digits) *"
+              type="tel"
               value={form.contact}
-              onChange={(e) => setForm({ ...form, contact: e.target.value })}
+              onChange={handleContactChange}
+              maxLength={10}
             />
             <input
               className="border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
-              placeholder="Password *"
+              placeholder="Password (min 6 characters) *"
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -345,6 +330,19 @@ export default function ManagerComponent({ adminId }: any) {
               onChange={(e) => setForm({ ...form, confirm: e.target.value })}
             />
           </div>
+
+          {/* ✅ IMPROVED: Password match indicator */}
+          {form.password && form.confirm && (
+            <div className={`mt-3 p-2 rounded-lg text-sm ${
+              form.password === form.confirm 
+                ? "bg-green-50 text-green-700 border border-green-200" 
+                : "bg-red-50 text-red-700 border border-red-200"
+            }`}>
+              {form.password === form.confirm 
+                ? "✓ Passwords match" 
+                : "✗ Passwords do not match"}
+            </div>
+          )}
 
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-800 flex items-center gap-2">
@@ -409,6 +407,7 @@ export default function ManagerComponent({ adminId }: any) {
                 value={otpForNewManager}
                 onChange={(e) => setOtpForNewManager(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 maxLength={6}
+                type="tel"
               />
             </div>
 
@@ -500,19 +499,7 @@ export default function ManagerComponent({ adminId }: any) {
                       </td>
                       <td className="p-4 text-gray-600">{m.email}</td>
                       <td className="p-4 text-gray-600">{m.contact}</td>
-                      <td className="p-4 text-right space-x-2">
-                        <button
-                          onClick={() => {
-                            setSelectedManagerId(m._id);
-                            setSelectedManagerName(m.name);
-                            setShowPassModal(true);
-                          }}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2 text-sm font-medium"
-                        >
-                          <Lock size={14} />
-                          Change Password
-                        </button>
-
+                      <td className="p-4 text-right">
                         <button
                           onClick={() => confirmDelete(m._id, m.name)}
                           className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors inline-flex items-center gap-2 text-sm font-medium"
@@ -548,19 +535,7 @@ export default function ManagerComponent({ adminId }: any) {
                     <div className="text-xs text-gray-500 mb-1">Contact</div>
                     <div className="text-sm text-gray-700">{m.contact}</div>
                   </div>
-                  <div className="flex flex-col gap-2 pt-2 border-t">
-                    <button
-                      onClick={() => {
-                        setSelectedManagerId(m._id);
-                        setSelectedManagerName(m.name);
-                        setShowPassModal(true);
-                      }}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition-colors inline-flex items-center justify-center gap-2 text-sm font-medium"
-                    >
-                      <Lock size={16} />
-                      Change Password
-                    </button>
-
+                  <div className="pt-2 border-t">
                     <button
                       onClick={() => confirmDelete(m._id, m.name)}
                       className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg transition-colors inline-flex items-center justify-center gap-2 text-sm font-medium"
@@ -612,131 +587,6 @@ export default function ManagerComponent({ adminId }: any) {
                 className="w-full sm:w-auto px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
               >
                 Delete Manager
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Change Password Modal */}
-      {showPassModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-fadeIn">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <Lock className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    Change Password
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {selectedManagerName}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowPassModal(false);
-                  setOtpSent(false);
-                  setOtpValue("");
-                  setPassForm({ password: "", confirm: "" });
-                  setSelectedManagerName("");
-                }}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {!otpSent ? (
-                <>
-                  <p className="text-sm text-gray-600">
-                    An OTP will be sent to your admin email address. Click
-                    below to receive it.
-                  </p>
-                  <button
-                    onClick={sendOTPForPassword}
-                    disabled={isOtpSendingForPassword}
-                    className="w-full px-5 py-3 rounded-lg text-white font-medium transition-colors flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isOtpSendingForPassword ? (
-                      <>
-                        <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        Sending OTP...
-                      </>
-                    ) : (
-                      "Send OTP"
-                    )}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">
-                      Enter OTP *
-                    </label>
-                    <input
-                      className="w-full border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="6-digit OTP"
-                      value={otpValue}
-                      onChange={(e) => setOtpValue(e.target.value)}
-                      maxLength={6}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">
-                      New Password *
-                    </label>
-                    <input
-                      className="w-full border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="New Password"
-                      type="password"
-                      value={passForm.password}
-                      onChange={(e) =>
-                        setPassForm({ ...passForm, password: e.target.value })
-                      }
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-gray-700 block mb-1">
-                      Confirm Password *
-                    </label>
-                    <input
-                      className="w-full border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Confirm Password"
-                      type="password"
-                      value={passForm.confirm}
-                      onChange={(e) =>
-                        setPassForm({ ...passForm, confirm: e.target.value })
-                      }
-                    />
-                  </div>
-
-                  <button
-                    onClick={changeManagerPassword}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-lg font-medium transition-colors"
-                  >
-                    Update Password
-                  </button>
-                </>
-              )}
-
-              <button
-                onClick={() => {
-                  setShowPassModal(false);
-                  setOtpSent(false);
-                  setOtpValue("");
-                  setPassForm({ password: "", confirm: "" });
-                  setSelectedManagerName("");
-                }}
-                className="w-full px-5 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
-              >
-                Close
               </button>
             </div>
           </div>
