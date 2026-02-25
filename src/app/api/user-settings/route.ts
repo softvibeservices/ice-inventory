@@ -1,6 +1,7 @@
-// icecream-inventory/src/app/api/user-settings/route.ts
+// src/app/api/user-settings/route.ts
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import UserSettings from "@/models/UserSettings";
 
@@ -14,14 +15,19 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     await connectDB();
-    
-    let settings = await UserSettings.findOne({ userId });
-    
-    // If settings don't exist, create default settings
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    let settings = await UserSettings.findOne({ userId: userObjectId });
+
     if (!settings) {
       settings = await UserSettings.create({
-        userId,
+        userId: userObjectId,
         categories: ["Cups", "Family Pack", "Cone", "Candybar", "Tub"],
         units: ["ml", "L", "gm", "kg", "piece", "box"],
       });
@@ -44,6 +50,10 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     if (!categories || !Array.isArray(categories)) {
       return NextResponse.json({ error: "Categories must be an array" }, { status: 400 });
     }
@@ -55,11 +65,8 @@ export async function PUT(req: Request) {
     await connectDB();
 
     const updated = await UserSettings.findOneAndUpdate(
-      { userId },
-      { 
-        categories: categories,
-        units: units,
-      },
+      { userId: new mongoose.Types.ObjectId(userId) },
+      { categories, units },
       { new: true, upsert: true, runValidators: true }
     );
 
@@ -70,7 +77,7 @@ export async function PUT(req: Request) {
   }
 }
 
-// ✅ ADD POST HANDLER FOR SENDBEACON SUPPORT
+// POST handler for SendBeacon support
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -78,6 +85,10 @@ export async function POST(req: Request) {
 
     if (!userId) {
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
     if (!categories || !Array.isArray(categories)) {
@@ -91,11 +102,8 @@ export async function POST(req: Request) {
     await connectDB();
 
     const updated = await UserSettings.findOneAndUpdate(
-      { userId },
-      { 
-        categories: categories,
-        units: units,
-      },
+      { userId: new mongoose.Types.ObjectId(userId) },
+      { categories, units },
       { new: true, upsert: true, runValidators: true }
     );
 

@@ -4,7 +4,7 @@ export interface Product {
     userId: string;
     name: string;
     category?: string;
-    unit: "piece" | "box" | "kg" | "litre" | "gm" | "ml";
+    unit: string;
     quantity: number;
     minStock?: number;
     packQuantity?: number;

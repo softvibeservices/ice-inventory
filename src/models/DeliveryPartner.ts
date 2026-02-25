@@ -1,7 +1,4 @@
-
-// src\models\DeliveryPartner.ts
-
-
+// src/models/DeliveryPartner.ts
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IDeliveryPartner extends Document {
@@ -15,8 +12,8 @@ export interface IDeliveryPartner extends Document {
   otp: string | null;
   otpExpires: Date | null;
 
-  createdByUser: string | null;   // shop owner
-  adminId: string | null;         // ✅ NEW FIELD (ADMIN ID)
+  createdByUser: mongoose.Types.ObjectId | null;   // shop owner
+  adminId: mongoose.Types.ObjectId | null;          // ✅ ADMIN ID
   adminEmail: string | null;
 
   notifiedAt: Date | null;
@@ -45,9 +42,9 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
     otp: { type: String, default: null },
     otpExpires: { type: Date, default: null },
 
-    createdByUser: { type: String, default: null },
+    createdByUser: { type: Schema.Types.ObjectId, ref: "User", default: null },
 
-    adminId: { type: String, default: null },   // ✅ NEW FIELD
+    adminId: { type: Schema.Types.ObjectId, ref: "User", default: null }, // ✅ ADMIN ID
     adminEmail: { type: String, default: null },
 
     notifiedAt: { type: Date, default: null },

@@ -1,5 +1,6 @@
 // src/app/api/seller-details/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import SellerDetails from "@/models/SellerDetails";
 
@@ -13,19 +14,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     if (!contact) {
       return NextResponse.json({ error: "Contact number is required" }, { status: 400 });
     }
 
-    const existing = await SellerDetails.findOne({ userId });
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    const existing = await SellerDetails.findOne({ userId: userObjectId });
     if (existing) {
-      const updated = await SellerDetails.findOneAndUpdate({ userId }, body, {
-        new: true,
-        runValidators: true,
-      });
+      const updated = await SellerDetails.findOneAndUpdate(
+        { userId: userObjectId },
+        { ...body, userId: userObjectId },
+        { new: true, runValidators: true }
+      );
       return NextResponse.json(updated);
     } else {
-      const created = await SellerDetails.create(body);
+      const created = await SellerDetails.create({ ...body, userId: userObjectId });
       return NextResponse.json(created, { status: 201 });
     }
   } catch (error) {
@@ -39,12 +47,19 @@ export async function GET(req: Request) {
     await connectDB();
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
-    
+
     if (!userId) {
       return NextResponse.json({ error: "UserId required" }, { status: 400 });
     }
 
-    const details = await SellerDetails.findOne({ userId });
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
+    const details = await SellerDetails.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
+    });
+
     return NextResponse.json(details || {});
   } catch (error) {
     console.error("Error fetching seller details:", error);

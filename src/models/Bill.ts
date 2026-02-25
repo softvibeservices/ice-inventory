@@ -6,7 +6,7 @@ import mongoose, { Schema, Document, models } from "mongoose";
 ======================= */
 
 export interface IBillLineItem {
-  productId?: string;
+  productId?: mongoose.Types.ObjectId;
   productName: string;
   quantity: number;
   unit: string;
@@ -16,7 +16,7 @@ export interface IBillLineItem {
 }
 
 export interface IBillCustomer {
-  customerId?: string;
+  customerId?: mongoose.Types.ObjectId;
   name: string;
   shopName: string;
   address: string;
@@ -28,8 +28,8 @@ export interface IBillCustomer {
 ======================= */
 
 export interface IBill extends Document {
-  userId: string;
-  orderId: string;
+  userId: mongoose.Types.ObjectId;
+  orderId: string; 
   serialNumber: string;
   billDate: string;
   billingCustomer: IBillCustomer;
@@ -46,12 +46,12 @@ export interface IBill extends Document {
 }
 
 /* =======================
-   Sub-schemas - WITHOUT type parameters to avoid union complexity
+   Sub-schemas
 ======================= */
 
 const BillLineItemSchema = new Schema(
   {
-    productId: { type: String },
+    productId: { type: Schema.Types.ObjectId, ref: "Product" },
     productName: { type: String, required: true },
     quantity: { type: Number, required: true },
     unit: { type: String, required: true },
@@ -64,7 +64,7 @@ const BillLineItemSchema = new Schema(
 
 const BillCustomerSchema = new Schema(
   {
-    customerId: { type: String },
+    customerId: { type: Schema.Types.ObjectId, ref: "Customer" },
     name: { type: String, required: true },
     shopName: { type: String, required: true },
     address: { type: String, required: true },
@@ -74,13 +74,13 @@ const BillCustomerSchema = new Schema(
 );
 
 /* =======================
-   Main Bill schema - WITH type parameter only here
+   Main Bill schema
 ======================= */
 
 const BillSchema = new Schema<IBill>(
   {
-    userId: { type: String, required: true, index: true },
-    orderId: { type: String, required: true, unique: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    orderId: { type: String, required: true, unique: true, index: true },
     serialNumber: { type: String, required: true, index: true },
     billDate: { type: String, required: true },
     billingCustomer: { type: BillCustomerSchema, required: true },

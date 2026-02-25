@@ -1,4 +1,5 @@
-// src/app/dashboard/profile/page.tsx
+// ice-inventory\src\app\dashboard\profile\page.tsx
+
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -88,7 +89,7 @@ export default function ProfilePage() {
     loadProfile();
   }, [router]);
 
-  // Fetch seller ID for bank details
+  // ✅ FIX: Robust sellerId extraction — handles ObjectId objects, strings, nested $oid
   useEffect(() => {
     if (!user?._id) return;
     (async () => {
@@ -98,11 +99,26 @@ export default function ProfilePage() {
         );
         if (!res.ok) return;
         const data = await res.json();
-        if (data && data._id) {
-          setSellerId(data._id);
+
+        // Safely extract _id as a plain string regardless of how MongoDB returns it
+        let rawId = data?._id;
+        if (!rawId) return;
+
+        // If it's an object (e.g. { $oid: "..." }), extract the string
+        if (typeof rawId === "object" && rawId !== null) {
+          rawId = rawId.$oid ?? rawId.toString?.() ?? String(rawId);
+        } else {
+          rawId = String(rawId);
         }
-      } catch {
-        // ignore
+
+        // Validate it looks like a MongoDB ObjectId (24 hex chars)
+        if (/^[a-f\d]{24}$/i.test(rawId)) {
+          setSellerId(rawId);
+        } else {
+          console.warn("sellerId from API is not a valid ObjectId:", rawId);
+        }
+      } catch (err) {
+        console.error("Failed to fetch seller details:", err);
       }
     })();
   }, [user?._id]);
@@ -307,7 +323,10 @@ export default function ProfilePage() {
 
         {/* Sidebar - Mobile (Dropdown) */}
         {isMobileSidebarOpen && (
-          <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setIsMobileSidebarOpen(false)}>
+          <div
+            className="lg:hidden fixed inset-0 z-40 bg-black/50"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          >
             <aside
               className="absolute top-0 left-0 w-64 h-full bg-white shadow-lg p-4 space-y-2 overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
@@ -424,10 +443,24 @@ export default function ProfilePage() {
               <BillingDetailsComponent userId={user._id} />
             )}
 
-            {/* BANK */}
+            {/* ✅ FIX: Show helpful message if seller details not set up yet,
+                otherwise pass guaranteed-valid sellerId string to component */}
             {activeTab === "bank" && (
-              <BankDetailsComponent sellerId={sellerId} />
+              sellerId === null ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                  <p className="text-gray-500 text-sm">Loading bank details...</p>
+                  <p className="text-gray-400 text-xs max-w-sm">
+                    Bank details are linked to your seller profile. If this keeps loading,
+                    please go to <strong>Bill Details</strong> tab and save your seller
+                    information first.
+                  </p>
+                </div>
+              ) : (
+                <BankDetailsComponent sellerId={sellerId} />
+              )
             )}
+
+            {/* PRODUCT SETTINGS */}
             {activeTab === "product-settings" && (
               <ProductSettingsComponent userId={user._id} />
             )}

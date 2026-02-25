@@ -1,6 +1,7 @@
 // src/app/api/delivery/register/route.ts
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import User from "@/models/User";
@@ -29,39 +30,44 @@ export async function POST(req: Request) {
     await connectDB();
 
     const partnerEmail = String(email).toLowerCase().trim();
-    let createdByUserNormalized = createdByUser ? String(createdByUser) : null;
-    let adminIdNormalized = adminId ? String(adminId) : null;
 
-    // Determine admin email
+    // Normalize createdByUser to ObjectId
+    let createdByUserObjId: mongoose.Types.ObjectId | null = null;
+    if (createdByUser && mongoose.Types.ObjectId.isValid(createdByUser)) {
+      createdByUserObjId = new mongoose.Types.ObjectId(createdByUser);
+    }
+
+    // Normalize adminId to ObjectId
+    let adminIdObjId: mongoose.Types.ObjectId | null = null;
+    if (adminId && mongoose.Types.ObjectId.isValid(adminId)) {
+      adminIdObjId = new mongoose.Types.ObjectId(adminId);
+    }
+
     let adminEmail = adminEmailFromClient
       ? String(adminEmailFromClient).toLowerCase()
       : null;
 
-    // ✅ CRITICAL FIX: Auto-populate createdByUser from adminEmail
-    // This fixes both Sticky Notes and Go To Customer search
-    if (adminEmail && !createdByUserNormalized) {
+    // ✅ Auto-populate createdByUser from adminEmail
+    if (adminEmail && !createdByUserObjId) {
       const manager = await User.findOne({ email: adminEmail }).select("_id");
       if (manager) {
-        createdByUserNormalized = String(manager._id);
-        adminIdNormalized = String(manager._id);
+        createdByUserObjId = manager._id as mongoose.Types.ObjectId;
+        adminIdObjId = manager._id as mongoose.Types.ObjectId;
       }
     }
 
-    // Fallback: If createdByUser exists but no adminEmail, get email from user
-    if (!adminEmail && createdByUserNormalized) {
-      const owner = await User.findById(createdByUserNormalized).select("email");
+    // Fallback: get email from user if no adminEmail
+    if (!adminEmail && createdByUserObjId) {
+      const owner = await User.findById(createdByUserObjId).select("email");
       if (owner?.email) adminEmail = owner.email.toLowerCase();
     }
 
-    // 🔒 STRONG DUPLICATE CHECK (email + manager)
+    // 🔒 DUPLICATE CHECK
     const existingPartner = await DeliveryPartner.findOne({
       email: partnerEmail,
-      createdByUser: createdByUserNormalized,
+      createdByUser: createdByUserObjId,
     });
 
-    // -------------------------------
-    // CASE 1 — PARTNER ALREADY EXISTS
-    // -------------------------------
     if (existingPartner) {
       const status = String(existingPartner.status).toLowerCase();
       if (status === "pending") {
@@ -77,55 +83,41 @@ export async function POST(req: Request) {
         );
       }
       if (status === "rejected") {
-        // ♻️ Re-request using SAME RECORD
         existingPartner.name = name;
         existingPartner.phone = phone ?? existingPartner.phone;
         existingPartner.password = await bcrypt.hash(password, 10);
-        existingPartner.createdByUser = createdByUserNormalized;
-        existingPartner.adminId = adminIdNormalized ?? existingPartner.adminId;
+        existingPartner.createdByUser = createdByUserObjId as any;
+        existingPartner.adminId = adminIdObjId as any;
         existingPartner.adminEmail = adminEmail ?? existingPartner.adminEmail;
         existingPartner.status = "pending";
         await existingPartner.save();
 
         return NextResponse.json(
-          {
-            message: "Re-registration request submitted",
-            partnerId: existingPartner._id,
-          },
+          { message: "Re-registration request submitted", partnerId: existingPartner._id },
           { status: 200 }
         );
       }
     }
 
-    // -------------------------------
-    // CASE 2 — NEW PARTNER
-    // -------------------------------
     const hashedPassword = await bcrypt.hash(password, 10);
     const partner = new DeliveryPartner({
       name,
       email: partnerEmail,
       phone,
       password: hashedPassword,
-      createdByUser: createdByUserNormalized,
-      adminId: adminIdNormalized,
+      createdByUser: createdByUserObjId,
+      adminId: adminIdObjId,
       adminEmail,
       status: "pending",
     });
     await partner.save();
 
     return NextResponse.json(
-      {
-        message: "Delivery partner registered successfully",
-        partnerId: partner._id,
-        status: "pending",
-      },
+      { message: "Delivery partner registered successfully", partnerId: partner._id, status: "pending" },
       { status: 201 }
     );
   } catch (err) {
     console.error("REGISTER ERROR:", err);
-    return NextResponse.json(
-      { error: "Unable to register delivery partner" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Unable to register delivery partner" }, { status: 500 });
   }
 }

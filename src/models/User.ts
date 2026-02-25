@@ -32,7 +32,7 @@ const UserSchema = new Schema<IUser>(
     password: { type: String, required: true },
     shopName: { type: String },
     shopAddress: { type: String },
-    gstin: { type: String }, // Removed sparse from here
+    gstin: { type: String }, // Sparse unique index below
     isVerified: { type: Boolean, default: false },
     otp: { type: String },
     otpExpires: { type: Date },
@@ -46,13 +46,13 @@ const UserSchema = new Schema<IUser>(
   { timestamps: true }
 );
 
-// ✅ CREATE SPARSE UNIQUE INDEX (allows multiple nulls)
+// ✅ Sparse unique index (allows multiple nulls)
 UserSchema.index({ gstin: 1 }, { unique: true, sparse: true });
 
 // Hash password before saving
 UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  
+
   try {
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);

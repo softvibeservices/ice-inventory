@@ -1,5 +1,6 @@
 // src/app/api/customers/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Customer from "@/models/Customer";
 
@@ -8,18 +9,19 @@ export async function POST(req: Request) {
   try {
     await connectDB();
     const body = await req.json();
-const { name, contacts, shopName, shopAddress, area, userId } = body;
+    const { name, contacts, shopName, shopAddress, area, userId } = body;
 
-    if (!name || !contacts?.length || !shopName || !shopAddress || !area || !userId) 
-{
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
+    if (!name || !contacts?.length || !shopName || !shopAddress || !area || !userId) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
     const customer = await Customer.create({
       ...body,
+      userId: new mongoose.Types.ObjectId(userId),
       credit: 0,
       debit: 0,
       totalSales: 0,
@@ -27,7 +29,7 @@ const { name, contacts, shopName, shopAddress, area, userId } = body;
     });
 
     return NextResponse.json(customer, { status: 201 });
-  } catch{
+  } catch {
     return NextResponse.json({ error: "Failed to add customer" }, { status: 500 });
   }
 }
@@ -43,9 +45,16 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
     }
 
-    const customers = await Customer.find({ userId }).sort({ createdAt: -1 });
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
+    const customers = await Customer.find({
+      userId: new mongoose.Types.ObjectId(userId),
+    }).sort({ createdAt: -1 });
+
     return NextResponse.json(customers);
-  } catch  {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch customers" }, { status: 500 });
   }
 }
@@ -64,17 +73,25 @@ export async function PUT(req: Request) {
       );
     }
 
-    const updated = await Customer.findOneAndUpdate({ _id: id, userId }, updates, {
-      new: true,
-      runValidators: true,
-    });
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
+    const updated = await Customer.findOneAndUpdate(
+      { _id: id, userId: new mongoose.Types.ObjectId(userId) },
+      updates,
+      { new: true, runValidators: true }
+    );
 
     if (!updated) {
-      return NextResponse.json({ error: "Customer not found or not authorized" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Customer not found or not authorized" },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json(updated);
-  } catch  {
+  } catch {
     return NextResponse.json({ error: "Failed to update customer" }, { status: 500 });
   }
 }
@@ -92,14 +109,24 @@ export async function DELETE(req: Request) {
       );
     }
 
-    const deleted = await Customer.findOneAndDelete({ _id: id, userId });
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
+    const deleted = await Customer.findOneAndDelete({
+      _id: id,
+      userId: new mongoose.Types.ObjectId(userId),
+    });
 
     if (!deleted) {
-      return NextResponse.json({ error: "Customer not found or not authorized" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Customer not found or not authorized" },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ success: true, id });
-  } catch  {
+  } catch {
     return NextResponse.json({ error: "Failed to delete customer" }, { status: 500 });
   }
 }

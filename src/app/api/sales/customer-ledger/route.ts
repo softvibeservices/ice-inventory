@@ -1,6 +1,7 @@
 // src/app/api/sales/customer-ledger/route.ts
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Customer, { ICustomer } from "@/models/Customer";
@@ -30,15 +31,12 @@ function parseDateParam(value: string | null): Date | null {
 function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
   if (!date) return false;
   const ts = date.getTime();
-
   if (from && ts < from.getTime()) return false;
-
   if (to) {
     const toLimit = new Date(to);
     toLimit.setDate(toLimit.getDate() + 1);
     if (ts >= toLimit.getTime()) return false;
   }
-
   return true;
 }
 
@@ -51,56 +49,55 @@ export async function GET(req: Request) {
     const toParam = searchParams.get("to");
 
     if (!userId || !customerId) {
-      return NextResponse.json(
-        { error: "userId and customerId are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "userId and customerId are required" }, { status: 400 });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(customerId)) {
+      return NextResponse.json({ error: "Invalid customerId" }, { status: 400 });
     }
 
     await connectDB();
 
-    // 🔒 Security: Block manager access
     const user = await User.findById(userId).select("role");
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     if (user.role === "manager") {
-      return NextResponse.json(
-        { error: "Access denied: Managers are not allowed" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Access denied: Managers are not allowed" }, { status: 403 });
     }
 
     const from = parseDateParam(fromParam);
     const to = parseDateParam(toParam);
 
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const customerObjectId = new mongoose.Types.ObjectId(customerId);
+
     const customerDoc = (await Customer.findOne({
-      _id: customerId,
-      userId,
+      _id: customerObjectId,
+      userId: userObjectId,
     })) as ICustomer | null;
 
     if (!customerDoc) {
-      return NextResponse.json(
-        { error: "Customer not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Customer not found" }, { status: 404 });
     }
 
     const customer = customerDoc.toObject() as ICustomer & { _id: any };
 
-    const orders = await Order.find({ userId, customerId }).lean();
+    const orders = await Order.find({
+      userId: userObjectId,
+      customerId: customerObjectId,
+    }).lean();
 
     const ledger: LedgerEntry[] = [];
 
     for (const order of orders as any[]) {
-      const createdAt: Date = order.createdAt
-        ? new Date(order.createdAt)
-        : new Date();
+      const createdAt: Date = order.createdAt ? new Date(order.createdAt) : new Date();
+      const withinRangeForSale = !from && !to ? true : isWithinRange(createdAt, from, to);
 
-      const withinRangeForSale =
-        !from && !to ? true : isWithinRange(createdAt, from, to);
-
-      // Sale event (bill created, customer debit increases)
       if (withinRangeForSale) {
         ledger.push({
           id: `${order._id}-sale`,
@@ -114,17 +111,12 @@ export async function GET(req: Request) {
         });
       }
 
-      const history: any[] = Array.isArray(order.settlementHistory)
-        ? order.settlementHistory
-        : [];
+      const history: any[] = Array.isArray(order.settlementHistory) ? order.settlementHistory : [];
 
       for (let index = 0; index < history.length; index++) {
         const entry = history[index];
         const at: Date = entry.at ? new Date(entry.at) : createdAt;
-
-        const withinRangeForEntry =
-          !from && !to ? true : isWithinRange(at, from, to);
-
+        const withinRangeForEntry = !from && !to ? true : isWithinRange(at, from, to);
         if (!withinRangeForEntry) continue;
 
         if (entry.action === "Settled") {
@@ -176,7 +168,6 @@ export async function GET(req: Request) {
       }
     }
 
-    // Sort ledger by time
     ledger.sort((a, b) => a.at.localeCompare(b.at));
 
     const currentDebit = Number((customer as any).debit || 0) || 0;
@@ -193,11 +184,7 @@ export async function GET(req: Request) {
         totalSales: Number((customer as any).totalSales || 0) || 0,
       },
       ledger,
-      totals: {
-        debit: currentDebit,
-        credit: currentCredit,
-        netBalance,
-      },
+      totals: { debit: currentDebit, credit: currentCredit, netBalance },
     });
   } catch (err: any) {
     console.error("GET /api/sales/customer-ledger error:", err);

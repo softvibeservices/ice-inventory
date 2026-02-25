@@ -1,5 +1,6 @@
 // src/app/api/manager/send-verification-otp/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { transporter } from "@/lib/nodemailer";
@@ -17,14 +18,19 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if verified manager with this email already exists
-    const existingVerifiedManager = await User.findOne({ 
-      adminId, 
+    if (!mongoose.Types.ObjectId.isValid(adminId)) {
+      return NextResponse.json({ error: "Invalid adminId" }, { status: 400 });
+    }
+
+    const adminObjId = new mongoose.Types.ObjectId(adminId);
+
+    const existingVerifiedManager = await User.findOne({
+      adminId: adminObjId,
       email,
       role: "manager",
-      isPending: { $ne: true }
+      isPending: { $ne: true },
     });
-    
+
     if (existingVerifiedManager) {
       return NextResponse.json(
         { error: "Manager with this email already exists" },
@@ -32,35 +38,30 @@ export async function POST(req: Request) {
       );
     }
 
-    // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Create a temporary document to store OTP
     const tempData = {
       email,
       name,
-      adminId,
-      role: "manager", // ✅ Set role
+      adminId: adminObjId,
+      role: "manager",
       otp,
-      otpExpires: new Date(Date.now() + 1000 * 60 * 10), // 10 minutes
+      otpExpires: new Date(Date.now() + 1000 * 60 * 10),
       isPending: true,
-      isVerified: false, // ✅ Not verified yet
-      password: 'TEMP_PASSWORD', // Temporary placeholder
-      contact: 'TEMP_CONTACT', // Temporary placeholder
+      isVerified: false,
+      password: "TEMP_PASSWORD",
+      contact: "TEMP_CONTACT",
     };
 
-    // Delete any existing pending entry for this email
-    await User.deleteMany({ 
-      email, 
-      adminId,
+    await User.deleteMany({
+      email,
+      adminId: adminObjId,
       role: "manager",
-      isPending: true 
+      isPending: true,
     });
 
-    // Create new pending entry
     await User.create(tempData);
 
-    // Send email
     await transporter.sendMail({
       from: process.env.EMAIL_USER!,
       to: email,
@@ -83,23 +84,14 @@ export async function POST(req: Request) {
             <p style="color: #666; font-size: 13px; margin-top: 20px;">
               ⏱️ This OTP will expire in <strong>10 minutes</strong>.
             </p>
-            <p style="color: #999; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-              If you didn't request this, please ignore this email.
-            </p>
           </div>
         </div>
       `,
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      message: "OTP sent to manager's email" 
-    });
+    return NextResponse.json({ success: true, message: "OTP sent to manager's email" });
   } catch (e: any) {
     console.error("Error sending verification OTP:", e);
-    return NextResponse.json(
-      { error: e.message || "Failed to send OTP" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e.message || "Failed to send OTP" }, { status: 500 });
   }
 }

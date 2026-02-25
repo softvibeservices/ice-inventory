@@ -1,7 +1,8 @@
 // src/app/api/delivery/notifications/route.ts
-// ✅ FIXED VERSION: Requires userId, removes adminEmail dependency
+// ✅ FIXED VERSION: Requires userId, uses ObjectId for queries
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import Order from "@/models/Order";
@@ -12,54 +13,42 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get("userId");
 
-    // ✅ SECURITY: userId is REQUIRED
     if (!userId) {
-      return NextResponse.json(
-        { error: "userId is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
     await connectDB();
 
-    // ✅ SECURITY: Verify user exists
     const user = await User.findById(userId).select("role");
     if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // ✅ SECURITY: Block managers from seeing notifications
     if (user.role === "manager") {
-      return NextResponse.json(
-        { error: "Access denied: Managers not allowed" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Access denied: Managers not allowed" }, { status: 403 });
     }
 
-    // ✅ Count pending delivery partners for THIS admin only
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Count pending delivery partners — createdByUser is now ObjectId
     const pendingPartners = await DeliveryPartner.countDocuments({
-      createdByUser: userId,
+      createdByUser: userObjectId,
       status: "pending",
     });
 
-    // ✅ Count pending deliveries for THIS admin only
+    // Count pending deliveries — userId is now ObjectId
     const pendingDeliveries = await Order.countDocuments({
-      userId,
+      userId: userObjectId,
       deliveryStatus: { $in: ["Pending", "On the Way"] },
     });
 
-    return NextResponse.json({
-      pendingPartners,
-      pendingDeliveries,
-    });
+    return NextResponse.json({ pendingPartners, pendingDeliveries });
   } catch (err: any) {
     console.error("GET /api/delivery/notifications error:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch notifications" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch notifications" }, { status: 500 });
   }
 }

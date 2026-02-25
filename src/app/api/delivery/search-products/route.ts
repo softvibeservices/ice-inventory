@@ -1,13 +1,13 @@
 // src/app/api/delivery/search-products/route.ts
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
 export async function GET(req: Request) {
-  // ✅ Verify delivery partner authentication
   const auth = await verifyDeliveryAuth(req);
   if (auth instanceof NextResponse) return auth;
 
@@ -18,19 +18,16 @@ export async function GET(req: Request) {
     const query = searchParams.get("q")?.toLowerCase() || "";
 
     if (!query || query.trim().length === 0) {
-      return NextResponse.json(
-        { products: [] },
-        { status: 200 }
-      );
+      return NextResponse.json({ products: [] }, { status: 200 });
     }
 
     await connectDB();
 
-    // ✅ Get manager's userId from delivery partner's profile
+    // createdByUser is now ObjectId
     const partner = await DeliveryPartner.findById(partnerId)
       .select("createdByUser")
-      .lean() as { createdByUser?: string } | null;
-    
+      .lean() as { createdByUser?: mongoose.Types.ObjectId | string } | null;
+
     if (!partner || !partner.createdByUser) {
       return NextResponse.json(
         { error: "Unable to determine manager for this delivery partner" },
@@ -38,11 +35,18 @@ export async function GET(req: Request) {
       );
     }
 
-    const userId = partner.createdByUser;
+    const userObjectId = partner.createdByUser instanceof mongoose.Types.ObjectId
+      ? partner.createdByUser
+      : mongoose.Types.ObjectId.isValid(String(partner.createdByUser))
+        ? new mongoose.Types.ObjectId(String(partner.createdByUser))
+        : null;
 
-    // ✅ Search products by manager's userId
+    if (!userObjectId) {
+      return NextResponse.json({ error: "Invalid manager ID" }, { status: 400 });
+    }
+
     const products = await Product.find({
-      userId,
+      userId: userObjectId,
       $or: [
         { name: { $regex: query, $options: "i" } },
         { category: { $regex: query, $options: "i" } },
@@ -55,9 +59,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ products }, { status: 200 });
   } catch (err) {
     console.error("search products error:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch product suggestions" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch product suggestions" }, { status: 500 });
   }
 }

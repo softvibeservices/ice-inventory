@@ -1,6 +1,7 @@
 // src/app/api/sales/summary/route.ts
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Customer from "@/models/Customer";
@@ -29,15 +30,12 @@ function parseDateParam(value: string | null): Date | null {
 function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
   if (!date) return false;
   const ts = date.getTime();
-
   if (from && ts < from.getTime()) return false;
-
   if (to) {
     const toLimit = new Date(to);
     toLimit.setDate(toLimit.getDate() + 1);
     if (ts >= toLimit.getTime()) return false;
   }
-
   return true;
 }
 
@@ -46,8 +44,7 @@ function initQuantities(): QuantityTotals {
 }
 
 function addQuantities(target: QuantityTotals, source: any) {
-  if (!source || typeof source !== 'object') return;
-  
+  if (!source || typeof source !== "object") return;
   Object.entries(source).forEach(([unit, value]) => {
     const numValue = Number(value || 0);
     if (!isNaN(numValue) && numValue > 0) {
@@ -64,43 +61,37 @@ export async function GET(req: Request) {
     const toParam = searchParams.get("to");
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "userId is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
     await connectDB();
 
-    // 🔒 Security: Block manager access
     const user = await User.findById(userId).select("role");
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
     if (user.role === "manager") {
-      return NextResponse.json(
-        { error: "Access denied: Managers not allowed" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Access denied: Managers not allowed" }, { status: 403 });
     }
 
     const from = parseDateParam(fromParam);
     const to = parseDateParam(toParam);
+    const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // ✅ CRITICAL: Only count orders that are BOTH settled AND delivered
-    const orderMatch: any = { 
-      userId,
+    const orderMatch: any = {
+      userId: userObjectId,
       discardedAt: null,
       status: "settled",
       deliveryStatus: "Delivered",
     };
 
-    // Date range filter
     if (from || to) {
       orderMatch.createdAt = {};
-      if (from) {
-        orderMatch.createdAt.$gte = from;
-      }
+      if (from) orderMatch.createdAt.$gte = from;
       if (to) {
         const toLimit = new Date(to);
         toLimit.setDate(toLimit.getDate() + 1);
@@ -112,10 +103,8 @@ export async function GET(req: Request) {
 
     let totalSales = 0;
     const totalOrders = orders.length;
-
     const quantities: QuantityTotals = initQuantities();
     const dailyMap: Record<string, DailyStat> = {};
-
     let cashReceived = 0;
     let bankReceived = 0;
 
@@ -126,20 +115,12 @@ export async function GET(req: Request) {
       return dateObj.toISOString().slice(0, 10);
     };
 
-    // Aggregate sales + quantities by createdAt
     for (const raw of orders as any[]) {
       const createdAt = raw.createdAt ? new Date(raw.createdAt) : new Date();
       const key = getDayKey(createdAt);
 
       if (!dailyMap[key]) {
-        dailyMap[key] = {
-          date: key,
-          totalSales: 0,
-          totalOrders: 0,
-          quantities: initQuantities(),
-          cashReceived: 0,
-          bankReceived: 0,
-        };
+        dailyMap[key] = { date: key, totalSales: 0, totalOrders: 0, quantities: initQuantities(), cashReceived: 0, bankReceived: 0 };
       }
 
       const orderTotal = Number(raw.total || 0) || 0;
@@ -147,37 +128,25 @@ export async function GET(req: Request) {
       dailyMap[key].totalSales += orderTotal;
       dailyMap[key].totalOrders += 1;
 
-      // ✅ Add all quantities from quantitySummary dynamically
       const q = raw.quantitySummary || {};
       addQuantities(dailyMap[key].quantities, q);
       addQuantities(quantities, q);
     }
 
-    // Aggregate payments by method from settlementHistory
     for (const raw of orders as any[]) {
-      const history: any[] = Array.isArray(raw.settlementHistory)
-        ? raw.settlementHistory
-        : [];
+      const history: any[] = Array.isArray(raw.settlementHistory) ? raw.settlementHistory : [];
 
       for (const entry of history) {
         if (entry.action !== "Settled") continue;
-
         const at = entry.at ? new Date(entry.at) : new Date();
         if ((from || to) && !isWithinRange(at, from, to)) continue;
 
         const amount = Number(entry.amountPaid || 0) || 0;
         const method: string | undefined = entry.method;
-
         const key = getDayKey(at);
+
         if (!dailyMap[key]) {
-          dailyMap[key] = {
-            date: key,
-            totalSales: 0,
-            totalOrders: 0,
-            quantities: initQuantities(),
-            cashReceived: 0,
-            bankReceived: 0,
-          };
+          dailyMap[key] = { date: key, totalSales: 0, totalOrders: 0, quantities: initQuantities(), cashReceived: 0, bankReceived: 0 };
         }
 
         if (method === "Cash") {
@@ -190,8 +159,7 @@ export async function GET(req: Request) {
       }
     }
 
-    // Overall credit/debit from customers (global, not date-limited)
-    const customers = await Customer.find({ userId }).lean();
+    const customers = await Customer.find({ userId: userObjectId }).lean();
     let overallDebit = 0;
     let overallCredit = 0;
 
@@ -203,31 +171,18 @@ export async function GET(req: Request) {
     const netReceivable = overallDebit - overallCredit;
     const outstandingDebt = netReceivable < 0 ? 0 : netReceivable;
 
-    // Sort daily data in DESCENDING order (latest first)
-    const daily = Object.values(dailyMap).sort((a, b) =>
-      b.date.localeCompare(a.date)
-    );
+    const daily = Object.values(dailyMap).sort((a, b) => b.date.localeCompare(a.date));
 
-    // Round all quantity values
-    Object.keys(quantities).forEach(unit => {
-      quantities[unit] = Math.round(quantities[unit]);
-    });
-
+    Object.keys(quantities).forEach(unit => { quantities[unit] = Math.round(quantities[unit]); });
     daily.forEach(day => {
-      Object.keys(day.quantities).forEach(unit => {
-        day.quantities[unit] = Math.round(day.quantities[unit]);
-      });
+      Object.keys(day.quantities).forEach(unit => { day.quantities[unit] = Math.round(day.quantities[unit]); });
     });
 
     return NextResponse.json({
       totalSales,
       totalOrders,
       quantities,
-      paymentBreakdown: {
-        cash: cashReceived,
-        bank: bankReceived,
-        outstandingDebt,
-      },
+      paymentBreakdown: { cash: cashReceived, bank: bankReceived, outstandingDebt },
       overallDebit,
       overallCredit,
       netReceivable,
@@ -235,9 +190,6 @@ export async function GET(req: Request) {
     });
   } catch (err: any) {
     console.error("GET /api/sales/summary error:", err);
-    return NextResponse.json(
-      { error: err?.message || "Failed to load sales summary" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err?.message || "Failed to load sales summary" }, { status: 500 });
   }
-} 
+}

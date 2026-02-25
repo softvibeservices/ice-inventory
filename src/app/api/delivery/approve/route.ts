@@ -1,5 +1,6 @@
 // src/app/api/delivery/approve/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import { transporter } from "@/lib/nodemailer";
@@ -13,15 +14,17 @@ export async function PATCH(req: Request) {
     if (!partnerId) return NextResponse.json({ error: "partnerId required" }, { status: 400 });
     if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     await connectDB();
 
-    // ✅ GET THE ADMIN USER TO VERIFY AUTHORIZATION
     const adminUser = await User.findById(userId).select("email role");
     if (!adminUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // ✅ BLOCK MANAGERS FROM APPROVING
     if (adminUser.role === "manager") {
       return NextResponse.json({ error: "Managers cannot approve delivery partners" }, { status: 403 });
     }
@@ -29,47 +32,35 @@ export async function PATCH(req: Request) {
     const partner = await DeliveryPartner.findById(partnerId);
     if (!partner) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
 
-    // ✅ AUTHORIZATION: Check multiple conditions
     const adminEmail = adminUser.email ? String(adminUser.email).toLowerCase() : null;
     const partnerAdminEmail = partner.adminEmail ? String(partner.adminEmail).toLowerCase() : null;
-    const partnerCreatedBy = partner.createdByUser ? String(partner.createdByUser) : null;
+    // createdByUser is now ObjectId — compare using toString()
+    const partnerCreatedBy = partner.createdByUser ? partner.createdByUser.toString() : null;
 
     const isAuthorized =
-      // 1. userId matches createdByUser
-      (userId && partnerCreatedBy && String(userId) === partnerCreatedBy) ||
-      // 2. Admin email matches partner's adminEmail
+      (userId && partnerCreatedBy && userId === partnerCreatedBy) ||
       (adminEmail && partnerAdminEmail && adminEmail === partnerAdminEmail) ||
-      // 3. If createdByUser is null/empty, allow if adminEmail matches
       (!partnerCreatedBy && adminEmail && partnerAdminEmail && adminEmail === partnerAdminEmail) ||
-      // 4. Allow if partner has no adminEmail set (backward compatibility)
-      (!partnerAdminEmail && partnerCreatedBy && String(userId) === partnerCreatedBy);
+      (!partnerAdminEmail && partnerCreatedBy && userId === partnerCreatedBy);
 
     if (!isAuthorized) {
-      console.error("Authorization failed:", {
-        userId,
-        adminEmail,
-        partnerCreatedBy,
-        partnerAdminEmail,
-      });
+      console.error("Authorization failed:", { userId, adminEmail, partnerCreatedBy, partnerAdminEmail });
       return NextResponse.json({ error: "Not authorized to approve this partner" }, { status: 403 });
     }
 
     partner.status = "approved";
     partner.notifiedAt = new Date();
-    
-    // ✅ SET adminEmail if not already set
+
     if (!partner.adminEmail && adminEmail) {
       partner.adminEmail = adminEmail;
     }
-    
-    // ✅ SET createdByUser if not already set
-    if (!partner.createdByUser && userId) {
-      partner.createdByUser = userId;
+
+    if (!partner.createdByUser && userId && mongoose.Types.ObjectId.isValid(userId)) {
+      partner.createdByUser = new mongoose.Types.ObjectId(userId) as any;
     }
-    
+
     await partner.save();
 
-    // send email to partner about approval (best effort)
     try {
       await transporter.sendMail({
         from: process.env.EMAIL_USER,

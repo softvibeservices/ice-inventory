@@ -67,14 +67,7 @@ type BillItem = {
   free: boolean;
 };
 
-type QuantitySummary = {
-  piece: number;
-  box: number;
-  kg: number;
-  litre: number;
-  gm: number;
-  ml: number;
-};
+type QuantitySummary = Record<string, number>;
 
 export default function BillingPage() {
   // At the top, add new state for editing mode
@@ -857,18 +850,17 @@ export default function BillingPage() {
         return acc;
       }, {} as Record<string, BillItem[]>);
 
-      const unitPriority: Array<BillItem["unit"]> = [
-        "box",
-        "litre",
-        "kg",
-        "gm",
-        "ml",
-        "piece",
-      ];
-
-      const orderedUnits = Object.keys(grouped).sort(
-        (a, b) => unitPriority.indexOf(a) - unitPriority.indexOf(b)
-      );
+     // ✅ REPLACE WITH
+// Dynamic sort: known units first in preferred order, unknown units appended alphabetically
+const knownUnitPriority = ["box", "litre", "kg", "gm", "ml", "piece"];
+const orderedUnits = Object.keys(grouped).sort((a, b) => {
+  const ai = knownUnitPriority.indexOf(a);
+  const bi = knownUnitPriority.indexOf(b);
+  if (ai !== -1 && bi !== -1) return ai - bi;   // both known → use priority order
+  if (ai !== -1) return -1;                      // only a is known → a comes first
+  if (bi !== -1) return 1;                       // only b is known → b comes first
+  return a.localeCompare(b);                     // both unknown → alphabetical
+});
 
       const sortedFilled = orderedUnits.flatMap((unit) =>
         grouped[unit].sort(

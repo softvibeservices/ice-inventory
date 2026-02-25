@@ -1,10 +1,10 @@
 // src/app/api/delivery/orders/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Customer from "@/models/Customer";
 import User from "@/models/User";
-import mongoose from "mongoose";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
 export async function GET(req: Request) {
@@ -25,36 +25,35 @@ export async function GET(req: Request) {
       );
     }
 
+    if (userId && !mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     await connectDB();
 
-    /* -----------------------------
-       BUILD QUERY
-    ----------------------------- */
     const filter: any = {};
 
-    if (userId) filter.userId = userId;
+    if (userId) filter.userId = new mongoose.Types.ObjectId(userId);
     if (onlyUnsettled) filter.status = "Unsettled";
     filter.deliveryStatus = { $ne: "Delivered" };
 
     if (partnerId) {
+      const partnerObjId = mongoose.Types.ObjectId.isValid(partnerId)
+        ? new mongoose.Types.ObjectId(partnerId)
+        : partnerId;
       filter.$or = [
-        { deliveryPartnerId: partnerId },
+        { deliveryPartnerId: partnerObjId },
         { deliveryPartnerId: null },
       ];
     }
 
-    /* -----------------------------
-       FETCH ORDERS
-    ----------------------------- */
     const orders: any[] = await Order.find(filter)
       .sort({ createdAt: -1 })
       .lean();
 
     if (!orders.length) return NextResponse.json([], { status: 200 });
 
-    /* -----------------------------
-       ENRICH CUSTOMER LOCATION
-    ----------------------------- */
+    // ENRICH CUSTOMER LOCATION
     const customerIds = [...new Set(orders.map(o => o.customerId).filter(Boolean))];
 
     if (customerIds.length) {
@@ -67,16 +66,14 @@ export async function GET(req: Request) {
       customers.forEach(c => (custMap[String(c._id)] = c));
 
       orders.forEach(o => {
-        if (!o.customerLat && custMap[o.customerId]?.location) {
-          o.customerLat = custMap[o.customerId].location.latitude;
-          o.customerLng = custMap[o.customerId].location.longitude;
+        if (!o.customerLat && o.customerId && custMap[String(o.customerId)]?.location) {
+          o.customerLat = custMap[String(o.customerId)].location.latitude;
+          o.customerLng = custMap[String(o.customerId)].location.longitude;
         }
       });
     }
 
-    /* -----------------------------
-       ENRICH SHOP NAME
-    ----------------------------- */
+    // ENRICH SHOP NAME
     const userIds = [...new Set(orders.map(o => o.userId).filter(Boolean))];
     if (userIds.length) {
       const users = await User.find(
@@ -88,8 +85,8 @@ export async function GET(req: Request) {
       users.forEach(u => (userMap[String(u._id)] = u));
 
       orders.forEach(o => {
-        if (!o.shopName && userMap[o.userId]) {
-          o.shopName = userMap[o.userId].shopName;
+        if (!o.shopName && o.userId && userMap[String(o.userId)]) {
+          o.shopName = userMap[String(o.userId)].shopName;
         }
       });
     }
@@ -97,9 +94,6 @@ export async function GET(req: Request) {
     return NextResponse.json(orders, { status: 200 });
   } catch (err) {
     console.error("/api/delivery/orders error:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch orders" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
   }
 }

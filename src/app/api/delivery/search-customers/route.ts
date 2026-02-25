@@ -1,6 +1,7 @@
 // src/app/api/delivery/search-customers/route.ts
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Customer from "@/models/Customer";
 import DeliveryPartner from "@/models/DeliveryPartner";
@@ -23,10 +24,11 @@ export async function GET(req: Request) {
     await connectDB();
 
     // Get manager's userId from delivery partner's profile
+    // createdByUser is now ObjectId
     const partner = await DeliveryPartner.findById(partnerId)
       .select("createdByUser")
-      .lean() as { createdByUser?: string } | null;
-    
+      .lean() as { createdByUser?: mongoose.Types.ObjectId | string } | null;
+
     if (!partner || !partner.createdByUser) {
       return NextResponse.json(
         { error: "Unable to determine manager for this delivery partner" },
@@ -34,11 +36,18 @@ export async function GET(req: Request) {
       );
     }
 
-    const userId = partner.createdByUser;
+    const userObjectId = partner.createdByUser instanceof mongoose.Types.ObjectId
+      ? partner.createdByUser
+      : mongoose.Types.ObjectId.isValid(String(partner.createdByUser))
+        ? new mongoose.Types.ObjectId(String(partner.createdByUser))
+        : null;
 
-    // Search customers by manager's userId
+    if (!userObjectId) {
+      return NextResponse.json({ error: "Invalid manager ID" }, { status: 400 });
+    }
+
     const customers = await Customer.find({
-      userId,
+      userId: userObjectId,
       $or: [
         { name: { $regex: query, $options: "i" } },
         { shopName: { $regex: query, $options: "i" } },
@@ -51,9 +60,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ customers }, { status: 200 });
   } catch (err) {
     console.error("search customers error:", err);
-    return NextResponse.json(
-      { error: "Failed to fetch customer suggestions" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch customer suggestions" }, { status: 500 });
   }
 }

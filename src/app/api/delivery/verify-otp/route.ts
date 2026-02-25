@@ -14,12 +14,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { partnerId, otp } = body ?? {};
 
-    // ✅ Validation
     if (!partnerId || !otp) {
-      return NextResponse.json(
-        { error: "partnerId and otp are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "partnerId and otp are required" }, { status: 400 });
     }
 
     await connectDB();
@@ -27,76 +23,51 @@ export async function POST(req: Request) {
     const partner = await DeliveryPartner.findById(partnerId);
 
     if (!partner) {
-      return NextResponse.json(
-        { error: "Partner not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Partner not found" }, { status: 404 });
     }
 
-    // ✅ STATUS CHECK
     if (partner.status !== "approved") {
-      return NextResponse.json(
-        { error: "Partner not approved" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Partner not approved" }, { status: 403 });
     }
 
-    // ✅ OTP validity
     if (!partner.otp || !partner.otpExpires) {
-      return NextResponse.json(
-        { error: "OTP not generated" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "OTP not generated" }, { status: 400 });
     }
 
     if (partner.otpExpires < new Date()) {
-      return NextResponse.json(
-        { error: "OTP expired" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "OTP expired" }, { status: 400 });
     }
 
     if (partner.otp !== String(otp)) {
-      return NextResponse.json(
-        { error: "Invalid OTP" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
     }
 
-    // ✅ SUCCESS → clear OTP
     partner.otp = null;
     partner.otpExpires = null;
 
-    // ✅ CREATE SESSION TOKEN
     const token = makeSessionToken();
     partner.sessionToken = token;
     await partner.save();
 
-    // ✅ ============================================
-    // ✅ CRITICAL FIX: Return full partner object
-    // ✅ ============================================
     return NextResponse.json({
       message: "Login successful",
       token,
       partnerId: String(partner._id),
-      // ✅ ADD THIS: Full partner object for app storage
       partner: {
         _id: String(partner._id),
         name: partner.name,
         email: partner.email,
         phone: partner.phone || "",
         status: partner.status,
-        createdByUser: partner.createdByUser ? String(partner.createdByUser) : null, // ✅ Manager's ID
-        adminId: partner.adminId ? String(partner.adminId) : null,
+        // createdByUser is now ObjectId — serialize to string for frontend
+        createdByUser: partner.createdByUser ? partner.createdByUser.toString() : null,
+        adminId: partner.adminId ? partner.adminId.toString() : null,
         adminEmail: partner.adminEmail || null,
         createdAt: partner.createdAt,
       },
     });
   } catch (err) {
     console.error("VERIFY OTP ERROR:", err);
-    return NextResponse.json(
-      { error: "OTP verification failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "OTP verification failed" }, { status: 500 });
   }
 }

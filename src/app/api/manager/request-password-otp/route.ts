@@ -1,5 +1,6 @@
 // src/app/api/manager/request-password-otp/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { transporter } from "@/lib/nodemailer";
@@ -11,26 +12,28 @@ export async function POST(req: Request) {
     const { managerId, adminId } = await req.json();
 
     if (!managerId || !adminId) {
-      return NextResponse.json(
-        { error: "managerId & adminId required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "managerId & adminId required" }, { status: 400 });
     }
+
+    if (!mongoose.Types.ObjectId.isValid(adminId)) {
+      return NextResponse.json({ error: "Invalid adminId" }, { status: 400 });
+    }
+
+    const adminObjId = new mongoose.Types.ObjectId(adminId);
 
     const manager = await User.findOne({
       _id: managerId,
       role: "manager",
-      adminId
+      adminId: adminObjId,
     });
 
     if (!manager) {
       return NextResponse.json({ error: "Manager not found" }, { status: 404 });
     }
 
-    // Don't allow password reset for pending managers
     if (manager.isPending) {
-      return NextResponse.json({ 
-        error: "Cannot reset password for pending manager" 
+      return NextResponse.json({
+        error: "Cannot reset password for pending manager",
       }, { status: 400 });
     }
 
@@ -41,10 +44,7 @@ export async function POST(req: Request) {
 
     const adminEmail = admin.email;
     if (!adminEmail) {
-      return NextResponse.json(
-        { error: "Admin email missing in user record" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Admin email missing in user record" }, { status: 500 });
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -76,9 +76,6 @@ export async function POST(req: Request) {
             <p style="color: #666; font-size: 13px; margin-top: 20px;">
               ⏱️ This OTP will expire in <strong>10 minutes</strong>.
             </p>
-            <p style="color: #999; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-              If you didn't request this, please contact your system administrator.
-            </p>
           </div>
         </div>
       `,
@@ -87,9 +84,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, message: "OTP sent" });
   } catch (e: any) {
     console.error("Error sending password reset OTP:", e);
-    return NextResponse.json(
-      { error: e.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e.message }, { status: 500 });
   }
 }

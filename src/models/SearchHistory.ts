@@ -1,9 +1,10 @@
+// src/models/SearchHistory.ts
 import mongoose, { Schema } from "mongoose";
 
 const SearchHistorySchema = new Schema(
   {
-    partnerId: { type: String, required: true },
-    customerId: { type: String, required: true },
+    partnerId: { type: Schema.Types.ObjectId, ref: "DeliveryPartner", required: true, index: true },
+    customerId: { type: Schema.Types.ObjectId, ref: "Customer", required: true },
     name: { type: String, required: true },
   },
   { timestamps: true }

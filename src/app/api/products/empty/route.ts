@@ -1,20 +1,10 @@
-// icecream-inventory/src/app/api/products/empty/route.ts
+// src/app/api/products/empty/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
 import RestockHistory from "@/models/RestockHistory";
 
-/**
- * POST /api/products/empty
- * Body: { userId: string }
- *
- * - Saves an audit RestockHistory record (note: "Empty Stock") capturing previous quantities.
- * - Sets all products' quantity to 0 for the provided userId.
- *
- * Returns JSON in all cases (no HTML).
- */
-
-// Allow OPTIONS for CORS/preflight in case it's needed
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
@@ -34,45 +24,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "userId required" }, { status: 400 });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     await connectDB();
 
-    // fetch all products for the user
-    const products = await Product.find({ userId }).lean();
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const products = await Product.find({ userId: userObjectId }).lean();
 
     if (!products || products.length === 0) {
-      // nothing to empty — return success but note that no products were found
       return NextResponse.json(
         { message: "No products found for user", emptied: false },
         { status: 200 }
       );
     }
 
-    // prepare history items with the quantities that will be removed
     const historyItems = products.map((p: any) => ({
-      productId: p._id?.toString?.() ?? String(p._id),
+      productId: p._id,  // already ObjectId
       name: p.name,
       category: p.category ?? "",
       unit: p.unit ?? "piece",
-      quantity: p.quantity ?? 0, // quantity removed (previous quantity)
+      quantity: p.quantity ?? 0,
       note: "Empty Stock",
     }));
 
-    // set all quantities to 0 in one efficient operation
-    await Product.updateMany({ userId }, { $set: { quantity: 0 } });
+    await Product.updateMany({ userId: userObjectId }, { $set: { quantity: 0 } });
 
-    // save a restock history record (audit trail)
     try {
       await RestockHistory.create({
-        userId,
+        userId: userObjectId,
         items: historyItems,
       });
     } catch (historyErr) {
-      // non-fatal: product quantities are already zeroed; return warning
       return NextResponse.json(
         {
           message: "All product quantities set to 0, but failed to record history",
           emptied: true,
-          historyError: (historyErr instanceof Error ? historyErr.message : String(historyErr)),
+          historyError: historyErr instanceof Error ? historyErr.message : String(historyErr),
         },
         { status: 200 }
       );
@@ -85,7 +74,6 @@ export async function POST(req: Request) {
   }
 }
 
-// helpful GET for quick diagnostics (returns 405, but JSON)
 export async function GET() {
   return NextResponse.json({ error: "Use POST to empty products (POST body: { userId })" }, { status: 405 });
 }

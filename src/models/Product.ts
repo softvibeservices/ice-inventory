@@ -1,9 +1,8 @@
-// icecream-inventory/src/models/Product.ts
-
-import { Schema, model, models, Document } from "mongoose";
+// src/models/Product.ts
+import mongoose, { Schema, model, models, Document } from "mongoose";
 
 export interface IProduct extends Document {
-  userId: string;
+  userId: mongoose.Types.ObjectId;
   name: string;
   category?: string;
   unit: string;
@@ -20,7 +19,7 @@ export interface IProduct extends Document {
 
 const ProductSchema = new Schema<IProduct>(
   {
-    userId: { type: String, required: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     name: { type: String, required: true, trim: true },
     category: { type: String, trim: true },
     unit: {

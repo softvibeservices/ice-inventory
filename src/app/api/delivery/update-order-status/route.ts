@@ -1,24 +1,21 @@
+// src/app/api/delivery/update-order-status/route.ts
+
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
-/* ----------------------------------------
-   Local Types (keep TS happy & strict)
----------------------------------------- */
 type DeliveryStatus = "Pending" | "On the Way" | "Delivered";
 
 interface LeanOrder {
   _id: string;
   deliveryStatus: DeliveryStatus;
-  deliveryPartnerId?: string | null;
+  deliveryPartnerId?: mongoose.Types.ObjectId | string | null;
   deliveryOnTheWayAt?: Date | null;
   deliveryCompletedAt?: Date | null;
 }
 
-/* ----------------------------------------
-   Allowed transitions
----------------------------------------- */
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
   Pending: ["On the Way"],
   "On the Way": ["Delivered"],
@@ -26,9 +23,6 @@ const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
 };
 
 export async function PATCH(req: Request) {
-  /* ----------------------------------------
-     🔐 AUTH FIRST (SESSION TOKEN)
-  ---------------------------------------- */
   const auth = await verifyDeliveryAuth(req);
   if (auth instanceof NextResponse) return auth;
 
@@ -39,85 +33,58 @@ export async function PATCH(req: Request) {
     const { orderId, status, note } = body ?? {};
 
     if (!orderId || !status) {
-      return NextResponse.json(
-        { error: "orderId and status required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "orderId and status required" }, { status: 400 });
     }
 
     if (!["Pending", "On the Way", "Delivered"].includes(status)) {
-      return NextResponse.json(
-        { error: "Invalid status" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
     await connectDB();
 
-    /* ----------------------------------------
-       Fetch order (typed)
-    ---------------------------------------- */
     const existingOrder = await Order.findById(orderId)
       .select("deliveryStatus deliveryPartnerId")
       .lean<LeanOrder | null>();
 
     if (!existingOrder) {
-      return NextResponse.json(
-        { error: "Order not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // 🚫 Delivered orders are immutable
     if (existingOrder.deliveryStatus === "Delivered") {
-      return NextResponse.json(
-        { error: "Order already delivered" },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "Order already delivered" }, { status: 409 });
     }
 
-    /* ----------------------------------------
-       Validate transition
-    ---------------------------------------- */
     const allowedNext = VALID_TRANSITIONS[existingOrder.deliveryStatus];
-
     if (!allowedNext.includes(status)) {
       return NextResponse.json(
-        {
-          error: `Invalid status transition from ${existingOrder.deliveryStatus} to ${status}`,
-        },
+        { error: `Invalid status transition from ${existingOrder.deliveryStatus} to ${status}` },
         { status: 409 }
       );
     }
 
-    /* ----------------------------------------
-       Prevent order hijacking
-    ---------------------------------------- */
-    if (
-      existingOrder.deliveryPartnerId &&
-      String(existingOrder.deliveryPartnerId) !== partnerId
-    ) {
-      return NextResponse.json(
-        { error: "Order is already assigned to another partner" },
-        { status: 403 }
-      );
+    // Prevent order hijacking — deliveryPartnerId is now ObjectId
+    if (existingOrder.deliveryPartnerId) {
+      const assignedPartnerStr = existingOrder.deliveryPartnerId.toString();
+      const currentPartnerStr = partnerId.toString();
+      if (assignedPartnerStr !== currentPartnerStr) {
+        return NextResponse.json(
+          { error: "Order is already assigned to another partner" },
+          { status: 403 }
+        );
+      }
     }
 
-    /* ----------------------------------------
-       Atomic update (race-condition safe)
-    ---------------------------------------- */
     const now = new Date();
+    const partnerObjId = mongoose.Types.ObjectId.isValid(partnerId)
+      ? new mongoose.Types.ObjectId(partnerId)
+      : partnerId;
 
-    const update: Partial<LeanOrder> & { deliveryStatus: DeliveryStatus } = {
-      deliveryStatus: status,
-    };
+    const update: any = { deliveryStatus: status };
 
-    if (note) {
-      (update as any).deliveryNotes = note;
-    }
+    if (note) update.deliveryNotes = note;
 
     if (status === "On the Way") {
-      update.deliveryPartnerId = partnerId;
+      update.deliveryPartnerId = partnerObjId;
       update.deliveryOnTheWayAt = now;
     }
 
@@ -131,7 +98,7 @@ export async function PATCH(req: Request) {
         deliveryStatus: existingOrder.deliveryStatus,
         $or: [
           { deliveryPartnerId: null },
-          { deliveryPartnerId: partnerId },
+          { deliveryPartnerId: partnerObjId },
         ],
       },
       { $set: update },
@@ -140,10 +107,7 @@ export async function PATCH(req: Request) {
 
     if (!updatedOrder) {
       return NextResponse.json(
-        {
-          error:
-            "Order update failed due to concurrent modification. Please refresh.",
-        },
+        { error: "Order update failed due to concurrent modification. Please refresh." },
         { status: 409 }
       );
     }
@@ -162,9 +126,6 @@ export async function PATCH(req: Request) {
     );
   } catch (err) {
     console.error("UPDATE ORDER STATUS ERROR:", err);
-    return NextResponse.json(
-      { error: "Failed to update order" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to update order" }, { status: 500 });
   }
 }

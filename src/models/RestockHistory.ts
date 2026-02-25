@@ -1,26 +1,25 @@
-// icecream-inventory\src\models\RestockHistory.ts
-
+// src/models/RestockHistory.ts
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IRestockHistory extends Document {
-  userId: string;
+  userId: mongoose.Types.ObjectId;
   createdAt: Date;
   items: {
-    productId: string;
+    productId: mongoose.Types.ObjectId;
     name: string;
     category?: string;
     unit: string;
-    quantity: number; 
+    quantity: number;
     note: string;
   }[];
 }
 
 const RestockHistorySchema: Schema = new Schema(
   {
-    userId: { type: String, required: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     items: [
       {
-        productId: { type: String, required: true },
+        productId: { type: Schema.Types.ObjectId, ref: "Product", required: true },
         name: { type: String, required: true },
         category: { type: String },
         unit: { type: String, required: true },

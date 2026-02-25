@@ -2,7 +2,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface ISellerDetails extends Document {
-  userId: string; // linked with User
+  userId: mongoose.Types.ObjectId; // linked with User
   sellerName: string;
   contact: string; // contact number
   gstNumber: string;
@@ -14,12 +14,12 @@ export interface ISellerDetails extends Document {
   signatureUrl: string; // compulsory
   signaturePublicId?: string;
   slogan: string;
-  compositionLine?: string; // ✅ NEW: User-configurable composition line
+  compositionLine?: string; // ✅ User-configurable composition line
 }
 
 const SellerDetailsSchema = new Schema<ISellerDetails>(
   {
-    userId: { type: String, required: true, unique: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
     sellerName: { type: String, required: true },
     contact: { type: String, required: true },
     gstNumber: { type: String, required: true },
@@ -31,9 +31,9 @@ const SellerDetailsSchema = new Schema<ISellerDetails>(
     signatureUrl: { type: String, required: true },
     signaturePublicId: { type: String },
     slogan: { type: String, required: true },
-    compositionLine: { 
-      type: String, 
-      default: "composition taxable person not eligible to collect taxes on supplies" // ✅ Default value
+    compositionLine: {
+      type: String,
+      default: "composition taxable person not eligible to collect taxes on supplies", // ✅ Default value
     },
   },
   { timestamps: true }

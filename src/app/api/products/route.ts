@@ -1,7 +1,7 @@
-
-// icecream-inventory\src\app\api\products\route.ts
+// src/app/api/products/route.ts
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
 
@@ -14,14 +14,19 @@ export async function POST(req: Request) {
     if (!userId) {
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
     }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     if (!name || unit === undefined || sellingPrice === undefined || quantity === undefined) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
-    
 
     await connectDB();
+
     const newProduct = await Product.create({
-      userId,
+      userId: new mongoose.Types.ObjectId(userId),
       name,
       unit,
       sellingPrice,
@@ -33,9 +38,9 @@ export async function POST(req: Request) {
       minStock: body.minStock,
       notes: body.notes,
     });
-    
+
     return NextResponse.json(newProduct, { status: 201 });
-  } catch  {
+  } catch {
     return NextResponse.json({ error: "Failed to add product" }, { status: 500 });
   }
 }
@@ -50,10 +55,17 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "User ID required" }, { status: 400 });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     await connectDB();
-    const products = await Product.find({ userId }).sort({ createdAt: -1 });
+    const products = await Product.find({
+      userId: new mongoose.Types.ObjectId(userId),
+    }).sort({ createdAt: -1 });
+
     return NextResponse.json(products);
-  } catch  {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
   }
 }
@@ -68,18 +80,23 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Product ID and User ID required" }, { status: 400 });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     await connectDB();
-    const updated = await Product.findOneAndUpdate({ _id: id, userId }, updates, {
-      new: true,
-      runValidators: true,
-    });
+    const updated = await Product.findOneAndUpdate(
+      { _id: id, userId: new mongoose.Types.ObjectId(userId) },
+      updates,
+      { new: true, runValidators: true }
+    );
 
     if (!updated) {
       return NextResponse.json({ error: "Product not found or not authorized" }, { status: 404 });
     }
 
     return NextResponse.json(updated);
-  } catch  {
+  } catch {
     return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
   }
 }
@@ -94,15 +111,22 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Product ID and User ID required" }, { status: 400 });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    }
+
     await connectDB();
-    const deleted = await Product.findOneAndDelete({ _id: id, userId });
+    const deleted = await Product.findOneAndDelete({
+      _id: id,
+      userId: new mongoose.Types.ObjectId(userId),
+    });
 
     if (!deleted) {
       return NextResponse.json({ error: "Product not found or not authorized" }, { status: 404 });
     }
 
     return NextResponse.json({ success: true, id });
-  } catch  {
+  } catch {
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
   }
 }

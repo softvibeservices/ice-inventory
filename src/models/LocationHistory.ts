@@ -1,13 +1,12 @@
 // src/models/LocationHistory.ts
-
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface ILocationHistory extends Document {
-  partnerId: string;
+  partnerId: mongoose.Types.ObjectId;
   latitude: number;
   longitude: number;
   accuracy?: number; // GPS accuracy in meters
-  speed?: number; // Speed in m/s
+  speed?: number;    // Speed in m/s
   batteryLevel?: number; // Battery percentage
   timestamp: Date;
   createdAt: Date;
@@ -15,41 +14,42 @@ export interface ILocationHistory extends Document {
 
 const LocationHistorySchema = new Schema<ILocationHistory>(
   {
-    partnerId: { 
-      type: String, 
-      required: true, 
-      index: true // ✅ Index for faster queries
-    },
-    latitude: { 
-      type: Number, 
-      required: true 
-    },
-    longitude: { 
-      type: Number, 
-      required: true 
-    },
-    accuracy: { 
-      type: Number, 
-      default: null 
-    },
-    speed: { 
-      type: Number, 
-      default: null 
-    },
-    batteryLevel: { 
-      type: Number, 
-      default: null 
-    },
-    timestamp: { 
-      type: Date, 
+    partnerId: {
+      type: Schema.Types.ObjectId,
+      ref: "DeliveryPartner",
       required: true,
-      index: true // ✅ Index for time-based queries
+      index: true, // ✅ Index for faster queries
+    },
+    latitude: {
+      type: Number,
+      required: true,
+    },
+    longitude: {
+      type: Number,
+      required: true,
+    },
+    accuracy: {
+      type: Number,
+      default: null,
+    },
+    speed: {
+      type: Number,
+      default: null,
+    },
+    batteryLevel: {
+      type: Number,
+      default: null,
+    },
+    timestamp: {
+      type: Date,
+      required: true,
+      index: true, // ✅ Index for time-based queries
     },
   },
-  { 
+  {
     timestamps: true,
     // ✅ Auto-delete old location data after 7 days
-    expireAfterSeconds: 7 * 24 * 60 * 60 // 7 days in seconds
+    expireAfterSeconds: 7 * 24 * 60 * 60, // 7 days in seconds
   }
 );
 

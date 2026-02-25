@@ -1,5 +1,6 @@
 // src/app/api/manager/change-password/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
@@ -17,28 +18,28 @@ export async function PUT(req: Request) {
       );
     }
 
+    if (!mongoose.Types.ObjectId.isValid(adminId)) {
+      return NextResponse.json({ error: "Invalid adminId" }, { status: 400 });
+    }
+
     const manager = await User.findOne({
       _id: managerId,
       role: "manager",
-      adminId
+      adminId: new mongoose.Types.ObjectId(adminId),
     });
 
     if (!manager) {
       return NextResponse.json({ error: "Manager not found" }, { status: 404 });
     }
 
-    // Don't allow password change for pending managers
     if (manager.isPending) {
-      return NextResponse.json({ 
-        error: "Cannot change password for pending manager" 
+      return NextResponse.json({
+        error: "Cannot change password for pending manager",
       }, { status: 400 });
     }
 
     if (!manager.otp || !manager.otpExpires) {
-      return NextResponse.json(
-        { error: "No OTP found, request OTP again" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "No OTP found, request OTP again" }, { status: 400 });
     }
 
     if (manager.otpExpires < new Date()) {
@@ -50,7 +51,6 @@ export async function PUT(req: Request) {
     }
 
     const hashed = await bcrypt.hash(password, 10);
-
     manager.password = hashed;
     manager.otp = null;
     manager.otpExpires = null;

@@ -1,7 +1,9 @@
+// ice-inventory\src\models\BankDetails.ts
+
 import mongoose, { Schema, Document, models } from "mongoose";
 
 export interface IBankDetails extends Document {
-  sellerId: mongoose.Types.ObjectId; // Reference to Seller
+  sellerId: mongoose.Types.ObjectId; // Reference to SellerDetails
   bankName: string;
   ifscCode: string;
   branchName: string;

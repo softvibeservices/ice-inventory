@@ -1,15 +1,9 @@
 // src/app/api/delivery/delete/route.ts
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 
-/**
- * DELETE /api/delivery/delete
- * body: { partnerId, userId?, adminId?, adminEmail? }
- *
- * Authorization same as update route.
- * Performs a deleteOne and returns partnerId on success.
- */
 export async function DELETE(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -32,10 +26,11 @@ export async function DELETE(req: Request) {
     const envAdminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL ? String(process.env.NEXT_PUBLIC_ADMIN_EMAIL).toLowerCase() : null;
     const envAdminId = process.env.NEXT_PUBLIC_ADMIN_ID ? String(process.env.NEXT_PUBLIC_ADMIN_ID) : null;
 
-    const createdByUserVal = partner.createdByUser ? String(partner.createdByUser) : null;
+    // createdByUser is now ObjectId — use toString() for comparison
+    const createdByUserVal = partner.createdByUser ? partner.createdByUser.toString() : null;
 
-    const okByOwner = userId && createdByUserVal && String(userId) === String(createdByUserVal);
-    const okByAdminIdMatchesOwner = adminId && createdByUserVal && String(adminId) === String(createdByUserVal);
+    const okByOwner = userId && createdByUserVal && String(userId) === createdByUserVal;
+    const okByAdminIdMatchesOwner = adminId && createdByUserVal && String(adminId) === createdByUserVal;
     const okByAdminEmail = providedAdminEmail && partnerAdminEmail && providedAdminEmail === partnerAdminEmail;
     const okByEnvAdminEmail = envAdminEmail && (providedAdminEmail === envAdminEmail || partnerAdminEmail === envAdminEmail);
     const okByEnvAdminId = envAdminId && adminId && String(adminId) === String(envAdminId);

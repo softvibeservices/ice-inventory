@@ -1,6 +1,7 @@
 // src/app/api/delivery/live-location/route.ts
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import LocationHistory from "@/models/LocationHistory";
@@ -9,7 +10,7 @@ interface LeanPartnerLocation {
   _id: string;
   name: string;
   phone?: string;
-  createdByUser?: string; // ✅ ADDED: For security check
+  createdByUser?: mongoose.Types.ObjectId | string;
   lastLocation?: {
     latitude: number;
     longitude: number;
@@ -17,69 +18,52 @@ interface LeanPartnerLocation {
   };
 }
 
-interface LocationPoint {
-  latitude: number;
-  longitude: number;
-  timestamp: Date;
-  accuracy?: number;
-  speed?: number;
-  batteryLevel?: number;
-}
-
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const partnerId = searchParams.get("partnerId");
-    const userId = searchParams.get("userId"); // ✅ ADDED: Manager's userId
-    const includeTrail = searchParams.get("includeTrail") === "true"; // Optional: Get location trail
-    const trailMinutes = parseInt(searchParams.get("trailMinutes") || "60"); // Default: Last 60 minutes
+    const userId = searchParams.get("userId");
+    const includeTrail = searchParams.get("includeTrail") === "true";
+    const trailMinutes = parseInt(searchParams.get("trailMinutes") || "60");
 
-    // ✅ Validation
     if (!partnerId) {
-      return NextResponse.json(
-        { error: "partnerId required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "partnerId required" }, { status: 400 });
     }
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "userId required for authorization" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "userId required for authorization" }, { status: 400 });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
     await connectDB();
 
-    // ✅ SECURITY: Fetch partner and verify ownership
     const partner = await DeliveryPartner.findById(partnerId)
       .select("name phone lastLocation createdByUser")
       .lean<LeanPartnerLocation | null>();
 
     if (!partner) {
-      return NextResponse.json(
-        { error: "Partner not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Partner not found" }, { status: 404 });
     }
 
-    // ✅ CRITICAL SECURITY CHECK: Verify the manager owns this partner
-    if (partner.createdByUser !== userId) {
+    // ✅ SECURITY: createdByUser is now ObjectId — compare via toString()
+    const createdByUserStr = partner.createdByUser
+      ? partner.createdByUser.toString()
+      : null;
+
+    if (createdByUserStr !== userId) {
       return NextResponse.json(
         { error: "Access denied: You do not have permission to view this partner's location" },
         { status: 403 }
       );
     }
 
-    // ✅ Check if location is available
     if (!partner.lastLocation) {
-      return NextResponse.json(
-        { error: "Location not available yet" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Location not available yet" }, { status: 404 });
     }
 
-    // ✅ Prepare response data
     const responseData: any = {
       partnerId,
       name: partner.name,
@@ -89,16 +73,15 @@ export async function GET(req: Request) {
       updatedAt: partner.lastLocation.updatedAt,
     };
 
-    // ✅ OPTIONAL: Include location trail/history for drawing path on map
     if (includeTrail) {
       const trailStartTime = new Date(Date.now() - trailMinutes * 60 * 1000);
-      
+
       const locationTrail = await LocationHistory.find({
-        partnerId: String(partnerId),
+        partnerId: new mongoose.Types.ObjectId(partnerId),
         timestamp: { $gte: trailStartTime },
       })
-        .sort({ timestamp: 1 }) // Oldest first
-        .limit(500) // Max 500 points to prevent performance issues
+        .sort({ timestamp: 1 })
+        .limit(500)
         .select("latitude longitude timestamp accuracy speed batteryLevel")
         .lean();
 
@@ -117,9 +100,6 @@ export async function GET(req: Request) {
     return NextResponse.json(responseData, { status: 200 });
   } catch (err) {
     console.error("GET /live-location error:", err);
-    return NextResponse.json(
-      { error: "Failed to retrieve location" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to retrieve location" }, { status: 500 });
   }
 }

@@ -6,7 +6,7 @@ import mongoose, { Schema, Document, models } from "mongoose";
 ======================= */
 
 export interface IOrderItem {
-  productId?: string;
+  productId?: mongoose.Types.ObjectId;
   productName: string;
   quantity: number;
   unit?: string;
@@ -23,12 +23,12 @@ export interface ISettlementHistory {
 }
 
 export interface IOrder extends Document {
-  userId: string;
+  userId: mongoose.Types.ObjectId;
   orderId: string;
   serialNumber?: string;
   shopName?: string;
 
-  customerId?: string;
+  customerId?: mongoose.Types.ObjectId;
   customerName?: string;
   customerAddress?: string;
   customerContact?: string;
@@ -51,7 +51,7 @@ export interface IOrder extends Document {
   discardedAt?: Date | null;
 
   // Delivery
-  deliveryPartnerId?: string | null;
+  deliveryPartnerId?: mongoose.Types.ObjectId | null;
   deliveryStatus?: "Pending" | "On the Way" | "Delivered";
   deliveryAssignedAt?: Date | null;
   deliveryOnTheWayAt?: Date | null;
@@ -66,10 +66,9 @@ export interface IOrder extends Document {
    Sub Schemas
 ======================= */
 
-// ✅ NO GENERICS HERE (fixes TS2590)
 const OrderItemSchema = new Schema(
   {
-    productId: { type: String },
+    productId: { type: Schema.Types.ObjectId, ref: "Product" },
     productName: { type: String, required: true },
     quantity: { type: Number, required: true },
     unit: { type: String },
@@ -79,7 +78,6 @@ const OrderItemSchema = new Schema(
   { _id: false }
 );
 
-// ✅ NO GENERICS HERE EITHER
 const SettlementSchema = new Schema(
   {
     action: { type: String, required: true },
@@ -97,13 +95,13 @@ const SettlementSchema = new Schema(
 
 const OrderSchema = new Schema<IOrder>(
   {
-    userId: { type: String, required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     orderId: { type: String, required: true },
     serialNumber: { type: String },
 
     shopName: { type: String },
 
-    customerId: { type: String },
+    customerId: { type: Schema.Types.ObjectId, ref: "Customer" },
     customerName: { type: String },
     customerAddress: { type: String },
     customerContact: { type: String },
@@ -128,7 +126,7 @@ const OrderSchema = new Schema<IOrder>(
     discardedAt: { type: Date, default: null, index: true },
 
     // Delivery fields
-    deliveryPartnerId: { type: String, default: null, index: true },
+    deliveryPartnerId: { type: Schema.Types.ObjectId, ref: "DeliveryPartner", default: null, index: true },
     deliveryStatus: {
       type: String,
       enum: ["Pending", "On the Way", "Delivered"],
@@ -147,7 +145,6 @@ const OrderSchema = new Schema<IOrder>(
    Model Export
 ======================= */
 
-const Order =
-  models.Order || mongoose.model<IOrder>("Order", OrderSchema);
+const Order = models.Order || mongoose.model<IOrder>("Order", OrderSchema);
 
 export default Order;

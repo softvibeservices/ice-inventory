@@ -1,29 +1,28 @@
 // src/models/StickyNote.ts
-
 import mongoose, { Schema, Document, models, Model } from "mongoose";
 
 export interface IStickyNoteItem {
-  productId?: string;
+  productId?: mongoose.Types.ObjectId;
   productName: string;
   quantity: number;
   unit?: string;
 }
 
 export interface IStickyNote extends Document {
-  userId: string;
-  customerId?: string;
+  userId: mongoose.Types.ObjectId;
+  customerId?: mongoose.Types.ObjectId;
   customerName: string;
   shopName: string;
   items: IStickyNoteItem[];
   totalQuantity: number;
-  deliveryPartnerId?: string;
+  deliveryPartnerId?: mongoose.Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 const StickyNoteItemSchema = new Schema(
   {
-    productId: { type: String },
+    productId: { type: Schema.Types.ObjectId, ref: "Product" },
     productName: { type: String, required: true, trim: true },
     quantity: { type: Number, required: true, min: 0 },
     unit: { type: String, trim: true },
@@ -33,9 +32,9 @@ const StickyNoteItemSchema = new Schema(
 
 const StickyNoteSchema = new Schema(
   {
-    userId: { type: String, required: true },
-    deliveryPartnerId: { type: String, index: true },
-    customerId: { type: String },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    deliveryPartnerId: { type: Schema.Types.ObjectId, ref: "DeliveryPartner", index: true },
+    customerId: { type: Schema.Types.ObjectId, ref: "Customer" },
     customerName: { type: String, required: true, trim: true },
     shopName: { type: String, required: true, trim: true },
     items: { type: [StickyNoteItemSchema], default: [] },

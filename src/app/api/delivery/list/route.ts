@@ -2,9 +2,9 @@
 // ✅ FIXED VERSION - Admin email comes from logged-in user, NOT from .env
 
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
-import mongoose from "mongoose";
 import User from "@/models/User";
 
 function escapeRegex(s: string) {
@@ -17,48 +17,33 @@ export async function GET(req: Request) {
     const userId = searchParams.get("userId");
     const status = searchParams.get("status") ?? undefined;
 
-    // ✅ SECURITY: userId is REQUIRED
     if (!userId) {
-      return NextResponse.json(
-        { error: "userId is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
     await connectDB();
 
-    // ✅ SECURITY: Get the actual user's email and role
     const user = await User.findById(userId).select("email role");
     if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // ✅ SECURITY: Block managers from accessing delivery partners
     if (user.role === "manager") {
-      return NextResponse.json(
-        { error: "Access denied: Managers not allowed" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Access denied: Managers not allowed" }, { status: 403 });
     }
 
-    // ✅ CORRECT: Use the logged-in user's email as adminEmail
     const adminEmail = user.email ? String(user.email).toLowerCase() : null;
+    const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // ✅ BUILD FILTER: Find delivery partners belonging to THIS admin
-    const filter: any = {};
-
-    // Filter by userId (primary method)
+    // ✅ BUILD FILTER: createdByUser is now ObjectId
     const ors: any[] = [
-      { createdByUser: userId },
-      { createdByUser: String(userId) },
+      { createdByUser: userObjectId },
+      { createdByUser: userId }, // fallback string match for legacy data
     ];
-
-    if (mongoose.Types.ObjectId.isValid(userId)) {
-      ors.push({ createdByUser: new mongoose.Types.ObjectId(userId) });
-    }
 
     // Also support adminEmail for backwards compatibility
     if (adminEmail) {
@@ -66,26 +51,23 @@ export async function GET(req: Request) {
       ors.push({ adminEmail: { $regex: new RegExp(`^${safe}$`, "i") } });
     }
 
-    filter.$or = ors;
+    const filter: any = { $or: ors };
 
-    // Filter by status if provided
     if (status) {
       filter.status = { $regex: new RegExp(`^${String(status)}$`, "i") };
     }
 
-    // ✅ QUERY: Get delivery partners belonging to this admin
     const raw = await DeliveryPartner.find(filter)
       .sort({ createdAt: -1 })
       .lean();
 
-    // ✅ NORMALIZE: Format the response
     const normalized = (Array.isArray(raw) ? raw : []).map((doc: any) => {
       const email = doc.email
         ? String(doc.email).toLowerCase()
         : doc.contactEmail
         ? String(doc.contactEmail).toLowerCase()
         : null;
-      
+
       let admin = doc.adminEmail ?? doc.ownerEmail ?? null;
       admin = admin ? String(admin).toLowerCase() : null;
 
@@ -99,11 +81,7 @@ export async function GET(req: Request) {
 
       const s = doc.status ? String(doc.status).toLowerCase() : "pending";
       const statusNorm =
-        s === "approved"
-          ? "approved"
-          : s === "rejected"
-          ? "rejected"
-          : "pending";
+        s === "approved" ? "approved" : s === "rejected" ? "rejected" : "pending";
 
       return {
         _id: doc._id ? String(doc._id) : doc.id ? String(doc.id) : null,
@@ -114,12 +92,8 @@ export async function GET(req: Request) {
         status: statusNorm,
         createdByUser: createdByUserVal,
         adminEmail: admin,
-        createdAt: doc.createdAt
-          ? new Date(doc.createdAt).toISOString()
-          : null,
-        notifiedAt: doc.notifiedAt
-          ? new Date(doc.notifiedAt).toISOString()
-          : null,
+        createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : null,
+        notifiedAt: doc.notifiedAt ? new Date(doc.notifiedAt).toISOString() : null,
         metadata: doc.metadata ?? {},
       };
     });
@@ -128,10 +102,7 @@ export async function GET(req: Request) {
   } catch (err: any) {
     console.error("GET /api/delivery/list error:", err);
     return NextResponse.json(
-      {
-        error: "Failed to list partners",
-        details: err?.message ?? String(err),
-      },
+      { error: "Failed to list partners", details: err?.message ?? String(err) },
       { status: 500 }
     );
   }

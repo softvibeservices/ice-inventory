@@ -1,9 +1,8 @@
-// icecream-inventory/src/models/UserSettings.ts
-
-import { Schema, model, models, Document } from "mongoose";
+// src/models/UserSettings.ts
+import mongoose, { Schema, model, models, Document } from "mongoose";
 
 export interface IUserSettings extends Document {
-  userId: string;
+  userId: mongoose.Types.ObjectId;
   categories: string[];
   units: string[];
   createdAt?: Date;
@@ -12,14 +11,14 @@ export interface IUserSettings extends Document {
 
 const UserSettingsSchema = new Schema<IUserSettings>(
   {
-    userId: { type: String, required: true, unique: true },
-    categories: { 
-      type: [String], 
-      default: ["Cups", "Family Pack", "Cone", "Candybar", "Tub"] 
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
+    categories: {
+      type: [String],
+      default: ["Cups", "Family Pack", "Cone", "Candybar", "Tub"],
     },
-    units: { 
-      type: [String], 
-      default: ["ml", "L", "gm", "kg", "piece", "box"] 
+    units: {
+      type: [String],
+      default: ["ml", "L", "gm", "kg", "piece", "box"],
     },
   },
   { timestamps: true }
