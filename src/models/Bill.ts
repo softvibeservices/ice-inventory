@@ -31,7 +31,7 @@ export interface IBill extends Document {
   userId: mongoose.Types.ObjectId;
   orderId: string; 
   serialNumber: string;
-  billDate: string;
+  billDate: Date;
   billingCustomer: IBillCustomer;
   shippingCustomer: IBillCustomer;
   sameAsBilling: boolean;
@@ -82,7 +82,7 @@ const BillSchema = new Schema<IBill>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     orderId: { type: String, required: true, unique: true, index: true },
     serialNumber: { type: String, required: true, index: true },
-    billDate: { type: String, required: true },
+    billDate: { type: Date, required: true  , index: true },
     billingCustomer: { type: BillCustomerSchema, required: true },
     shippingCustomer: { type: BillCustomerSchema, required: true },
     sameAsBilling: { type: Boolean, default: false },

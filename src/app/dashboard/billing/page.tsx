@@ -313,7 +313,15 @@ export default function BillingPage() {
 
         // Populate form with bill data
         setSerialNo(billData.serialNumber);
-        setDate(billData.billDate);
+       
+// billDate now comes back as ISO string e.g. "2025-01-15T00:00:00.000Z"
+// Convert back to DD-MM-YYYY for the form input
+const isoDate = new Date(billData.billDate);
+const dd = String(isoDate.getUTCDate()).padStart(2, "0");
+const mm = String(isoDate.getUTCMonth() + 1).padStart(2, "0");
+const yyyy = isoDate.getUTCFullYear();
+setDate(`${dd}-${mm}-${yyyy}`);
+
         setDiscountPercent(billData.discountPercentage || 0);
         setRemarks(billData.remarks || "");
         setSameAsBilling(billData.sameAsBilling);

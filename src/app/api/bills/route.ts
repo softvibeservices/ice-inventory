@@ -68,9 +68,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
-    if (!billDate || typeof billDate !== "string") {
+    if (!billDate) {
       return NextResponse.json(
-        { error: "billDate is required (DD-MM-YYYY)." },
+        { error: "billDate is required." },
+        { status: 400 }
+      );
+    }
+    const [dd, mm, yyyy] = String(billDate).split("-");
+    const parsedBillDate = new Date(`${yyyy}-${mm}-${dd}T00:00:00.000Z`);
+    if (isNaN(parsedBillDate.getTime())) {
+      return NextResponse.json(
+        { error: "billDate is invalid. Expected DD-MM-YYYY." },
         { status: 400 }
       );
     }
@@ -157,7 +165,7 @@ export async function POST(req: Request) {
       userId: userObjectId,
       orderId,
       serialNumber,
-      billDate,
+      billDate: parsedBillDate,
       billingCustomer: {
         customerId: billingCustomerIdObj,
         name: billingCustomer.name,
@@ -362,8 +370,13 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Associated order not found." }, { status: 404 });
     }
 
-    if (!billDate || typeof billDate !== "string") {
-      return NextResponse.json({ error: "billDate is required (DD-MM-YYYY)." }, { status: 400 });
+    if (!billDate) {
+      return NextResponse.json({ error: "billDate is required." }, { status: 400 });
+    }
+    const [dd2, mm2, yyyy2] = String(billDate).split("-");
+    const parsedBillDate = new Date(`${yyyy2}-${mm2}-${dd2}T00:00:00.000Z`);
+    if (isNaN(parsedBillDate.getTime())) {
+      return NextResponse.json({ error: "billDate is invalid. Expected DD-MM-YYYY." }, { status: 400 });
     }
 
     if (!billingCustomer || !billingCustomer.name?.trim() || !billingCustomer.address?.trim()) {
@@ -437,7 +450,7 @@ export async function PUT(req: Request) {
     }));
 
     existingBill.serialNumber = serialNumber;
-    existingBill.billDate = billDate;
+    existingBill.billDate = parsedBillDate;
     existingBill.billingCustomer = {
       customerId: newBillingCustomerIdObj,
       name: billingCustomer.name,
