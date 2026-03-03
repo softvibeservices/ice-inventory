@@ -141,6 +141,15 @@ const OrderSchema = new Schema<IOrder>(
   { timestamps: true }
 );
 
+// ✅ Compound indexes for Order
+OrderSchema.index({ userId: 1, createdAt: -1 });
+OrderSchema.index({ userId: 1, status: 1 });
+OrderSchema.index({ userId: 1, orderDate: -1 });
+OrderSchema.index({ deliveryPartnerId: 1, deliveryStatus: 1 });
+OrderSchema.index({ userId: 1, customerId: 1 });
+OrderSchema.index({ userId: 1, serialNumber: 1 }, { unique: true });
+
+
 /* =======================
    Model Export
 ======================= */

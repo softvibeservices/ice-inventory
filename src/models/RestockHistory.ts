@@ -31,5 +31,8 @@ const RestockHistorySchema: Schema = new Schema(
   { timestamps: { createdAt: true, updatedAt: false } }
 );
 
+// ✅ Compound index for RestockHistory
+RestockHistorySchema.index({ userId: 1, createdAt: -1 });
+
 export default mongoose.models.RestockHistory ||
   mongoose.model<IRestockHistory>("RestockHistory", RestockHistorySchema);

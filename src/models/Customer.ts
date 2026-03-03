@@ -46,4 +46,10 @@ const CustomerSchema = new Schema<ICustomer>(
   { timestamps: true }
 );
 
+// ✅ Compound indexes for Customer
+CustomerSchema.index({ userId: 1, shopName: 1 });
+CustomerSchema.index({ userId: 1, area: 1 });
+CustomerSchema.index({ userId: 1, 'contacts.0': 1 });
+CustomerSchema.index({ userId: 1, totalSales: -1 });
+
 export default models.Customer || mongoose.model<ICustomer>("Customer", CustomerSchema);

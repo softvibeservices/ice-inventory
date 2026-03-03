@@ -18,7 +18,7 @@ const LocationHistorySchema = new Schema<ILocationHistory>(
       type: Schema.Types.ObjectId,
       ref: "DeliveryPartner",
       required: true,
-      index: true, // ✅ Index for faster queries
+      index: true,
     },
     latitude: {
       type: Number,
@@ -43,18 +43,24 @@ const LocationHistorySchema = new Schema<ILocationHistory>(
     timestamp: {
       type: Date,
       required: true,
-      index: true, // ✅ Index for time-based queries
+      index: true,
     },
   },
   {
     timestamps: true,
-    // ✅ Auto-delete old location data after 7 days
-    expireAfterSeconds: 7 * 24 * 60 * 60, // 7 days in seconds
+    // ❌ REMOVED: expireAfterSeconds here does nothing in Mongoose
+    // TTL must be set on a field-level index, not schema options
   }
 );
 
-// ✅ Compound index for efficient queries (partnerId + timestamp)
+// ✅ FIXED: TTL index on createdAt field (correct Mongoose placement)
+LocationHistorySchema.index({ createdAt: 1 }, { expireAfterSeconds: 604800 });
+
+// ✅ KEPT: Existing compound index
 LocationHistorySchema.index({ partnerId: 1, timestamp: -1 });
+
+// ✅ NEW: Compound index for userId + deliveryPartnerId queries
+LocationHistorySchema.index({ userId: 1, deliveryPartnerId: 1, createdAt: -1 });
 
 export default mongoose.models.LocationHistory ||
   mongoose.model<ILocationHistory>("LocationHistory", LocationHistorySchema);

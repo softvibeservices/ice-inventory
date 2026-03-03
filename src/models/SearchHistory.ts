@@ -10,5 +10,8 @@ const SearchHistorySchema = new Schema(
   { timestamps: true }
 );
 
+// ✅ Compound index for efficient partner history queries
+SearchHistorySchema.index({ partnerId: 1, createdAt: -1 });
+
 export default mongoose.models.SearchHistory ||
   mongoose.model("SearchHistory", SearchHistorySchema);

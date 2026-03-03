@@ -59,5 +59,9 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
   { timestamps: true }
 );
 
+// ✅ Compound indexes for DeliveryPartner
+DeliveryPartnerSchema.index({ adminId: 1, isActive: 1 });
+DeliveryPartnerSchema.index({ createdByUser: 1, isActive: 1 });
+
 export default mongoose.models.DeliveryPartner ||
   mongoose.model<IDeliveryPartner>("DeliveryPartner", DeliveryPartnerSchema);

@@ -38,6 +38,11 @@ const ProductSchema = new Schema<IProduct>(
   { timestamps: true }
 );
 
+// ✅ Compound indexes for Product
+ProductSchema.index({ userId: 1, name: 1 });
+ProductSchema.index({ userId: 1, category: 1 });
+ProductSchema.index({ userId: 1, quantity: 1 });
+
 const Product = models.Product || model<IProduct>("Product", ProductSchema);
 
 export default Product;

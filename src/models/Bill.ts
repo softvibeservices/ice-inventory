@@ -103,6 +103,12 @@ const BillSchema = new Schema<IBill>(
   { timestamps: true }
 );
 
+// ✅ Compound indexes for Bill
+BillSchema.index({ userId: 1, billDate: -1 });
+BillSchema.index({ userId: 1, serialNumber: 1 }, { unique: true });
+BillSchema.index({ userId: 1, createdAt: -1 });
+BillSchema.index({ userId: 1, 'billingCustomer.customerId': 1 });
+
 /* =======================
    Model export
 ======================= */

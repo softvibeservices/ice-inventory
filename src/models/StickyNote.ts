@@ -47,4 +47,7 @@ const StickyNote: Model<IStickyNote> =
   (models.StickyNote as Model<IStickyNote>) ||
   mongoose.model<IStickyNote>("StickyNote", StickyNoteSchema);
 
+  // ✅ Compound index for StickyNote
+StickyNoteSchema.index({ userId: 1, deliveryPartnerId: 1 });
+
 export default StickyNote;
