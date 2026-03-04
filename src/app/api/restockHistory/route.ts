@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import RestockHistory from "@/models/RestockHistory";
+import "@/models/Product"; // ensure Product model is registered for populate
 
 export async function POST(req: Request) {
   try {
@@ -18,13 +19,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
-    // Map items to use ObjectId for productId
+    // Only store productId, quantity, note — no redundant product fields
     const items = Array.isArray(body.items)
       ? body.items.map((it: any) => ({
-          ...it,
           productId: it.productId && mongoose.Types.ObjectId.isValid(it.productId)
             ? new mongoose.Types.ObjectId(it.productId)
             : it.productId,
+          quantity: it.quantity,
+          note: it.note ?? "Restocking",
         }))
       : [];
 
@@ -54,9 +56,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
+    // Populate productId so frontend gets name, category, unit from Product
     const history = await RestockHistory.find({
       userId: new mongoose.Types.ObjectId(userId),
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .populate("items.productId", "name category unit");
 
     return NextResponse.json(history, { status: 200 });
   } catch (err) {

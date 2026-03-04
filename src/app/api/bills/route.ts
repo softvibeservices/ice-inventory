@@ -1,5 +1,4 @@
-// ✅ FINAL FIX: Backend returns the NEXT serial number after saving
-// Location: src/app/api/bills/route.ts
+// src/app/api/bills/route.ts
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
@@ -134,7 +133,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── 2. COMPUTE TOTALS SERVER-SIDE ─────────────────────────────
+    // ── COMPUTE TOTALS SERVER-SIDE ─────────────────────────────────
     let serverSubtotal = 0;
     for (const it of items) {
       if (!it.free) {
@@ -150,7 +149,6 @@ export async function POST(req: Request) {
     const billingCustomerIdObj = toObjectId(billingCustomer.customerId);
     const shippingCustomerIdObj = toObjectId(shippingCustomer.customerId);
 
-    // ── 3. CREATE THE Bill DOCUMENT ─────────────────────────────────
     const billItems = items.map((it: any) => ({
       productId: toObjectId(it.productId),
       productName: it.productName,
@@ -161,35 +159,6 @@ export async function POST(req: Request) {
       free: !!it.free,
     }));
 
-    const bill = await Bill.create({
-      userId: userObjectId,
-      orderId,
-      serialNumber,
-      billDate: parsedBillDate,
-      billingCustomer: {
-        customerId: billingCustomerIdObj,
-        name: billingCustomer.name,
-        shopName: billingCustomer.shopName || billingCustomer.name,
-        address: billingCustomer.address,
-        contact: billingCustomer.contact || "",
-      },
-      shippingCustomer: {
-        customerId: shippingCustomerIdObj,
-        name: shippingCustomer.name,
-        shopName: shippingCustomer.shopName || shippingCustomer.name,
-        address: shippingCustomer.address,
-        contact: shippingCustomer.contact || "",
-      },
-      sameAsBilling: !!sameAsBilling,
-      items: billItems,
-      subtotal: serverSubtotal,
-      discountPercentage: serverDiscountPct,
-      discountAmount: serverDiscountAmt,
-      grandTotal: serverGrandTotal,
-      remarks: remarks || "",
-    });
-
-    // ── 4. CREATE THE Order DOCUMENT ─────────────────────────────────
     const paidItemsForOrder = items
       .filter((it: any) => !it.free)
       .map((it: any) => ({
@@ -218,54 +187,115 @@ export async function POST(req: Request) {
       quantitySummary[key] = (quantitySummary[key] || 0) + Number(it.quantity || 0);
     }
 
-    const order = await Order.create({
-      userId: userObjectId,
-      orderId,
-      serialNumber,
-      shopName: billingCustomer.shopName || billingCustomer.name || "Unknown",
-      customerId: billingCustomerIdObj,
-      customerName: billingCustomer.name,
-      customerAddress: billingCustomer.address,
-      customerContact: billingCustomer.contact || "",
-      items: paidItemsForOrder,
-      freeItems: freeItemsForOrder,
-      quantitySummary,
-      subtotal: serverSubtotal,
-      discountPercentage: serverDiscountPct,
-      total: serverGrandTotal,
-      remarks: remarks || "",
-      status: "Unsettled",
-      settlementHistory: [{ action: "Created", at: new Date() }],
-    });
+    // ── START TRANSACTION ─────────────────────────────────────────
+    // All operations below succeed together or all roll back together.
+    // customer.debit and customer.totalSales only change if EVERYTHING succeeds.
+    const session = await mongoose.startSession();
+    let bill: any;
+    let order: any;
 
-    // ── 5. DECREMENT STOCK ─────────────────────────────────────────
-    const stockPromises = items
-      .filter((it: any) => it.productId && mongoose.Types.ObjectId.isValid(it.productId) && it.quantity > 0)
-      .map((it: any) =>
-        Product.findOneAndUpdate(
-          { _id: new mongoose.Types.ObjectId(it.productId), userId: userObjectId },
-          { $inc: { quantity: -Math.abs(Number(it.quantity)) } },
-          { new: true }
-        )
-      );
+    try {
+      await session.withTransaction(async () => {
+        // 1. Create Bill
+        const [createdBill] = await Bill.create(
+          [
+            {
+              userId: userObjectId,
+              orderId,
+              serialNumber,
+              billDate: parsedBillDate,
+              billingCustomer: {
+                customerId: billingCustomerIdObj,
+                name: billingCustomer.name,
+                shopName: billingCustomer.shopName || billingCustomer.name,
+                address: billingCustomer.address,
+                contact: billingCustomer.contact || "",
+              },
+              shippingCustomer: {
+                customerId: shippingCustomerIdObj,
+                name: shippingCustomer.name,
+                shopName: shippingCustomer.shopName || shippingCustomer.name,
+                address: shippingCustomer.address,
+                contact: shippingCustomer.contact || "",
+              },
+              sameAsBilling: !!sameAsBilling,
+              items: billItems,
+              subtotal: serverSubtotal,
+              discountPercentage: serverDiscountPct,
+              discountAmount: serverDiscountAmt,
+              grandTotal: serverGrandTotal,
+              remarks: remarks || "",
+            },
+          ],
+          { session }
+        );
+        bill = createdBill;
 
-    if (stockPromises.length) {
-      await Promise.all(stockPromises);
-    }
+        // 2. Create Order
+        const [createdOrder] = await Order.create(
+          [
+            {
+              userId: userObjectId,
+              orderId,
+              serialNumber,
+              shopName: billingCustomer.shopName || billingCustomer.name || "Unknown",
+              customerId: billingCustomerIdObj,
+              customerName: billingCustomer.name,
+              customerAddress: billingCustomer.address,
+              customerContact: billingCustomer.contact || "",
+              items: paidItemsForOrder,
+              freeItems: freeItemsForOrder,
+              quantitySummary,
+              subtotal: serverSubtotal,
+              discountPercentage: serverDiscountPct,
+              total: serverGrandTotal,
+              remarks: remarks || "",
+              status: "Unsettled",
+              settlementHistory: [{ action: "Created", at: new Date() }],
+            },
+          ],
+          { session }
+        );
+        order = createdOrder;
 
-    // ── 6. INCREMENT customer debit ─────────────────────────────────
-    if (billingCustomerIdObj && serverGrandTotal > 0) {
-      await Customer.findByIdAndUpdate(billingCustomerIdObj, {
-        $inc: { debit: serverGrandTotal, totalSales: serverGrandTotal },
+        // 3. Decrement stock
+        const stockUpdates = items
+          .filter(
+            (it: any) =>
+              it.productId &&
+              mongoose.Types.ObjectId.isValid(it.productId) &&
+              it.quantity > 0
+          )
+          .map((it: any) =>
+            Product.findOneAndUpdate(
+              { _id: new mongoose.Types.ObjectId(it.productId), userId: userObjectId },
+              { $inc: { quantity: -Math.abs(Number(it.quantity)) } },
+              { new: true, session }
+            )
+          );
+        if (stockUpdates.length) await Promise.all(stockUpdates);
+
+        // 4. Update customer debit & totalSales
+        //    ✅ This only runs if Bill + Order + Stock all succeeded above.
+        //    If this step fails, the whole transaction rolls back.
+        if (billingCustomerIdObj && serverGrandTotal > 0) {
+          await Customer.findByIdAndUpdate(
+            billingCustomerIdObj,
+            { $inc: { debit: serverGrandTotal, totalSales: serverGrandTotal } },
+            { session }
+          );
+        }
+
+        // 5. Update user serial number
+        await User.findByIdAndUpdate(
+          userObjectId,
+          { lastSerialNumber: serialNumber },
+          { new: true, session }
+        );
       });
+    } finally {
+      session.endSession();
     }
-
-    // ── 7. UPDATE USER & CALCULATE NEXT SERIAL ─────────────────
-    await User.findByIdAndUpdate(
-      userObjectId,
-      { lastSerialNumber: serialNumber },
-      { new: true }
-    );
 
     const nextSerialNumber = calculateNextSerial(serialNumber);
 
@@ -360,6 +390,7 @@ export async function PUT(req: Request) {
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
+    // Pre-fetch for validation before starting transaction
     const existingBill = await Bill.findOne({ _id: billId, userId: userObjectId });
     if (!existingBill) {
       return NextResponse.json({ error: "Bill not found." }, { status: 404 });
@@ -397,40 +428,13 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "At least one bill item is required." }, { status: 400 });
     }
 
-    // ── 3. REVERT OLD STOCK CHANGES ─────────────────────────────────
-    const oldItems = existingBill.items || [];
-    const stockRevertPromises = oldItems
-      .filter((it: any) => it.productId && it.quantity > 0)
-      .map((it: any) =>
-        Product.findOneAndUpdate(
-          { _id: it.productId, userId: userObjectId },
-          { $inc: { quantity: Math.abs(Number(it.quantity)) } },
-          { new: true }
-        )
-      );
-
-    if (stockRevertPromises.length) {
-      await Promise.all(stockRevertPromises);
-    }
-
-    // ── 4. REVERT OLD CUSTOMER DEBIT ────────────────────────────────
-    const oldCustomerId = existingBill.billingCustomer?.customerId;
-    const oldTotal = existingBill.grandTotal || 0;
-
-    if (oldCustomerId && oldTotal > 0) {
-      await Customer.findByIdAndUpdate(oldCustomerId, {
-        $inc: { debit: -oldTotal, totalSales: -oldTotal },
-      });
-    }
-
-    // ── 5. COMPUTE NEW TOTALS SERVER-SIDE ──────────────────────────
+    // Compute new totals
     let serverSubtotal = 0;
     for (const it of items) {
       if (!it.free) {
         serverSubtotal += Number(it.price || 0) * Number(it.quantity || 0);
       }
     }
-
     const serverDiscountPct = Math.max(0, Math.min(100, Number(discountPercentage || 0)));
     const serverDiscountAmt = (serverSubtotal * serverDiscountPct) / 100;
     const serverGrandTotal = serverSubtotal - serverDiscountAmt;
@@ -438,7 +442,6 @@ export async function PUT(req: Request) {
     const newBillingCustomerIdObj = toObjectId(billingCustomer.customerId);
     const newShippingCustomerIdObj = toObjectId(shippingCustomer.customerId);
 
-    // ── 6. UPDATE BILL DOCUMENT ─────────────────────────────────────
     const billItems = items.map((it: any) => ({
       productId: toObjectId(it.productId),
       productName: it.productName,
@@ -449,33 +452,6 @@ export async function PUT(req: Request) {
       free: !!it.free,
     }));
 
-    existingBill.serialNumber = serialNumber;
-    existingBill.billDate = parsedBillDate;
-    existingBill.billingCustomer = {
-      customerId: newBillingCustomerIdObj,
-      name: billingCustomer.name,
-      shopName: billingCustomer.shopName || billingCustomer.name,
-      address: billingCustomer.address,
-      contact: billingCustomer.contact || "",
-    };
-    existingBill.shippingCustomer = {
-      customerId: newShippingCustomerIdObj,
-      name: shippingCustomer.name,
-      shopName: shippingCustomer.shopName || shippingCustomer.name,
-      address: shippingCustomer.address,
-      contact: shippingCustomer.contact || "",
-    };
-    existingBill.sameAsBilling = !!sameAsBilling;
-    existingBill.items = billItems;
-    existingBill.subtotal = serverSubtotal;
-    existingBill.discountPercentage = serverDiscountPct;
-    existingBill.discountAmount = serverDiscountAmt;
-    existingBill.grandTotal = serverGrandTotal;
-    existingBill.remarks = remarks || "";
-
-    await existingBill.save();
-
-    // ── 7. UPDATE ORDER DOCUMENT ────────────────────────────────────
     const paidItemsForOrder = items
       .filter((it: any) => !it.free)
       .map((it: any) => ({
@@ -504,42 +480,111 @@ export async function PUT(req: Request) {
       quantitySummary[key] = (quantitySummary[key] || 0) + Number(it.quantity || 0);
     }
 
-    existingOrder.serialNumber = serialNumber;
-    existingOrder.shopName = billingCustomer.shopName || billingCustomer.name || "Unknown";
-    existingOrder.customerId = newBillingCustomerIdObj;
-    existingOrder.customerName = billingCustomer.name;
-    existingOrder.customerAddress = billingCustomer.address;
-    existingOrder.customerContact = billingCustomer.contact || "";
-    existingOrder.items = paidItemsForOrder;
-    existingOrder.freeItems = freeItemsForOrder;
-    existingOrder.quantitySummary = quantitySummary;
-    existingOrder.subtotal = serverSubtotal;
-    existingOrder.discountPercentage = serverDiscountPct;
-    existingOrder.total = serverGrandTotal;
-    existingOrder.remarks = remarks || "";
+    // Snapshot old values for reverting inside transaction
+    const oldItems = existingBill.items || [];
+    const oldCustomerId = existingBill.billingCustomer?.customerId;
+    const oldTotal = existingBill.grandTotal || 0;
 
-    await existingOrder.save();
+    // ── START TRANSACTION ─────────────────────────────────────────
+    // Revert old + apply new — all atomically.
+    // customer.debit/totalSales only change if everything succeeds.
+    const session = await mongoose.startSession();
 
-    // ── 8. APPLY NEW STOCK CHANGES ──────────────────────────────────
-    const stockPromises = items
-      .filter((it: any) => it.productId && mongoose.Types.ObjectId.isValid(it.productId) && it.quantity > 0)
-      .map((it: any) =>
-        Product.findOneAndUpdate(
-          { _id: new mongoose.Types.ObjectId(it.productId), userId: userObjectId },
-          { $inc: { quantity: -Math.abs(Number(it.quantity)) } },
-          { new: true }
-        )
-      );
+    try {
+      await session.withTransaction(async () => {
+        // 1. Revert old stock
+        const stockRevertPromises = oldItems
+          .filter((it: any) => it.productId && it.quantity > 0)
+          .map((it: any) =>
+            Product.findOneAndUpdate(
+              { _id: it.productId, userId: userObjectId },
+              { $inc: { quantity: Math.abs(Number(it.quantity)) } },
+              { new: true, session }
+            )
+          );
+        if (stockRevertPromises.length) await Promise.all(stockRevertPromises);
 
-    if (stockPromises.length) {
-      await Promise.all(stockPromises);
-    }
+        // 2. Revert old customer debit
+        //    ✅ This only proceeds if stock revert succeeded.
+        if (oldCustomerId && oldTotal > 0) {
+          await Customer.findByIdAndUpdate(
+            oldCustomerId,
+            { $inc: { debit: -oldTotal, totalSales: -oldTotal } },
+            { session }
+          );
+        }
 
-    // ── 9. APPLY NEW CUSTOMER DEBIT ─────────────────────────────────
-    if (newBillingCustomerIdObj && serverGrandTotal > 0) {
-      await Customer.findByIdAndUpdate(newBillingCustomerIdObj, {
-        $inc: { debit: serverGrandTotal, totalSales: serverGrandTotal },
+        // 3. Update Bill document
+        existingBill.serialNumber = serialNumber;
+        existingBill.billDate = parsedBillDate;
+        existingBill.billingCustomer = {
+          customerId: newBillingCustomerIdObj,
+          name: billingCustomer.name,
+          shopName: billingCustomer.shopName || billingCustomer.name,
+          address: billingCustomer.address,
+          contact: billingCustomer.contact || "",
+        };
+        existingBill.shippingCustomer = {
+          customerId: newShippingCustomerIdObj,
+          name: shippingCustomer.name,
+          shopName: shippingCustomer.shopName || shippingCustomer.name,
+          address: shippingCustomer.address,
+          contact: shippingCustomer.contact || "",
+        };
+        existingBill.sameAsBilling = !!sameAsBilling;
+        existingBill.items = billItems;
+        existingBill.subtotal = serverSubtotal;
+        existingBill.discountPercentage = serverDiscountPct;
+        existingBill.discountAmount = serverDiscountAmt;
+        existingBill.grandTotal = serverGrandTotal;
+        existingBill.remarks = remarks || "";
+        await existingBill.save({ session });
+
+        // 4. Update Order document
+        existingOrder.serialNumber = serialNumber;
+        existingOrder.shopName = billingCustomer.shopName || billingCustomer.name || "Unknown";
+        existingOrder.customerId = newBillingCustomerIdObj;
+        existingOrder.customerName = billingCustomer.name;
+        existingOrder.customerAddress = billingCustomer.address;
+        existingOrder.customerContact = billingCustomer.contact || "";
+        existingOrder.items = paidItemsForOrder;
+        existingOrder.freeItems = freeItemsForOrder;
+        existingOrder.quantitySummary = quantitySummary;
+        existingOrder.subtotal = serverSubtotal;
+        existingOrder.discountPercentage = serverDiscountPct;
+        existingOrder.total = serverGrandTotal;
+        existingOrder.remarks = remarks || "";
+        await existingOrder.save({ session });
+
+        // 5. Apply new stock changes
+        const stockPromises = items
+          .filter(
+            (it: any) =>
+              it.productId &&
+              mongoose.Types.ObjectId.isValid(it.productId) &&
+              it.quantity > 0
+          )
+          .map((it: any) =>
+            Product.findOneAndUpdate(
+              { _id: new mongoose.Types.ObjectId(it.productId), userId: userObjectId },
+              { $inc: { quantity: -Math.abs(Number(it.quantity)) } },
+              { new: true, session }
+            )
+          );
+        if (stockPromises.length) await Promise.all(stockPromises);
+
+        // 6. Apply new customer debit
+        //    ✅ This only runs if all steps above succeeded.
+        if (newBillingCustomerIdObj && serverGrandTotal > 0) {
+          await Customer.findByIdAndUpdate(
+            newBillingCustomerIdObj,
+            { $inc: { debit: serverGrandTotal, totalSales: serverGrandTotal } },
+            { session }
+          );
+        }
       });
+    } finally {
+      session.endSession();
     }
 
     return NextResponse.json(

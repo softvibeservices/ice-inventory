@@ -40,11 +40,9 @@ export async function POST(req: Request) {
       );
     }
 
+    // Only store productId, quantity, note — no redundant name/category/unit
     const historyItems = products.map((p: any) => ({
-      productId: p._id,  // already ObjectId
-      name: p.name,
-      category: p.category ?? "",
-      unit: p.unit ?? "piece",
+      productId: p._id,
       quantity: p.quantity ?? 0,
       note: "Empty Stock",
     }));

@@ -1,4 +1,5 @@
 // src/app/api/orders/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
@@ -74,47 +75,69 @@ export async function POST(req: NextRequest) {
       ? freeItems.map((it: any) => ({ ...it, productId: toObjectId(it.productId) }))
       : [];
 
-    const order = await Order.create({
-      userId: userObjectId,
-      orderId,
-      serialNumber,
-      shopName,
-      customerName,
-      customerAddress,
-      customerContact,
-      customerId: customerObjectId,
-      items: mappedItems,
-      freeItems: mappedFreeItems,
-      quantitySummary,
-      subtotal,
-      discountPercentage,
-      total,
-      remarks,
-      status: "Unsettled",
-      settlementHistory: [{ action: "Created", at: new Date() }],
-    });
+    // ── START TRANSACTION ─────────────────────────────────────────
+    const session = await mongoose.startSession();
+    let order: any;
 
-    // Decrease stock for all products
-    const allItems = [...mappedItems, ...mappedFreeItems];
-    const stockUpdates = allItems
-      .filter((it: any) => it.productId && typeof it.quantity === "number" && it.quantity > 0)
-      .map((it: any) =>
-        Product.findOneAndUpdate(
-          { _id: it.productId, userId: userObjectId },
-          { $inc: { quantity: -Math.abs(it.quantity) } },
-          { new: true }
-        )
-      );
+    try {
+      await session.withTransaction(async () => {
+        // 1. Create Order
+        const [createdOrder] = await Order.create(
+          [
+            {
+              userId: userObjectId,
+              orderId,
+              serialNumber,
+              shopName,
+              customerName,
+              customerAddress,
+              customerContact,
+              customerId: customerObjectId,
+              items: mappedItems,
+              freeItems: mappedFreeItems,
+              quantitySummary,
+              subtotal,
+              discountPercentage,
+              total,
+              remarks,
+              status: "Unsettled",
+              settlementHistory: [{ action: "Created", at: new Date() }],
+            },
+          ],
+          { session }
+        );
+        order = createdOrder;
 
-    if (stockUpdates.length) {
-      await Promise.all(stockUpdates);
-    }
+        // 2. Decrease stock for all products
+        const allItems = [...mappedItems, ...mappedFreeItems];
+        const stockUpdates = allItems
+          .filter(
+            (it: any) =>
+              it.productId &&
+              typeof it.quantity === "number" &&
+              it.quantity > 0
+          )
+          .map((it: any) =>
+            Product.findOneAndUpdate(
+              { _id: it.productId, userId: userObjectId },
+              { $inc: { quantity: -Math.abs(it.quantity) } },
+              { new: true, session }
+            )
+          );
+        if (stockUpdates.length) await Promise.all(stockUpdates);
 
-    // Add total to customer's debit & totalSales
-    if (customerObjectId && typeof total === "number" && total > 0) {
-      await Customer.findByIdAndUpdate(customerObjectId, {
-        $inc: { debit: total, totalSales: total },
+        // 3. Update customer debit & totalSales
+        //    ✅ Only runs if Order creation + stock update succeeded.
+        if (customerObjectId && typeof total === "number" && total > 0) {
+          await Customer.findByIdAndUpdate(
+            customerObjectId,
+            { $inc: { debit: total, totalSales: total } },
+            { session }
+          );
+        }
       });
+    } finally {
+      session.endSession();
     }
 
     return NextResponse.json({ success: true, order }, { status: 201 });
@@ -188,29 +211,11 @@ export async function PATCH(req: NextRequest) {
 
     const billTotal = Number(order.total || 0);
 
-    const adjustCustomerForDiscard = async () => {
-      if (!order.customerId || !order.total) return;
-      await Customer.findByIdAndUpdate(order.customerId, {
-        $inc: { debit: -order.total, totalSales: -order.total },
-      });
-    };
-
-    const adjustCustomerForPayment = async (payAmount: number, remainingForThisOrder: number) => {
-      if (!order.customerId || payAmount <= 0) return;
-      const customer: any = await Customer.findById(order.customerId);
-      if (!customer) return;
-      const currentDebit = Number(customer.debit || 0);
-      const appliedToDebit = Math.min(payAmount, Math.max(0, remainingForThisOrder), Math.max(0, currentDebit));
-      const extraToCredit = payAmount - appliedToDebit;
-      await Customer.findByIdAndUpdate(order.customerId, {
-        $inc: { debit: -appliedToDebit, credit: extraToCredit > 0 ? extraToCredit : 0 },
-      });
-    };
-
     const shouldMoveToSettled = (totalPaid: number, delStatus: string) =>
       totalPaid >= billTotal && delStatus === "Delivered";
 
     // ===== CHANGE DELIVERY STATUS =====
+    // No financial changes — no transaction needed
     if (action === "changeDeliveryStatus") {
       if (!deliveryStatus || !["Pending", "On the Way", "Delivered"].includes(deliveryStatus)) {
         return NextResponse.json({ error: "Invalid delivery status." }, { status: 400 });
@@ -238,13 +243,19 @@ export async function PATCH(req: NextRequest) {
       }
 
       await order.save();
-      return NextResponse.json({ success: true, order, message: `Delivery status changed from ${oldStatus} to ${deliveryStatus}` }, { status: 200 });
+      return NextResponse.json(
+        { success: true, order, message: `Delivery status changed from ${oldStatus} to ${deliveryStatus}` },
+        { status: 200 }
+      );
     }
 
     // ===== DISCARD =====
     if (action === "discard") {
       if (order.status !== "Unsettled") {
-        return NextResponse.json({ error: "Only Unsettled orders can be discarded." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Only Unsettled orders can be discarded." },
+          { status: 400 }
+        );
       }
 
       const allItems = [
@@ -252,29 +263,47 @@ export async function PATCH(req: NextRequest) {
         ...(Array.isArray(order.freeItems) ? order.freeItems : []),
       ];
 
-      const stockUpdates = allItems
-        .filter((it: any) => it.productId && typeof it.quantity === "number" && it.quantity > 0)
-        .map((it: any) =>
-          Product.findOneAndUpdate(
-            { _id: it.productId, userId: userObjectId },
-            { $inc: { quantity: Math.abs(it.quantity) } },
-            { new: true }
-          )
-        );
+      // ── TRANSACTION: stock restore + customer debit undo + order update ──
+      const session = await mongoose.startSession();
 
-      if (stockUpdates.length) await Promise.all(stockUpdates);
+      try {
+        await session.withTransaction(async () => {
+          // 1. Restore stock
+          const stockUpdates = allItems
+            .filter((it: any) => it.productId && typeof it.quantity === "number" && it.quantity > 0)
+            .map((it: any) =>
+              Product.findOneAndUpdate(
+                { _id: it.productId, userId: userObjectId },
+                { $inc: { quantity: Math.abs(it.quantity) } },
+                { new: true, session }
+              )
+            );
+          if (stockUpdates.length) await Promise.all(stockUpdates);
 
-      await adjustCustomerForDiscard();
+          // 2. Reverse customer debit (undo the original bill's debit)
+          //    ✅ Only runs if stock restore succeeded.
+          if (order.customerId && order.total) {
+            await Customer.findByIdAndUpdate(
+              order.customerId,
+              { $inc: { debit: -order.total, totalSales: -order.total } },
+              { session }
+            );
+          }
 
-      order.status = "settled";
-      order.discardedAt = new Date();
-      order.settlementMethod = "Discarded";
-      order.settlementAmount = 0;
-      order.settledAt = null;
-      order.settlementHistory = order.settlementHistory || [];
-      order.settlementHistory.push({ action: "Discarded", amountPaid: 0, at: new Date() });
+          // 3. Mark order as discarded
+          order.status = "settled";
+          order.discardedAt = new Date();
+          order.settlementMethod = "Discarded";
+          order.settlementAmount = 0;
+          order.settledAt = null;
+          order.settlementHistory = order.settlementHistory || [];
+          order.settlementHistory.push({ action: "Discarded", amountPaid: 0, at: new Date() });
+          await order.save({ session });
+        });
+      } finally {
+        session.endSession();
+      }
 
-      await order.save();
       return NextResponse.json({ success: true, order }, { status: 200 });
     }
 
@@ -288,9 +317,13 @@ export async function PATCH(req: NextRequest) {
         order.status !== "Unsettled" &&
         !(order.status === "settled" && order.settlementMethod === "Debt")
       ) {
-        return NextResponse.json({ error: "This order cannot be settled from this tab anymore." }, { status: 400 });
+        return NextResponse.json(
+          { error: "This order cannot be settled from this tab anymore." },
+          { status: 400 }
+        );
       }
 
+      // Debt settlement: no money changes hands yet — no customer credit change
       if (method === "Debt") {
         order.status = "settled";
         order.settlementMethod = "Debt";
@@ -298,80 +331,171 @@ export async function PATCH(req: NextRequest) {
         order.settlementAmount = previousPaid;
         order.settledAt = new Date();
         order.settlementHistory = order.settlementHistory || [];
-        order.settlementHistory.push({ action: "Settled", method: "Debt", amountPaid: 0, at: new Date(), note: "Marked as Debt" });
+        order.settlementHistory.push({
+          action: "Settled",
+          method: "Debt",
+          amountPaid: 0,
+          at: new Date(),
+          note: "Marked as Debt",
+        });
         await order.save();
         return NextResponse.json({ success: true, order }, { status: 200 });
       }
 
       const payAmount = Math.max(0, Number(amount || 0));
       if (payAmount <= 0) {
-        return NextResponse.json({ error: "Payment amount must be greater than 0." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Payment amount must be greater than 0." },
+          { status: 400 }
+        );
       }
 
       const previousPaid = typeof order.settlementAmount === "number" ? order.settlementAmount : 0;
       const remainingForThisOrder = Math.max(0, billTotal - previousPaid);
-
-      await adjustCustomerForPayment(payAmount, remainingForThisOrder);
-
       const totalPaid = previousPaid + payAmount;
       const currentDeliveryStatus = order.deliveryStatus || "Pending";
       const moveToSettled = shouldMoveToSettled(totalPaid, currentDeliveryStatus);
 
-      order.status = "settled";
-      order.settlementMethod = moveToSettled ? method : "Debt";
-      order.settlementAmount = totalPaid;
-      order.settledAt = new Date();
-      order.settlementHistory = order.settlementHistory || [];
-      order.settlementHistory.push({
-        action: "Settled",
-        method,
-        amountPaid: payAmount,
-        at: new Date(),
-        note: moveToSettled ? "Fully settled and delivered" : totalPaid >= billTotal ? "Fully paid but not delivered yet" : "Partial payment",
-      });
+      // ── TRANSACTION: customer credit update + order update ──
+      const session = await mongoose.startSession();
 
-      await order.save();
+      try {
+        await session.withTransaction(async () => {
+          // 1. Update customer credit/debit
+          //    ✅ Reduces debit by amount paid (up to what's owed for this order),
+          //       and any overpayment goes to credit.
+          if (order.customerId && payAmount > 0) {
+            const customer: any = await Customer.findById(order.customerId).session(session);
+            if (customer) {
+              const currentDebit = Number(customer.debit || 0);
+              const appliedToDebit = Math.min(
+                payAmount,
+                Math.max(0, remainingForThisOrder),
+                Math.max(0, currentDebit)
+              );
+              const extraToCredit = payAmount - appliedToDebit;
+              await Customer.findByIdAndUpdate(
+                order.customerId,
+                {
+                  $inc: {
+                    debit: -appliedToDebit,
+                    credit: extraToCredit > 0 ? extraToCredit : 0,
+                  },
+                },
+                { session }
+              );
+            }
+          }
+
+          // 2. Update order
+          order.status = "settled";
+          order.settlementMethod = moveToSettled ? method : "Debt";
+          order.settlementAmount = totalPaid;
+          order.settledAt = new Date();
+          order.settlementHistory = order.settlementHistory || [];
+          order.settlementHistory.push({
+            action: "Settled",
+            method,
+            amountPaid: payAmount,
+            at: new Date(),
+            note: moveToSettled
+              ? "Fully settled and delivered"
+              : totalPaid >= billTotal
+              ? "Fully paid but not delivered yet"
+              : "Partial payment",
+          });
+          await order.save({ session });
+        });
+      } finally {
+        session.endSession();
+      }
+
       return NextResponse.json({ success: true, order }, { status: 200 });
     }
 
     // ===== SETTLE DEBT =====
     if (action === "settleDebt") {
       if (order.settlementMethod !== "Debt") {
-        return NextResponse.json({ error: "Only Debt orders can be settled from the Debt tab." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Only Debt orders can be settled from the Debt tab." },
+          { status: 400 }
+        );
       }
 
       if (method !== "Cash" && method !== "Bank/UPI") {
-        return NextResponse.json({ error: "Invalid settlement method for Debt." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Invalid settlement method for Debt." },
+          { status: 400 }
+        );
       }
 
       const payAmount = Math.max(0, Number(amount || 0));
       if (!payAmount) {
-        return NextResponse.json({ error: "Payment amount must be greater than 0." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Payment amount must be greater than 0." },
+          { status: 400 }
+        );
       }
 
       const prevPaid = typeof order.settlementAmount === "number" ? order.settlementAmount : 0;
       const remainingForThisOrder = Math.max(0, billTotal - prevPaid);
-
-      await adjustCustomerForPayment(payAmount, remainingForThisOrder);
-
       const newTotalPaid = prevPaid + payAmount;
       const currentDeliveryStatus = order.deliveryStatus || "Pending";
       const moveToSettled = shouldMoveToSettled(newTotalPaid, currentDeliveryStatus);
 
-      order.status = "settled";
-      order.settlementAmount = newTotalPaid;
-      order.settlementMethod = moveToSettled ? method : "Debt";
-      order.settledAt = new Date();
-      order.settlementHistory = order.settlementHistory || [];
-      order.settlementHistory.push({
-        action: "Settled",
-        method,
-        amountPaid: payAmount,
-        at: new Date(),
-        note: moveToSettled ? "Debt fully settled and delivered" : newTotalPaid >= billTotal ? "Fully paid but not delivered yet" : "Partial payment",
-      });
+      // ── TRANSACTION: customer credit update + order update ──
+      const session = await mongoose.startSession();
 
-      await order.save();
+      try {
+        await session.withTransaction(async () => {
+          // 1. Update customer credit/debit
+          //    ✅ Only runs atomically — if order update fails, credit stays unchanged.
+          if (order.customerId && payAmount > 0) {
+            const customer: any = await Customer.findById(order.customerId).session(session);
+            if (customer) {
+              const currentDebit = Number(customer.debit || 0);
+              const appliedToDebit = Math.min(
+                payAmount,
+                Math.max(0, remainingForThisOrder),
+                Math.max(0, currentDebit)
+              );
+              const extraToCredit = payAmount - appliedToDebit;
+              await Customer.findByIdAndUpdate(
+                order.customerId,
+                {
+                  $inc: {
+                    debit: -appliedToDebit,
+                    credit: extraToCredit > 0 ? extraToCredit : 0,
+                  },
+                },
+                { session }
+              );
+            }
+          }
+
+          // 2. Update order
+          order.status = "settled";
+          order.settlementAmount = newTotalPaid;
+          order.settlementMethod = moveToSettled ? method : "Debt";
+          order.settledAt = new Date();
+          order.settlementHistory = order.settlementHistory || [];
+          order.settlementHistory.push({
+            action: "Settled",
+            method,
+            amountPaid: payAmount,
+            at: new Date(),
+            note: moveToSettled
+              ? "Debt fully settled and delivered"
+              : newTotalPaid >= billTotal
+              ? "Fully paid but not delivered yet"
+              : "Partial payment",
+          });
+          await order.save({ session });
+        });
+      } finally {
+        session.endSession();
+      }
+
       return NextResponse.json({ success: true, order }, { status: 200 });
     }
 

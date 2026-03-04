@@ -6,9 +6,6 @@ export interface IRestockHistory extends Document {
   createdAt: Date;
   items: {
     productId: mongoose.Types.ObjectId;
-    name: string;
-    category?: string;
-    unit: string;
     quantity: number;
     note: string;
   }[];
@@ -20,9 +17,6 @@ const RestockHistorySchema: Schema = new Schema(
     items: [
       {
         productId: { type: Schema.Types.ObjectId, ref: "Product", required: true },
-        name: { type: String, required: true },
-        category: { type: String },
-        unit: { type: String, required: true },
         quantity: { type: Number, required: true },
         note: { type: String, default: "Restocking" },
       },

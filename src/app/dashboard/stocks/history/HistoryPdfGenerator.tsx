@@ -4,7 +4,7 @@
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { RestockHistory } from "@/types/stocks.types";
+import { RestockHistory, getRestockItemProduct } from "@/types/stocks.types";
 
 interface HistoryPdfGeneratorProps {
   history: RestockHistory | RestockHistory[];
@@ -51,7 +51,7 @@ export default function HistoryPdfGenerator({
     };
 
     /* ================= HEADER ================= */
-    doc.setFillColor(22, 163, 74); // green
+    doc.setFillColor(22, 163, 74);
     doc.rect(0, 0, pageWidth, 70, "F");
 
     doc.setTextColor(255);
@@ -80,19 +80,21 @@ export default function HistoryPdfGenerator({
       doc.text(`Reason     : ${reason}`, marginX, 112);
       doc.text(`Items Count: ${h.items.length}`, marginX, 129);
 
-      const tableData = h.items.map((item, i) => [
-        i + 1,
-        item.name,
-        item.category || "-",
-        `${item.quantity} ${item.unit}`,
-      ]);
+      const tableData = h.items.map((item, i) => {
+        const product = getRestockItemProduct(item);
+        return [
+          i + 1,
+          product.name,
+          product.category || "-",
+          `${item.quantity} ${product.unit}`,
+        ];
+      });
 
       autoTable(doc, {
         startY: 155,
-        theme: "grid", // ✅ THIS IS THE KEY
+        theme: "grid",
         head: [["#", "Product Name", "Category", "Quantity"]],
         body: tableData,
-
         styles: {
           fontSize: 10,
           cellPadding: 6,
@@ -101,7 +103,6 @@ export default function HistoryPdfGenerator({
           lineColor: [120, 120, 120],
           textColor: 20,
         },
-
         headStyles: {
           fillColor: [22, 163, 74],
           textColor: 255,
@@ -110,18 +111,15 @@ export default function HistoryPdfGenerator({
           lineWidth: 0.8,
           lineColor: [0, 0, 0],
         },
-
         columnStyles: {
           0: { cellWidth: 30, halign: "center" },
           1: { cellWidth: 200 },
           2: { cellWidth: 140 },
           3: { cellWidth: 120, halign: "center" },
         },
-
         alternateRowStyles: {
           fillColor: [245, 247, 250],
         },
-
         didDrawPage: footer,
       });
 
@@ -153,19 +151,21 @@ export default function HistoryPdfGenerator({
       doc.text(`Reason     : ${reason}`, marginX, y + 30);
       doc.text(`Items Count: ${h.items.length}`, marginX, y + 44);
 
-      const tableData = h.items.map((item, i) => [
-        i + 1,
-        item.name,
-        item.category || "-",
-        `${item.quantity} ${item.unit}`,
-      ]);
+      const tableData = h.items.map((item, i) => {
+        const product = getRestockItemProduct(item);
+        return [
+          i + 1,
+          product.name,
+          product.category || "-",
+          `${item.quantity} ${product.unit}`,
+        ];
+      });
 
       autoTable(doc, {
         startY: y + 60,
-        theme: "grid", // ✅ GRID FIX
+        theme: "grid",
         head: [["#", "Product Name", "Category", "Quantity"]],
         body: tableData,
-
         styles: {
           fontSize: 9,
           cellPadding: 5,
@@ -173,7 +173,6 @@ export default function HistoryPdfGenerator({
           lineColor: [120, 120, 120],
           textColor: 20,
         },
-
         headStyles: {
           fillColor: [22, 163, 74],
           textColor: 255,
@@ -181,18 +180,15 @@ export default function HistoryPdfGenerator({
           lineWidth: 0.8,
           lineColor: [0, 0, 0],
         },
-
         columnStyles: {
           0: { cellWidth: 30, halign: "center" },
           1: { cellWidth: 200 },
           2: { cellWidth: 140 },
           3: { cellWidth: 120, halign: "center" },
         },
-
         alternateRowStyles: {
           fillColor: [245, 247, 250],
         },
-
         didDrawPage: footer,
       });
 

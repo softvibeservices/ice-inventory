@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
-import { RestockHistory } from "@/types/stocks.types";
+import { RestockHistory, getRestockItemProduct } from "@/types/stocks.types";
 import HistoryPdfGenerator from "./HistoryPdfGenerator";
 
 export default function HistoryPage() {
@@ -103,7 +103,7 @@ export default function HistoryPage() {
   const totalPages = Math.ceil(filteredHistory.length / ITEMS_PER_PAGE);
   const paginatedHistory = useMemo(() => {
     if (viewAll) return filteredHistory;
-    
+
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
     return filteredHistory.slice(startIndex, endIndex);
@@ -247,7 +247,7 @@ export default function HistoryPage() {
         {/* ================= FILTERS ================= */}
         <div className="bg-white border border-gray-300 rounded-xl shadow-sm p-5 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Filters & Sort</h2>
-          
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
             <input
               type="text"
@@ -420,29 +420,32 @@ export default function HistoryPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {h.items.map((item, i) => (
-                            <tr
-                              key={item.productId}
-                              className={`border-b border-gray-200 hover:bg-blue-50 transition ${
-                                i % 2 === 0 ? "bg-white" : "bg-gray-50"
-                              }`}
-                            >
-                              <td className="px-4 py-3 text-gray-700 font-medium">
-                                {i + 1}
-                              </td>
-                              <td className="px-4 py-3 text-gray-900 font-semibold">
-                                {item.name}
-                              </td>
-                              <td className="px-4 py-3 text-gray-700">
-                                <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
-                                  {item.category || "Uncategorized"}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-right text-gray-900 font-semibold">
-                                {item.quantity} <span className="text-gray-600 font-normal">{item.unit}</span>
-                              </td>
-                            </tr>
-                          ))}
+                          {h.items.map((item, i) => {
+                            const product = getRestockItemProduct(item);
+                            return (
+                              <tr
+                                key={typeof item.productId === "object" ? item.productId._id : item.productId}
+                                className={`border-b border-gray-200 hover:bg-blue-50 transition ${
+                                  i % 2 === 0 ? "bg-white" : "bg-gray-50"
+                                }`}
+                              >
+                                <td className="px-4 py-3 text-gray-700 font-medium">
+                                  {i + 1}
+                                </td>
+                                <td className="px-4 py-3 text-gray-900 font-semibold">
+                                  {product.name}
+                                </td>
+                                <td className="px-4 py-3 text-gray-700">
+                                  <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                                    {product.category || "Uncategorized"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right text-gray-900 font-semibold">
+                                  {item.quantity} <span className="text-gray-600 font-normal">{product.unit}</span>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
