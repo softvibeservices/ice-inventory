@@ -22,10 +22,7 @@ export async function POST(req: Request) {
     const customer = await Customer.create({
       ...body,
       userId: new mongoose.Types.ObjectId(userId),
-      credit: 0,
-      debit: 0,
-      totalSales: 0,
-      remarks: "",
+      // ✅ REMOVED hardcoded overrides — now uses values from body (form)
     });
 
     return NextResponse.json(customer, { status: 201 });

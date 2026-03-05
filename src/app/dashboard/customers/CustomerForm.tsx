@@ -11,7 +11,7 @@ interface CustomerFormProps {
   saving: boolean;
   editingId: string | null;
   handleSubmit: (e: React.FormEvent) => void;
-  onCancel: () => void; 
+  onCancel: () => void;
 }
 
 export default function CustomerForm({
@@ -21,7 +21,7 @@ export default function CustomerForm({
   saving,
   editingId,
   handleSubmit,
-  onCancel, 
+  onCancel,
 }: CustomerFormProps) {
   const inputBase =
     "w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500";
@@ -60,10 +60,10 @@ export default function CustomerForm({
             Fields marked with * are required
           </p>
         </div>
-  
+
         {/* ================= GRID ================= */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-  
+
           {/* Customer Name */}
           <div>
             <label className="text-sm font-semibold text-slate-800">
@@ -77,7 +77,7 @@ export default function CustomerForm({
               required
             />
           </div>
-  
+
           {/* Primary Contact */}
           <div>
             <label className="text-sm font-semibold text-slate-800">
@@ -101,7 +101,7 @@ export default function CustomerForm({
               Digits only (6–15)
             </p>
           </div>
-  
+
           {/* Shop Name */}
           <div>
             <label className="text-sm font-semibold text-slate-800">
@@ -120,7 +120,7 @@ export default function CustomerForm({
               </span>
             </div>
           </div>
-  
+
           {/* Shop Address */}
           <div className="sm:col-span-2">
             <label className="text-sm font-semibold text-slate-800">
@@ -134,7 +134,7 @@ export default function CustomerForm({
               required
             />
           </div>
-  
+
           {/* Area */}
           <div>
             <label className="text-sm font-semibold text-slate-800">
@@ -148,7 +148,7 @@ export default function CustomerForm({
               required
             />
           </div>
-  
+
           {/* Latitude */}
           <div>
             <label className="text-sm font-semibold text-slate-800">
@@ -163,7 +163,7 @@ export default function CustomerForm({
               placeholder="21.1458"
             />
           </div>
-  
+
           {/* Longitude */}
           <div>
             <label className="text-sm font-semibold text-slate-800">
@@ -178,7 +178,7 @@ export default function CustomerForm({
               placeholder="72.7758"
             />
           </div>
-  
+
           {/* Credit */}
           <div>
             <label className="text-sm font-semibold text-slate-800">
@@ -187,7 +187,6 @@ export default function CustomerForm({
             <input
               className={inputBase}
               value={form.credit}
-              readOnly={!editingId}
               onChange={(e) =>
                 setForm({
                   ...form,
@@ -197,7 +196,7 @@ export default function CustomerForm({
               placeholder="0.00"
             />
           </div>
-  
+
           {/* Debit */}
           <div>
             <label className="text-sm font-semibold text-slate-800">
@@ -206,7 +205,6 @@ export default function CustomerForm({
             <input
               className={inputBase}
               value={form.debit}
-              readOnly={!editingId}
               onChange={(e) =>
                 setForm({
                   ...form,
@@ -216,7 +214,7 @@ export default function CustomerForm({
               placeholder="0.00"
             />
           </div>
-  
+
           {/* Total Sales */}
           <div>
             <label className="text-sm font-semibold text-slate-800">
@@ -225,7 +223,6 @@ export default function CustomerForm({
             <input
               className={inputBase}
               value={form.totalSales}
-              readOnly={!editingId}
               onChange={(e) =>
                 setForm({
                   ...form,
@@ -235,13 +232,13 @@ export default function CustomerForm({
               placeholder="0.00"
             />
           </div>
-  
+
           {/* ================= ADDITIONAL CONTACTS ================= */}
           <div className="sm:col-span-2 xl:col-span-3">
             <label className="text-sm font-semibold text-slate-800">
               Additional Contacts
             </label>
-  
+
             <div className="mt-2 space-y-2">
               {form.contacts.map((c, i) => {
                 if (i === 0) return null;
@@ -265,7 +262,7 @@ export default function CustomerForm({
                   </div>
                 );
               })}
-  
+
               <button
                 type="button"
                 onClick={addContactField}
@@ -275,7 +272,7 @@ export default function CustomerForm({
               </button>
             </div>
           </div>
-  
+
           {/* Remarks */}
           <div className="sm:col-span-2 xl:col-span-3">
             <label className="text-sm font-semibold text-slate-800">
@@ -290,7 +287,7 @@ export default function CustomerForm({
             />
           </div>
         </div>
-  
+
         {/* ================= ACTIONS ================= */}
         <div className="mt-5 flex justify-end gap-3">
           {editingId && (
@@ -302,7 +299,7 @@ export default function CustomerForm({
               Cancel
             </button>
           )}
-  
+
           <button
             type="submit"
             disabled={saving}
@@ -316,5 +313,4 @@ export default function CustomerForm({
       </form>
     </div>
   );
-  
 }
