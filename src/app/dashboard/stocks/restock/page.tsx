@@ -117,14 +117,12 @@ export default function RestockPage() {
           body: JSON.stringify({ id, userId, quantity: newQty }),
         });
 
-        restockedItems.push({
-          productId: product._id,
-          name: product.name,
-          category: product.category,
-          unit: product.unit,
-          quantity: qty,
-          note: globalNote || "Restocking",
-        });
+       // ✅ AFTER — productId carries the full object so getRestockItemProduct() can read it later
+restockedItems.push({
+  productId: { _id: product._id, name: product.name, category: product.category, unit: product.unit },
+  quantity: qty,
+  note: globalNote || "Restocking",
+});
       }
 
       await fetch("/api/restockHistory", {
@@ -334,17 +332,15 @@ export default function RestockPage() {
           <RestockPdfGenerator
             items={Object.entries(restockValues)
               .filter(([_, qty]) => qty !== 0)
-              .map(([id, qty]) => {
-                const product = products.find((p) => p._id === id);
-                return {
-                  productId: id,
-                  name: product?.name || "",
-                  category: product?.category,
-                  unit: product?.unit || "",
-                  quantity: qty,
-                  note: globalNote,
-                };
-              })}
+             // ✅ AFTER
+.map(([id, qty]) => {
+  const product = products.find((p) => p._id === id);
+  return {
+    productId: { _id: id, name: product?.name || "", category: product?.category, unit: product?.unit || "" },
+    quantity: qty,
+    note: globalNote,
+  };
+})}
             dateTime={new Date().toLocaleString()}
             note={globalNote}
             fileName={`RESTOCK-${new Date().toISOString().slice(0, 10)}.pdf`}
