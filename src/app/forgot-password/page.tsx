@@ -20,10 +20,33 @@ export default function ForgotPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // ✅ NEW: cooldown state — counts down from 60 to 0 after each OTP send
+  const [cooldown, setCooldown] = useState(0);
+
+  // ✅ NEW: starts a 60-second countdown, called after every successful OTP dispatch
+  const startCooldown = () => {
+    setCooldown(60);
+    const interval = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   /* ================= REQUEST OTP ================= */
   const requestOtp = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!email) return toast.error("Please enter your registered email.");
+
+    // ✅ NEW: block resend if cooldown is still active
+    if (cooldown > 0) {
+      toast.error(`Please wait ${cooldown}s before requesting another OTP.`);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -37,6 +60,12 @@ export default function ForgotPasswordPage() {
       if (res.ok) {
         toast.success("OTP sent to your email.");
         setStep("otp");
+        startCooldown(); // ✅ NEW: start 60s cooldown after successful send
+      } else if (res.status === 404) {
+        toast.error(data.error || "No account found. Please register first.", {
+          autoClose: 4000,
+        });
+        setTimeout(() => router.push("/register"), 4000);
       } else {
         toast.error(data.error || "Failed to send OTP.");
       }
@@ -94,19 +123,12 @@ export default function ForgotPasswordPage() {
       });
 
       const data = await res.json();
-     // ✅ AFTER
-if (res.ok) {
-  toast.success("OTP sent to your email.");
-  setStep("otp");
-} else if (res.status === 404) {
-  toast.error(data.error || "No account found. Please register first.", {
-    autoClose: 4000,
-  });
-  // Optional: redirect to register after a delay
-  setTimeout(() => router.push("/register"), 4000);
-} else {
-  toast.error(data.error || "Failed to send OTP.");
-}
+      if (res.ok) {
+        toast.success("Password updated successfully! Redirecting to login...");
+        setTimeout(() => router.push("/login"), 1500);
+      } else {
+        toast.error(data.error || "Failed to update password.");
+      }
     } catch {
       toast.error("Network error.");
     } finally {
@@ -187,6 +209,14 @@ if (res.ok) {
                 />
               </div>
 
+              {/* ✅ NEW: cooldown hint shown when timer is active */}
+              {cooldown > 0 && (
+                <p className="text-center text-xs text-slate-400">
+                  You can resend OTP in{" "}
+                  <span className="text-cyan-400 font-semibold">{cooldown}s</span>
+                </p>
+              )}
+
               <div className="flex gap-3">
                 <button
                   type="submit"
@@ -196,13 +226,14 @@ if (res.ok) {
                   {loading ? "Verifying…" : "Verify OTP"}
                 </button>
 
+                {/* ✅ UPDATED: Resend button disabled during cooldown, shows live countdown */}
                 <button
                   type="button"
                   onClick={requestOtp}
-                  disabled={loading}
-                  className="flex-1 rounded-md py-3 border border-white/20 text-slate-300 hover:bg-white/5 transition"
+                  disabled={loading || cooldown > 0}
+                  className="flex-1 rounded-md py-3 border border-white/20 text-slate-300 hover:bg-white/5 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Resend
+                  {cooldown > 0 ? `Resend (${cooldown}s)` : "Resend"}
                 </button>
               </div>
             </form>
