@@ -5,7 +5,7 @@
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { RestockItem } from "@/types/stocks.types";
+import { RestockItem , getRestockItemProduct} from "@/types/stocks.types";
 
 interface RestockPdfGeneratorProps {
   items: RestockItem[];
@@ -75,14 +75,18 @@ export default function RestockPdfGenerator({
     doc.text(`• Total Quantity: ${totalQuantity}`, marginX, 220);
 
     /* ================= TABLE ================= */
-    const tableBody = items.map((item, index) => [
-      index + 1,
-      item.name,
-      item.category || "-",
-      `${item.quantity}`,
-      item.unit,
-      item.note || "-",
-    ]);
+   // ✅ AFTER
+const tableBody = items.map((item, index) => {
+  const product = getRestockItemProduct(item);
+  return [
+    index + 1,
+    product.name,
+    product.category || "-",
+    `${item.quantity}`,
+    product.unit,
+    item.note || "-",
+  ];
+});
 
     autoTable(doc, {
       startY: 250,

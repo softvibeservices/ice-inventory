@@ -1,4 +1,3 @@
-// src/app/dashboard/profile/SerialNumberComponent.tsx
 "use client";
 import { useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
@@ -7,297 +6,298 @@ interface SerialNumberComponentProps {
   userId: string;
 }
 
-export default function SerialNumberComponent({
-  userId,
-}: SerialNumberComponentProps) {
-  const [showSerialDialog, setShowSerialDialog] = useState(false);
+export default function SerialNumberComponent({ userId }: SerialNumberComponentProps) {
+  const [showDialog, setShowDialog] = useState(false);
   const [currentSerial, setCurrentSerial] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-
-  // State for the 6-digit serial number (2 month digits + 4 user digits)
-  const [monthDigits, setMonthDigits] = useState<string>(""); // First 2 digits (month)
-  // ✅ FIX: initialise as empty string, not "0000" — we populate it properly in fetchCurrentSerial
-  const [userDigits, setUserDigits] = useState<string>("    "); // 4 spaces = empty slots
-
-  // Refs for the 4 editable digit inputs
+  const [loadingSerial, setLoadingSerial] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [prefix, setPrefix] = useState<string>("");
+  const [userDigits, setUserDigits] = useState<string>("    ");
   const digitRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
 
-  // Get current month for the first 2 digits
   useEffect(() => {
     const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    setMonthDigits(month);
+    const yy = String(now.getFullYear() % 100).padStart(2, "0");
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    setPrefix(yy + mm);
   }, []);
 
-  // Fetch current serial number from DB
   const fetchCurrentSerial = async () => {
+    setLoadingSerial(true);
     try {
-      const res = await fetch(`/api/profile?userId=${userId}`);
+      const res = await fetch(`/api/bills/next-serial?userId=${encodeURIComponent(userId)}`);
       const data = await res.json();
-
-      if (data && data.lastSerialNumber && data.lastSerialNumber.length === 6) {
-        setCurrentSerial(data.lastSerialNumber);
-        // Pre-fill the last 4 digits so the user sees what's already saved
-        setUserDigits(data.lastSerialNumber.substring(2));
+      if (res.ok && data.nextSerial?.length === 8) {
+        setCurrentSerial(data.nextSerial);
+        setUserDigits(data.nextSerial.substring(4));
       } else {
         setCurrentSerial("Not set");
-        // ✅ FIX: leave blank so inputs are empty and immediately typeable
         setUserDigits("    ");
       }
-    } catch (err) {
-      console.error("Error fetching serial:", err);
+    } catch {
+      setCurrentSerial("Error");
+      setUserDigits("    ");
+    } finally {
+      setLoadingSerial(false);
     }
   };
 
   useEffect(() => {
-    if (showSerialDialog) {
-      fetchCurrentSerial();
-    }
-  }, [showSerialDialog, userId]);
+    if (showDialog) fetchCurrentSerial();
+  }, [showDialog, userId]);
 
-  // ✅ REWRITTEN: single handler that replaces the digit at the given index
-  //    and moves focus forward automatically.
   const handleDigitInput = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-
-    // If the field was cleared (Backspace cleared it) — set that slot to space
     if (raw === "") {
       const arr = userDigits.split("");
       arr[index] = " ";
       setUserDigits(arr.join(""));
-      // Move focus to previous input on clear
-      if (index > 0) {
-        digitRefs.current[index - 1]?.focus();
-      }
+      if (index > 0) digitRefs.current[index - 1]?.focus();
       return;
     }
-
-    // Extract only the last character typed (handles both empty→char and char→newchar)
     const lastChar = raw.slice(-1);
-
-    // Only accept digits
     if (!/^\d$/.test(lastChar)) return;
-
     const arr = userDigits.split("");
     arr[index] = lastChar;
     setUserDigits(arr.join(""));
-
-    // Auto-advance focus to next input
-    if (index < 3) {
-      digitRefs.current[index + 1]?.focus();
-    }
+    if (index < 3) digitRefs.current[index + 1]?.focus();
   };
 
-  // ✅ REWRITTEN: handle Backspace cleanly
   const handleDigitKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace") {
-      const currentVal = userDigits[index];
-
-      if (currentVal && currentVal.trim() !== "") {
-        // Slot has a digit — clear it, stay on same input
+      const cv = userDigits[index];
+      if (cv?.trim()) {
         e.preventDefault();
-        const arr = userDigits.split("");
-        arr[index] = " ";
-        setUserDigits(arr.join(""));
+        const arr = userDigits.split(""); arr[index] = " "; setUserDigits(arr.join(""));
       } else {
-        // Slot is already empty — move back and clear the previous one
         e.preventDefault();
         if (index > 0) {
-          const arr = userDigits.split("");
-          arr[index - 1] = " ";
-          setUserDigits(arr.join(""));
+          const arr = userDigits.split(""); arr[index - 1] = " "; setUserDigits(arr.join(""));
           digitRefs.current[index - 1]?.focus();
         }
       }
     }
-
-    // Allow arrow keys for manual navigation
-    if (e.key === "ArrowLeft" && index > 0) {
-      e.preventDefault();
-      digitRefs.current[index - 1]?.focus();
-    }
-    if (e.key === "ArrowRight" && index < 3) {
-      e.preventDefault();
-      digitRefs.current[index + 1]?.focus();
-    }
+    if (e.key === "ArrowLeft" && index > 0) { e.preventDefault(); digitRefs.current[index - 1]?.focus(); }
+    if (e.key === "ArrowRight" && index < 3) { e.preventDefault(); digitRefs.current[index + 1]?.focus(); }
   };
 
-  // On focus: select all text in the input so typing replaces it instantly
-  const handleDigitFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.target.select();
-  };
+  const handleDigitFocus = (e: React.FocusEvent<HTMLInputElement>) => e.target.select();
 
-  // Compute the clean 4-digit string (spaces → "0" for display/validation)
   const cleanDigits = userDigits.replace(/ /g, "0");
-  // Whether all 4 slots have been explicitly filled by the user
   const allFilled = userDigits.split("").every((ch) => ch.trim() !== "");
+  const fullSerial = prefix + cleanDigits;
+  const nextBillSerial = prefix + String(parseInt(cleanDigits || "0", 10) + 1).padStart(4, "0");
+  const prefixYY = prefix.substring(0, 2);
+  const prefixMM = prefix.substring(2, 4);
 
-  // Save the serial number
   const handleSaveSerial = async () => {
-    if (!allFilled) {
-      toast.error("Please enter all 4 digits");
-      return;
-    }
-
-    const fullSerial = monthDigits + cleanDigits;
-    const serialValue = parseInt(cleanDigits, 10);
-
-    if (serialValue < 1 || serialValue > 9999) {
-      toast.error("Serial number must be between 0001 and 9999");
-      return;
-    }
-
-    setLoading(true);
+    if (!allFilled) { toast.error("Please fill all 4 sequence digits"); return; }
+    const seqValue = parseInt(cleanDigits, 10);
+    if (seqValue < 1 || seqValue > 9999) { toast.error("Sequence must be between 0001 and 9999"); return; }
+    setSaving(true);
     try {
       const res = await fetch("/api/profile/update-serial", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          serialNumber: fullSerial,
-        }),
+        body: JSON.stringify({ userId, serialNumber: fullSerial }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to update serial number");
-      }
-
-      toast.success("Serial number updated successfully! ✅");
+      if (!res.ok) throw new Error(data.error || "Failed to update");
+      toast.success("Serial number updated successfully ✅");
       setCurrentSerial(fullSerial);
-      setShowSerialDialog(false);
-
-      // Update sessionStorage so the billing page picks it up immediately
-      sessionStorage.setItem("billing-serial", fullSerial);
+      sessionStorage.setItem("billing-serial-preview", fullSerial);
+      handleClose();
     } catch (err: any) {
-      console.error("Error updating serial:", err);
-      toast.error(err.message || "Failed to update serial number ❌");
+      toast.error(err.message || "Failed to update serial number");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
+
+  const handleClose = () => {
+    setShowDialog(false);
+    setUserDigits("    ");
+    setCurrentSerial("");
+  };
+
+  // A single digit cell — locked (grey) or editable (blue)
+  const LockedDigit = ({ value, label }: { value: string; label: string }) => (
+    <div className="flex flex-col items-center gap-1.5">
+      <div className="w-12 h-12 flex items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400 font-mono text-lg font-semibold select-none">
+        {value}
+      </div>
+      <span className="text-[10px] font-semibold text-gray-300 uppercase tracking-wide">{label}</span>
+    </div>
+  );
 
   return (
     <>
       <button
-        onClick={() => setShowSerialDialog(true)}
+        onClick={() => setShowDialog(true)}
         className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium hover:bg-gray-100 text-gray-700 transition-colors"
       >
         🔢 Set Bill Serial Number
       </button>
 
-      {/* Serial Number Dialog */}
-      {showSerialDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Set Bill Serial Number
-            </h2>
+      {showDialog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(15,23,42,0.6)", backdropFilter: "blur(4px)" }}
+          onClick={handleClose}
+        >
+          <div
+            className="relative w-full bg-white rounded-2xl shadow-2xl overflow-hidden"
+            style={{ maxWidth: "480px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top accent bar */}
+            <div className="h-1 w-full" style={{ background: "linear-gradient(90deg, #3b82f6, #6366f1, #8b5cf6)" }} />
 
-            {/* Current Serial Display */}
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-gray-700">
-                <strong>Current Serial:</strong>{" "}
-                <span className="text-blue-600 font-mono text-lg">
-                  {currentSerial || "Not set"}
-                </span>
-              </p>
-            </div>
+            <div className="p-6">
 
-            {/* Information Box */}
-            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-              <p className="text-xs text-gray-600 mb-2">
-                <strong>Serial Number Format:</strong>
-              </p>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-mono bg-green-100 text-green-800 px-2 py-1 rounded border border-green-300">
-                  {monthDigits}
-                </span>
-                <span className="text-xs text-gray-500">+</span>
-                <span className="text-sm font-mono bg-blue-100 text-blue-800 px-2 py-1 rounded border border-blue-300">
-                  XXXX
-                </span>
+              {/* Header */}
+              <div className="flex items-start justify-between mb-5">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Bill Serial Number</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Override the current billing sequence</p>
+                </div>
+                <button
+                  onClick={handleClose}
+                  className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors font-bold text-base"
+                >
+                  ✕
+                </button>
               </div>
-              <ul className="text-xs text-gray-600 space-y-1">
-                <li>• <strong>First 2 digits:</strong> Current month (auto-set, cannot change)</li>
-                <li>• <strong>Last 4 digits:</strong> Your custom number (0001-9999)</li>
-                <li>• Next bill will use: <strong>{monthDigits}{cleanDigits}</strong></li>
-              </ul>
-            </div>
 
-            {/* Input Boxes */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Enter Serial Number
-              </label>
-              <div className="flex gap-2 justify-center items-center">
-                {/* Month digits — read-only */}
-                <input
-                  type="text"
-                  value={monthDigits[0] || ""}
-                  disabled
-                  className="w-12 h-14 text-center text-xl font-mono border-2 border-gray-300 rounded-lg bg-gray-100 text-gray-600"
-                />
-                <input
-                  type="text"
-                  value={monthDigits[1] || ""}
-                  disabled
-                  className="w-12 h-14 text-center text-xl font-mono border-2 border-gray-300 rounded-lg bg-gray-100 text-gray-600"
-                />
-
-                <span className="text-gray-400 text-2xl">-</span>
-
-                {/* User digits — editable */}
-                {[0, 1, 2, 3].map((i) => (
-                  <input
-                    key={i}
-                    ref={(el) => { digitRefs.current[i] = el; }}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    value={userDigits[i]?.trim() || ""}
-                    onChange={(e) => handleDigitInput(i, e)}
-                    onKeyDown={(e) => handleDigitKeyDown(i, e)}
-                    onFocus={handleDigitFocus}
-                    placeholder="0"
-                    className="w-12 h-14 text-center text-xl font-mono border-2 border-blue-500 rounded-lg
-                               focus:ring-2 focus:ring-blue-300 focus:border-blue-600
-                               placeholder-gray-300 text-gray-900 bg-white"
-                  />
-                ))}
+              {/* Current serial card */}
+              <div className="flex items-center gap-3 mb-5 px-4 py-3 rounded-xl bg-blue-50 border border-blue-100">
+                <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center text-blue-500 font-bold text-base shrink-0">
+                  #
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Next Queued Serial</p>
+                  {loadingSerial ? (
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <div className="w-3.5 h-3.5 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
+                      <span className="text-xs text-gray-400">Fetching...</span>
+                    </div>
+                  ) : (
+                    <p className="text-2xl font-mono font-bold text-blue-700 tracking-[0.2em] leading-tight mt-0.5">
+                      {currentSerial || "—"}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Preview */}
-            <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <p className="text-sm text-gray-700">
-                <strong>Next bill serial will be:</strong>{" "}
-                <span className="text-purple-600 font-mono text-lg">
-                  {monthDigits}{cleanDigits}
+              {/* Digit entry — KEY FIX: single non-wrapping row */}
+              <div className="mb-5">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                  Set Sequence &nbsp;·&nbsp; Format: YY MM – XXXX
+                </p>
+
+                {/* 
+                  All 8 boxes in one flex row that NEVER wraps.
+                  Using inline-flex + overflow-hidden on the container 
+                  so it scales down instead of wrapping on small screens.
+                */}
+                <div className="flex items-end justify-center gap-2" style={{ minWidth: 0 }}>
+
+                  {/* YY locked */}
+                  <LockedDigit value={prefixYY[0] || ""} label="Y" />
+                  <LockedDigit value={prefixYY[1] || ""} label="Y" />
+
+                  {/* Group separator */}
+                  <div className="pb-6 text-gray-200 text-xl font-light select-none">·</div>
+
+                  {/* MM locked */}
+                  <LockedDigit value={prefixMM[0] || ""} label="M" />
+                  <LockedDigit value={prefixMM[1] || ""} label="M" />
+
+                  {/* Dash */}
+                  <div className="pb-6 text-gray-300 text-lg font-semibold select-none px-0.5">–</div>
+
+                  {/* XXXX editable */}
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="flex flex-col items-center gap-1.5">
+                      <input
+                        ref={(el) => { digitRefs.current[i] = el; }}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={userDigits[i]?.trim() || ""}
+                        onChange={(e) => handleDigitInput(i, e)}
+                        onKeyDown={(e) => handleDigitKeyDown(i, e)}
+                        onFocus={handleDigitFocus}
+                        placeholder="0"
+                        className="w-12 h-12 text-center font-mono text-lg font-bold rounded-xl border-2 border-blue-400 bg-white text-gray-900 placeholder-gray-200 focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50 hover:border-blue-500 transition-all"
+                      />
+                      <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">
+                        {i + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Legend row */}
+              <div className="flex items-center gap-2 mb-5 text-xs text-gray-400 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-gray-200 inline-block" />
+                  Locked (year + month)
                 </span>
-              </p>
-            </div>
+                <span className="text-gray-200">·</span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-blue-400 inline-block" />
+                  Editable sequence
+                </span>
+                <span className="text-gray-200">·</span>
+                <span>Next bill = your value + 1</span>
+              </div>
 
-            {/* Buttons */}
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowSerialDialog(false);
-                  setUserDigits("    ");
-                }}
-                className="px-4 py-2 rounded border text-gray-700 hover:bg-gray-50 transition-colors"
-                disabled={loading}
+              {/* Preview — only shown when all filled */}
+              <div className={`mb-5 rounded-xl border overflow-hidden transition-all duration-200 ${allFilled ? "opacity-100" : "opacity-40"}`}
+                style={{ borderColor: "#e9d5ff", background: "linear-gradient(135deg, #faf5ff 0%, #eff6ff 100%)" }}
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveSerial}
-                disabled={loading || !allFilled}
-                className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50 hover:bg-blue-700 transition-colors"
-              >
-                {loading ? "Saving..." : "Save Serial Number"}
-              </button>
+                <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <p className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Next bill will get</p>
+                    <p className="text-2xl font-mono font-bold text-purple-700 tracking-[0.15em] mt-0.5">
+                      {allFilled ? nextBillSerial : `${prefix}????`}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[10px] text-gray-400">Counter set to</p>
+                    <p className="text-sm font-mono font-semibold text-gray-500">{allFilled ? fullSerial : "—"}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={handleClose}
+                  disabled={saving}
+                  className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveSerial}
+                  disabled={saving || !allFilled}
+                  className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                  style={{ background: saving || !allFilled ? "#93c5fd" : "linear-gradient(135deg, #3b82f6, #6366f1)" }}
+                >
+                  {saving ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Serial Number"
+                  )}
+                </button>
+              </div>
+
             </div>
           </div>
         </div>

@@ -115,13 +115,14 @@ export async function POST(req: Request) {
 
     // Always respond with a generic success message to avoid account enumeration.
     // If user is not present, we do NOT send an email — but we return 200 to the client.
-    if (!user) {
-      console.info(`[ForgotPassword] request for non-existing email: ${emailRaw}`);
-      return NextResponse.json(
-        { message: "If this email is registered, you will receive an OTP shortly." },
-        { status: 200 }
-      );
-    }
+   // ✅ AFTER
+if (!user) {
+  console.info(`[ForgotPassword] request for non-existing email: ${emailRaw}`);
+  return NextResponse.json(
+    { error: "No account found with this email. Please create an account first." },
+    { status: 404 }
+  );
+}
 
     // Rate-limit: prevent requesting OTP too frequently
     const now = new Date();

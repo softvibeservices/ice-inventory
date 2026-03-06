@@ -94,12 +94,19 @@ export default function ForgotPasswordPage() {
       });
 
       const data = await res.json();
-      if (res.ok) {
-        toast.success("Password updated. Redirecting...");
-        setTimeout(() => router.push("/login"), 1500);
-      } else {
-        toast.error(data.error || "Failed to update password.");
-      }
+     // ✅ AFTER
+if (res.ok) {
+  toast.success("OTP sent to your email.");
+  setStep("otp");
+} else if (res.status === 404) {
+  toast.error(data.error || "No account found. Please register first.", {
+    autoClose: 4000,
+  });
+  // Optional: redirect to register after a delay
+  setTimeout(() => router.push("/register"), 4000);
+} else {
+  toast.error(data.error || "Failed to send OTP.");
+}
     } catch {
       toast.error("Network error.");
     } finally {

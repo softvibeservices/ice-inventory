@@ -17,7 +17,6 @@ export interface IUser extends Document {
   role: "admin" | "manager" | "superAdmin";
   adminId?: mongoose.Types.ObjectId;
   status: "pending" | "approved" | "rejected" | "blocked";
-  lastSerialNumber?: string;
   isPending?: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -32,21 +31,28 @@ const UserSchema = new Schema<IUser>(
     password: { type: String, required: true },
     shopName: { type: String },
     shopAddress: { type: String },
-    gstin: { type: String }, // Sparse unique index below
+    gstin: { type: String },
     isVerified: { type: Boolean, default: false },
     otp: { type: String },
     otpExpires: { type: Date },
     otpRequestedAt: { type: Date },
-    role: { type: String, enum: ["admin", "manager", "superAdmin"], default: "admin" },
+    role: {
+      type: String,
+      enum: ["admin", "manager", "superAdmin"],
+      default: "admin",
+    },
     adminId: { type: Schema.Types.ObjectId, ref: "User" },
-    status: { type: String, enum: ["pending", "approved", "rejected", "blocked"], default: "approved" },
-    lastSerialNumber: { type: String, default: null },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected", "blocked"],
+      default: "approved",
+    },
     isPending: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
-// ✅ Sparse unique index (allows multiple nulls)
+// Sparse unique index (allows multiple nulls)
 UserSchema.index({ gstin: 1 }, { unique: true, sparse: true });
 
 // Hash password before saving

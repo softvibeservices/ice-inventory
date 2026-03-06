@@ -75,8 +75,6 @@ export default function BillingPage() {
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [hasLoadedEditData, setHasLoadedEditData] = useState(false);
-  // ✅ NEW: Add state for database serial number
-  const [dbSerialNumber, setDbSerialNumber] = useState<string | null>(null);
   // ✅ NEW: Add state for sticky note loaded indicator
   const [loadedFromStickyNote, setLoadedFromStickyNote] = useState(false);
 
@@ -149,58 +147,24 @@ export default function BillingPage() {
 
   const pdfExportRef = useRef<any>(null);
 
-  // ✅ NEW: Helper function to fetch serial from database
-  const fetchSerialFromDatabase = async (uid: string) => {
+  // ✅ NEW: Fetch the next available serial number from the server
+  // This is a pure preview — it does NOT consume a slot.
+  // The real serial is assigned only when POST /api/bills is called.
+  const fetchNextSerialPreview = async (uid: string) => {
     try {
-      const res = await fetch(`/api/profile?userId=${encodeURIComponent(uid)}`);
-      const userData = await res.json();
-
-      if (userData && userData.lastSerialNumber) {
-        return userData.lastSerialNumber;
+      const res = await fetch(
+        `/api/bills/next-serial?userId=${encodeURIComponent(uid)}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nextSerial) {
+          setSerialNo(data.nextSerial);
+          sessionStorage.setItem("billing-serial-preview", data.nextSerial);
+        }
       }
-      return null;
     } catch (err) {
-      console.error("Error fetching serial from DB:", err);
-      return null;
+      console.error("Error fetching next serial preview:", err);
     }
-  };
-
-  // ✅ NEW: Updated generateSerial function
-  const generateSerial = async (uid: string) => {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-
-    // ✅ NEW: Try to get serial from database first
-    const dbSerial = await fetchSerialFromDatabase(uid);
-
-    if (dbSerial && dbSerial.startsWith(month)) {
-      // Database has a serial for this month - use it
-      const lastFourDigits = dbSerial.substring(2);
-      const nextNumber = parseInt(lastFourDigits, 10) + 1;
-
-      if (nextNumber > 9999) {
-        // Reset to 1 if exceeds 9999
-        const newSerial = `${month}0001`;
-        return newSerial;
-      }
-
-      const paddedNext = String(nextNumber).padStart(4, "0");
-      const newSerial = `${month}${paddedNext}`;
-      return newSerial;
-    }
-
-    // ✅ FALLBACK: If no DB serial or month changed, use localStorage
-    const year = now.getFullYear();
-    const key = `serial-${month}-${year}`;
-
-    let last = Number(localStorage.getItem(key) || "0");
-    last = last + 1;
-    if (last > 9999) last = 1;
-
-    const padded = String(last).padStart(4, "0");
-    localStorage.setItem(key, padded);
-
-    return `${month}${padded}`;
   };
 
   // ✅ NEW: Load sticky note data from sessionStorage
@@ -313,14 +277,14 @@ export default function BillingPage() {
 
         // Populate form with bill data
         setSerialNo(billData.serialNumber);
-       
-// billDate now comes back as ISO string e.g. "2025-01-15T00:00:00.000Z"
-// Convert back to DD-MM-YYYY for the form input
-const isoDate = new Date(billData.billDate);
-const dd = String(isoDate.getUTCDate()).padStart(2, "0");
-const mm = String(isoDate.getUTCMonth() + 1).padStart(2, "0");
-const yyyy = isoDate.getUTCFullYear();
-setDate(`${dd}-${mm}-${yyyy}`);
+
+        // billDate now comes back as ISO string e.g. "2025-01-15T00:00:00.000Z"
+        // Convert back to DD-MM-YYYY for the form input
+        const isoDate = new Date(billData.billDate);
+        const dd = String(isoDate.getUTCDate()).padStart(2, "0");
+        const mm = String(isoDate.getUTCMonth() + 1).padStart(2, "0");
+        const yyyy = isoDate.getUTCFullYear();
+        setDate(`${dd}-${mm}-${yyyy}`);
 
         setDiscountPercent(billData.discountPercentage || 0);
         setRemarks(billData.remarks || "");
@@ -440,26 +404,18 @@ setDate(`${dd}-${mm}-${yyyy}`);
     // --- Set Serial & Date (persist per tab using sessionStorage) ---
     const initializeSerial = async () => {
       try {
-        const existingSerial = sessionStorage.getItem("billing-serial");
-        if (existingSerial) {
-          setSerialNo(existingSerial);
+        // Check if we already have a preview serial for this session
+        const cachedPreview = sessionStorage.getItem("billing-serial-preview");
+        if (cachedPreview) {
+          setSerialNo(cachedPreview);
           return;
         }
-
-        // ✅ NEW: Generate serial using database
-        const newSerial = await generateSerial(uid);
-        setSerialNo(newSerial);
-        sessionStorage.setItem("billing-serial", newSerial);
+        // ✅ Fetch serial preview from server (not generated client-side)
+        await fetchNextSerialPreview(uid);
       } catch (err) {
-        // Fallback to old method
-        const now = new Date();
-        const month = String(now.getMonth() + 1).padStart(2, "0");
-        const fallbackSerial = `${month}0001`;
-        setSerialNo(fallbackSerial);
-        sessionStorage.setItem("billing-serial", fallbackSerial);
+        console.error("Error initializing serial:", err);
       }
     };
-
     initializeSerial();
     updateDateToToday();
   }, []);
@@ -552,33 +508,6 @@ setDate(`${dd}-${mm}-${yyyy}`);
     const now = new Date();
     const formatted = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
     setDate(formatted);
-  };
-
-  // ✅ UPDATED: Reset bill form with database serial
-  const resetBillForm = async () => {
-    // reset all fields after saving
-    setBillingCustomer(null);
-    setShippingCustomer(null);
-    setSameAsBilling(false);
-    setCustomerInput("");
-    setShippingInput("");
-    setItems(Array.from({ length: 15 }, blankItem));
-    setDiscountPercent(0);
-    setRemarks("");
-
-    // ✅ NEW: Generate serial using database
-    if (userId) {
-      const newSerial = await generateSerial(userId);
-      setSerialNo(newSerial);
-
-      try {
-        if (typeof window !== "undefined") {
-          sessionStorage.setItem("billing-serial", newSerial);
-        }
-      } catch {
-        // ignore
-      }
-    }
   };
 
   const focusQuantity = (index: number) => {
@@ -858,17 +787,16 @@ setDate(`${dd}-${mm}-${yyyy}`);
         return acc;
       }, {} as Record<string, BillItem[]>);
 
-     // ✅ REPLACE WITH
-// Dynamic sort: known units first in preferred order, unknown units appended alphabetically
-const knownUnitPriority = ["box", "litre", "kg", "gm", "ml", "piece"];
-const orderedUnits = Object.keys(grouped).sort((a, b) => {
-  const ai = knownUnitPriority.indexOf(a);
-  const bi = knownUnitPriority.indexOf(b);
-  if (ai !== -1 && bi !== -1) return ai - bi;   // both known → use priority order
-  if (ai !== -1) return -1;                      // only a is known → a comes first
-  if (bi !== -1) return 1;                       // only b is known → b comes first
-  return a.localeCompare(b);                     // both unknown → alphabetical
-});
+      // Dynamic sort: known units first in preferred order, unknown units appended alphabetically
+      const knownUnitPriority = ["box", "litre", "kg", "gm", "ml", "piece"];
+      const orderedUnits = Object.keys(grouped).sort((a, b) => {
+        const ai = knownUnitPriority.indexOf(a);
+        const bi = knownUnitPriority.indexOf(b);
+        if (ai !== -1 && bi !== -1) return ai - bi;   // both known → use priority order
+        if (ai !== -1) return -1;                      // only a is known → a comes first
+        if (bi !== -1) return 1;                       // only b is known → b comes first
+        return a.localeCompare(b);                     // both unknown → alphabetical
+      });
 
       const sortedFilled = orderedUnits.flatMap((unit) =>
         grouped[unit].sort(
@@ -918,8 +846,6 @@ const orderedUnits = Object.keys(grouped).sort((a, b) => {
 
   // ✅ FINAL FIX: Use nextSerialNumber from backend response
   // This completely eliminates race conditions
-  // Replace your confirmSaveBill function with this version
-
   const confirmSaveBill = async () => {
     if (!validateBeforeSave()) {
       setShowConfirm(false);
@@ -974,10 +900,12 @@ const orderedUnits = Object.keys(grouped).sort((a, b) => {
             contact: shippingCustomer?.contact || "",
           };
 
-      const payload = {
+      // ✅ serialNumber is intentionally NOT sent in POST payload —
+      //    the server generates it atomically from the Counter collection.
+      // For PUT (edits), the existing serial is sent to preserve it.
+      const payload: any = {
         userId,
         orderId,
-        serialNumber: serialNo,
         billDate: date,
         billingCustomer: billingCustomerData,
         shippingCustomer: shippingCustomerData,
@@ -989,12 +917,13 @@ const orderedUnits = Object.keys(grouped).sort((a, b) => {
         remarks,
       };
 
+      if (isEditMode && editingBillId) {
+        payload.billId = editingBillId;
+        payload.serialNumber = serialNo; // preserve existing serial on edit
+      }
+
       const method = isEditMode ? "PUT" : "POST";
       const url = "/api/bills";
-
-      if (isEditMode && editingBillId) {
-        (payload as any).billId = editingBillId;
-      }
 
       const res = await fetch(url, {
         method,
@@ -1029,12 +958,11 @@ const orderedUnits = Object.keys(grouped).sort((a, b) => {
         // The backend has ALREADY calculated and returned the correct next serial
         if (data.nextSerialNumber) {
           setSerialNo(data.nextSerialNumber);
-          sessionStorage.setItem("billing-serial", data.nextSerialNumber);
+          sessionStorage.setItem("billing-serial-preview", data.nextSerialNumber);
         } else {
-          // Fallback: generate serial (shouldn't normally happen)
-          await resetBillForm();
+          // Fallback: re-fetch preview from server
+          await fetchNextSerialPreview(userId);
         }
-
         // Reset form fields (but serial is already set above)
         setBillingCustomer(null);
         setShippingCustomer(null);
@@ -1044,6 +972,7 @@ const orderedUnits = Object.keys(grouped).sort((a, b) => {
         setItems(Array.from({ length: 15 }, blankItem));
         setDiscountPercent(0);
         setRemarks("");
+        updateDateToToday();
       } else {
         // This was an EDIT - clear form WITHOUT generating new serial
         setBillingCustomer(null);
@@ -1054,11 +983,9 @@ const orderedUnits = Object.keys(grouped).sort((a, b) => {
         setItems(Array.from({ length: 15 }, blankItem));
         setDiscountPercent(0);
         setRemarks("");
-
-        const currentSerial = sessionStorage.getItem("billing-serial");
-        if (currentSerial) {
-          setSerialNo(currentSerial);
-        }
+        const cachedPreview = sessionStorage.getItem("billing-serial-preview");
+        if (cachedPreview) setSerialNo(cachedPreview);
+        updateDateToToday();
       }
     } catch (err: any) {
       console.error(err);
@@ -1398,7 +1325,8 @@ const orderedUnits = Object.keys(grouped).sort((a, b) => {
           {/* SERIAL + DATE */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 text-xs sm:text-sm">
             <div>
-              <strong>Serial No:</strong> {serialNo}
+              <strong>Serial No:</strong>{" "}
+              {serialNo || <span className="text-gray-400 italic">Loading...</span>}
             </div>
             <div>
               <strong>Date:</strong> {date}

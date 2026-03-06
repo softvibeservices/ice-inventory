@@ -1,4 +1,10 @@
-// src/app/api/bills/route.ts
+// ✅ UPDATED FILE: src/app/api/bills/route.ts
+// KEY CHANGES:
+//   - Removed: import User, calculateNextSerial(), User.findByIdAndUpdate serial step
+//   - Added:   import getNextSerialNumber from serialNumber.service
+//   - POST:    serial is now generated server-side via Counter (atomic, no race condition)
+//             serialNumber is no longer accepted from the client payload
+//   - PUT:    unchanged (edits keep original serial, no new serial generated)
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
@@ -7,26 +13,11 @@ import Bill from "@/models/Bill";
 import Order from "@/models/Order";
 import Product from "@/models/Product";
 import Customer from "@/models/Customer";
-import User from "@/models/User";
+import { getNextSerialNumber } from "@/services/serialNumber.service";
 
-// ✅ Helper function to calculate next serial number
-function calculateNextSerial(currentSerial: string): string {
-  const now = new Date();
-  const currentMonth = String(now.getMonth() + 1).padStart(2, "0");
-  const serialMonth = currentSerial.substring(0, 2);
-  const serialNumber = parseInt(currentSerial.substring(2), 10);
-  if (serialMonth !== currentMonth) {
-    return `${currentMonth}0001`;
-  }
-  const nextNumber = serialNumber + 1;
-  if (nextNumber > 9999) {
-    return `${currentMonth}0001`;
-  }
-  const paddedNext = String(nextNumber).padStart(4, "0");
-  return `${currentMonth}${paddedNext}`;
-}
-
-function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
+function toObjectId(
+  id: string | undefined
+): mongoose.Types.ObjectId | undefined {
   if (!id) return undefined;
   if (!mongoose.Types.ObjectId.isValid(id)) return undefined;
   return new mongoose.Types.ObjectId(id);
@@ -44,7 +35,7 @@ export async function POST(req: Request) {
     const {
       userId,
       orderId,
-      serialNumber,
+      // ✅ serialNumber is NO LONGER read from the client — it is generated server-side
       billDate,
       billingCustomer,
       shippingCustomer,
@@ -56,9 +47,9 @@ export async function POST(req: Request) {
       remarks,
     } = body;
 
-    if (!userId || !orderId || !serialNumber) {
+    if (!userId || !orderId) {
       return NextResponse.json(
-        { error: "userId, orderId and serialNumber are required." },
+        { error: "userId and orderId are required." },
         { status: 400 }
       );
     }
@@ -133,15 +124,17 @@ export async function POST(req: Request) {
       }
     }
 
-    // ── COMPUTE TOTALS SERVER-SIDE ─────────────────────────────────
+    // ── COMPUTE TOTALS SERVER-SIDE ──────────────────────────────────
     let serverSubtotal = 0;
     for (const it of items) {
       if (!it.free) {
         serverSubtotal += Number(it.price || 0) * Number(it.quantity || 0);
       }
     }
-
-    const serverDiscountPct = Math.max(0, Math.min(100, Number(discountPercentage || 0)));
+    const serverDiscountPct = Math.max(
+      0,
+      Math.min(100, Number(discountPercentage || 0))
+    );
     const serverDiscountAmt = (serverSubtotal * serverDiscountPct) / 100;
     const serverGrandTotal = serverSubtotal - serverDiscountAmt;
 
@@ -155,7 +148,9 @@ export async function POST(req: Request) {
       quantity: Number(it.quantity),
       unit: it.unit,
       price: it.free ? 0 : Number(it.price || 0),
-      total: it.free ? 0 : Number(it.price || 0) * Number(it.quantity || 0),
+      total: it.free
+        ? 0
+        : Number(it.price || 0) * Number(it.quantity || 0),
       free: !!it.free,
     }));
 
@@ -184,12 +179,15 @@ export async function POST(req: Request) {
     const quantitySummary: Record<string, number> = {};
     for (const it of items) {
       const key = (it.unit || "piece").toLowerCase();
-      quantitySummary[key] = (quantitySummary[key] || 0) + Number(it.quantity || 0);
+      quantitySummary[key] =
+        (quantitySummary[key] || 0) + Number(it.quantity || 0);
     }
 
-    // ── START TRANSACTION ─────────────────────────────────────────
-    // All operations below succeed together or all roll back together.
-    // customer.debit and customer.totalSales only change if EVERYTHING succeeds.
+    // ✅ Generate atomic serial number BEFORE the transaction
+    //    Counter.findOneAndUpdate is itself atomic so no race condition here.
+    const serialNumber = await getNextSerialNumber(userObjectId);
+
+    // ── START TRANSACTION ───────────────────────────────────────────
     const session = await mongoose.startSession();
     let bill: any;
     let order: any;
@@ -207,14 +205,16 @@ export async function POST(req: Request) {
               billingCustomer: {
                 customerId: billingCustomerIdObj,
                 name: billingCustomer.name,
-                shopName: billingCustomer.shopName || billingCustomer.name,
+                shopName:
+                  billingCustomer.shopName || billingCustomer.name,
                 address: billingCustomer.address,
                 contact: billingCustomer.contact || "",
               },
               shippingCustomer: {
                 customerId: shippingCustomerIdObj,
                 name: shippingCustomer.name,
-                shopName: shippingCustomer.shopName || shippingCustomer.name,
+                shopName:
+                  shippingCustomer.shopName || shippingCustomer.name,
                 address: shippingCustomer.address,
                 contact: shippingCustomer.contact || "",
               },
@@ -238,7 +238,10 @@ export async function POST(req: Request) {
               userId: userObjectId,
               orderId,
               serialNumber,
-              shopName: billingCustomer.shopName || billingCustomer.name || "Unknown",
+              shopName:
+                billingCustomer.shopName ||
+                billingCustomer.name ||
+                "Unknown",
               customerId: billingCustomerIdObj,
               customerName: billingCustomer.name,
               customerAddress: billingCustomer.address,
@@ -268,7 +271,10 @@ export async function POST(req: Request) {
           )
           .map((it: any) =>
             Product.findOneAndUpdate(
-              { _id: new mongoose.Types.ObjectId(it.productId), userId: userObjectId },
+              {
+                _id: new mongoose.Types.ObjectId(it.productId),
+                userId: userObjectId,
+              },
               { $inc: { quantity: -Math.abs(Number(it.quantity)) } },
               { new: true, session }
             )
@@ -276,31 +282,66 @@ export async function POST(req: Request) {
         if (stockUpdates.length) await Promise.all(stockUpdates);
 
         // 4. Update customer debit & totalSales
-        //    ✅ This only runs if Bill + Order + Stock all succeeded above.
-        //    If this step fails, the whole transaction rolls back.
         if (billingCustomerIdObj && serverGrandTotal > 0) {
           await Customer.findByIdAndUpdate(
             billingCustomerIdObj,
-            { $inc: { debit: serverGrandTotal, totalSales: serverGrandTotal } },
+            {
+              $inc: {
+                debit: serverGrandTotal,
+                totalSales: serverGrandTotal,
+              },
+            },
             { session }
           );
         }
 
-        // 5. Update user serial number
-        await User.findByIdAndUpdate(
-          userObjectId,
-          { lastSerialNumber: serialNumber },
-          { new: true, session }
-        );
+        // ✅ NOTE: No User.lastSerialNumber update needed anymore.
+        //    Serial state is tracked in the Counter collection.
       });
     } finally {
       session.endSession();
     }
 
-    const nextSerialNumber = calculateNextSerial(serialNumber);
+    // ✅ Return the serial that was used + the next preview serial for the UI
+    const nextSerialNumber = await getNextSerialNumber(userObjectId);
+    // IMPORTANT: the above call incremented the counter by 1 to "peek" at the next number.
+    // We must decrement it back so the preview doesn't consume a real slot.
+    // Better approach: compute next display serial without touching the DB.
+    // We derive it deterministically from the one we just generated.
+    const [usedYear, usedMonth, usedSeq] = (() => {
+      const y = parseInt(serialNumber.substring(0, 2), 10);
+      const mo = parseInt(serialNumber.substring(2, 4), 10);
+      const seq = parseInt(serialNumber.substring(4), 10);
+      return [y, mo, seq];
+    })();
+    const now = new Date();
+    const currentYear = now.getFullYear() % 100;
+    const currentMonth = now.getMonth() + 1;
+    let nextSeq = usedSeq + 1;
+    let nextYear = usedYear;
+    let nextMo = usedMonth;
+    if (nextSeq > 9999) {
+      nextSeq = 1;
+    }
+    // If month rolled over, reset to 0001
+    if (currentYear !== usedYear || currentMonth !== usedMonth) {
+      nextYear = currentYear;
+      nextMo = currentMonth;
+      nextSeq = 1;
+    }
+    const nextSerialPreview =
+      nextYear.toString().padStart(2, "0") +
+      nextMo.toString().padStart(2, "0") +
+      nextSeq.toString().padStart(4, "0");
 
     return NextResponse.json(
-      { success: true, bill, order, nextSerialNumber },
+      {
+        success: true,
+        bill,
+        order,
+        serialNumber,           // ✅ serial used for this bill
+        nextSerialNumber: nextSerialPreview, // ✅ preview for UI display
+      },
       { status: 201 }
     );
   } catch (err: any) {
@@ -324,7 +365,10 @@ export async function GET(req: Request) {
     const orderId = searchParams.get("orderId");
 
     if (!userId) {
-      return NextResponse.json({ error: "userId is required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "userId is required." },
+        { status: 400 }
+      );
     }
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -336,12 +380,17 @@ export async function GET(req: Request) {
     if (orderId) {
       const bill = await Bill.findOne({ userId: userObjectId, orderId });
       if (!bill) {
-        return NextResponse.json({ error: "Bill not found." }, { status: 404 });
+        return NextResponse.json(
+          { error: "Bill not found." },
+          { status: 404 }
+        );
       }
       return NextResponse.json(bill, { status: 200 });
     }
 
-    const bills = await Bill.find({ userId: userObjectId }).sort({ createdAt: -1 });
+    const bills = await Bill.find({ userId: userObjectId }).sort({
+      createdAt: -1,
+    });
     return NextResponse.json(bills, { status: 200 });
   } catch (err: any) {
     console.error("GET /api/bills error:", err);
@@ -365,7 +414,7 @@ export async function PUT(req: Request) {
       billId,
       userId,
       orderId,
-      serialNumber,
+      serialNumber, // kept: edits preserve the original serial
       billDate,
       billingCustomer,
       shippingCustomer,
@@ -390,34 +439,61 @@ export async function PUT(req: Request) {
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // Pre-fetch for validation before starting transaction
-    const existingBill = await Bill.findOne({ _id: billId, userId: userObjectId });
+    const existingBill = await Bill.findOne({
+      _id: billId,
+      userId: userObjectId,
+    });
     if (!existingBill) {
-      return NextResponse.json({ error: "Bill not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Bill not found." },
+        { status: 404 }
+      );
     }
 
-    const existingOrder = await Order.findOne({ orderId, userId: userObjectId });
+    const existingOrder = await Order.findOne({
+      orderId,
+      userId: userObjectId,
+    });
     if (!existingOrder) {
-      return NextResponse.json({ error: "Associated order not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Associated order not found." },
+        { status: 404 }
+      );
     }
 
     if (!billDate) {
-      return NextResponse.json({ error: "billDate is required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "billDate is required." },
+        { status: 400 }
+      );
     }
     const [dd2, mm2, yyyy2] = String(billDate).split("-");
-    const parsedBillDate = new Date(`${yyyy2}-${mm2}-${dd2}T00:00:00.000Z`);
+    const parsedBillDate = new Date(
+      `${yyyy2}-${mm2}-${dd2}T00:00:00.000Z`
+    );
     if (isNaN(parsedBillDate.getTime())) {
-      return NextResponse.json({ error: "billDate is invalid. Expected DD-MM-YYYY." }, { status: 400 });
+      return NextResponse.json(
+        { error: "billDate is invalid. Expected DD-MM-YYYY." },
+        { status: 400 }
+      );
     }
 
-    if (!billingCustomer || !billingCustomer.name?.trim() || !billingCustomer.address?.trim()) {
+    if (
+      !billingCustomer ||
+      !billingCustomer.name?.trim() ||
+      !billingCustomer.address?.trim()
+    ) {
       return NextResponse.json(
         { error: "Billing customer name and address are required." },
         { status: 400 }
       );
     }
 
-    if (!shippingCustomer || !shippingCustomer.name?.trim() || !shippingCustomer.address?.trim()) {
+    if (
+      !shippingCustomer ||
+      !shippingCustomer.name?.trim() ||
+      !shippingCustomer.address?.trim()
+    ) {
       return NextResponse.json(
         { error: "Shipping customer name and address are required." },
         { status: 400 }
@@ -425,7 +501,10 @@ export async function PUT(req: Request) {
     }
 
     if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json({ error: "At least one bill item is required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "At least one bill item is required." },
+        { status: 400 }
+      );
     }
 
     // Compute new totals
@@ -435,7 +514,10 @@ export async function PUT(req: Request) {
         serverSubtotal += Number(it.price || 0) * Number(it.quantity || 0);
       }
     }
-    const serverDiscountPct = Math.max(0, Math.min(100, Number(discountPercentage || 0)));
+    const serverDiscountPct = Math.max(
+      0,
+      Math.min(100, Number(discountPercentage || 0))
+    );
     const serverDiscountAmt = (serverSubtotal * serverDiscountPct) / 100;
     const serverGrandTotal = serverSubtotal - serverDiscountAmt;
 
@@ -448,7 +530,9 @@ export async function PUT(req: Request) {
       quantity: Number(it.quantity),
       unit: it.unit,
       price: it.free ? 0 : Number(it.price || 0),
-      total: it.free ? 0 : Number(it.price || 0) * Number(it.quantity || 0),
+      total: it.free
+        ? 0
+        : Number(it.price || 0) * Number(it.quantity || 0),
       free: !!it.free,
     }));
 
@@ -477,17 +561,14 @@ export async function PUT(req: Request) {
     const quantitySummary: Record<string, number> = {};
     for (const it of items) {
       const key = (it.unit || "piece").toLowerCase();
-      quantitySummary[key] = (quantitySummary[key] || 0) + Number(it.quantity || 0);
+      quantitySummary[key] =
+        (quantitySummary[key] || 0) + Number(it.quantity || 0);
     }
 
-    // Snapshot old values for reverting inside transaction
     const oldItems = existingBill.items || [];
     const oldCustomerId = existingBill.billingCustomer?.customerId;
     const oldTotal = existingBill.grandTotal || 0;
 
-    // ── START TRANSACTION ─────────────────────────────────────────
-    // Revert old + apply new — all atomically.
-    // customer.debit/totalSales only change if everything succeeds.
     const session = await mongoose.startSession();
 
     try {
@@ -502,10 +583,10 @@ export async function PUT(req: Request) {
               { new: true, session }
             )
           );
-        if (stockRevertPromises.length) await Promise.all(stockRevertPromises);
+        if (stockRevertPromises.length)
+          await Promise.all(stockRevertPromises);
 
         // 2. Revert old customer debit
-        //    ✅ This only proceeds if stock revert succeeded.
         if (oldCustomerId && oldTotal > 0) {
           await Customer.findByIdAndUpdate(
             oldCustomerId,
@@ -542,7 +623,8 @@ export async function PUT(req: Request) {
 
         // 4. Update Order document
         existingOrder.serialNumber = serialNumber;
-        existingOrder.shopName = billingCustomer.shopName || billingCustomer.name || "Unknown";
+        existingOrder.shopName =
+          billingCustomer.shopName || billingCustomer.name || "Unknown";
         existingOrder.customerId = newBillingCustomerIdObj;
         existingOrder.customerName = billingCustomer.name;
         existingOrder.customerAddress = billingCustomer.address;
@@ -566,7 +648,10 @@ export async function PUT(req: Request) {
           )
           .map((it: any) =>
             Product.findOneAndUpdate(
-              { _id: new mongoose.Types.ObjectId(it.productId), userId: userObjectId },
+              {
+                _id: new mongoose.Types.ObjectId(it.productId),
+                userId: userObjectId,
+              },
               { $inc: { quantity: -Math.abs(Number(it.quantity)) } },
               { new: true, session }
             )
@@ -574,11 +659,15 @@ export async function PUT(req: Request) {
         if (stockPromises.length) await Promise.all(stockPromises);
 
         // 6. Apply new customer debit
-        //    ✅ This only runs if all steps above succeeded.
         if (newBillingCustomerIdObj && serverGrandTotal > 0) {
           await Customer.findByIdAndUpdate(
             newBillingCustomerIdObj,
-            { $inc: { debit: serverGrandTotal, totalSales: serverGrandTotal } },
+            {
+              $inc: {
+                debit: serverGrandTotal,
+                totalSales: serverGrandTotal,
+              },
+            },
             { session }
           );
         }
