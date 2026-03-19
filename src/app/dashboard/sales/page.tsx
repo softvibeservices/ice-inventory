@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import SalesInsights from "./SalesInsights";
+import ProductSalesTab from "./ProductSalesTab";
 
 import {
   IndianRupee,
@@ -19,8 +20,13 @@ import {
   AlertCircle,
   LayoutGrid,
   LineChart,
+  Package,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────────────────────
 
 type QuantityTotals = Record<string, number>;
 
@@ -106,7 +112,12 @@ type CustomerSortMode =
   | "name-desc"
   | "sales-desc";
 
-type ViewMode = "overview" | "insights";
+// ✅ Added "products" as third tab
+type ViewMode = "overview" | "insights" | "products";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
 
 function formatINR(v: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -133,27 +144,6 @@ function toDateInputValue(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function formatQuantity(value: number, unit: string): string {
-  const roundedValue = Math.round(value);
-
-  const unitFormatMap: Record<string, string> = {
-    ml: "ml",
-    l: "L",
-    litre: "L",
-    litres: "L",
-    gm: "gm",
-    g: "gm",
-    kg: "kg",
-    piece: "pc",
-    pieces: "pc",
-    box: "box",
-    boxes: "box",
-  };
-
-  const formattedUnit = unitFormatMap[unit.toLowerCase()] || unit;
-  return `${roundedValue} ${formattedUnit}`;
-}
-
 function getUnitDisplayName(unit: string): string {
   const displayMap: Record<string, string> = {
     l: "Litre",
@@ -175,6 +165,10 @@ function getUnitDisplayName(unit: string): string {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function SalesPage() {
   const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
@@ -190,26 +184,25 @@ export default function SalesPage() {
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
 
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
-    null
-  );
-  const [customerLedger, setCustomerLedger] =
-    useState<CustomerLedgerResponse | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [customerLedger, setCustomerLedger] = useState<CustomerLedgerResponse | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
 
-  const [ledgerSortMode, setLedgerSortMode] =
-    useState<LedgerSortMode>("date-desc");
-  const [customerSortMode, setCustomerSortMode] =
-    useState<CustomerSortMode>("net-desc");
+  const [ledgerSortMode, setLedgerSortMode] = useState<LedgerSortMode>("date-desc");
+  const [customerSortMode, setCustomerSortMode] = useState<CustomerSortMode>("net-desc");
 
-  // ✅ NEW: View mode state (overview or insights)
+  // ✅ View mode — now has three tabs
   const [viewMode, setViewMode] = useState<ViewMode>("overview");
+
+  // ─── HANDLERS ───────────────────────────────────────────────────────────────
 
   const handleClearFilters = () => {
     setRangePreset("all");
     setFrom("");
     setTo("");
   };
+
+  // ─── AUTH CHECK ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
@@ -222,6 +215,8 @@ export default function SalesPage() {
       router.push("/dashboard");
     }
   }, [router]);
+
+  // ─── LOAD USER ID ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -248,16 +243,15 @@ export default function SalesPage() {
     }
   }, []);
 
+  // ─── DATE RANGE PRESET → from/to ────────────────────────────────────────────
+
   useEffect(() => {
     if (rangePreset === "all") {
       setFrom("");
       setTo("");
       return;
     }
-
-    if (rangePreset === "custom") {
-      return;
-    }
+    if (rangePreset === "custom") return;
 
     const now = new Date();
     let fromDate = new Date(now);
@@ -293,6 +287,8 @@ export default function SalesPage() {
     setTo(toDateInputValue(toDate));
   }, [rangePreset]);
 
+  // ─── FETCH SALES SUMMARY ────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!userId) return;
 
@@ -319,6 +315,8 @@ export default function SalesPage() {
       })
       .finally(() => setSummaryLoading(false));
   }, [userId, from, to]);
+
+  // ─── FETCH CUSTOMERS ────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!userId) return;
@@ -353,6 +351,8 @@ export default function SalesPage() {
       .finally(() => setCustomersLoading(false));
   }, [userId, selectedCustomerId]);
 
+  // ─── FETCH CUSTOMER LEDGER ──────────────────────────────────────────────────
+
   useEffect(() => {
     if (!userId || !selectedCustomerId) return;
 
@@ -382,9 +382,10 @@ export default function SalesPage() {
       .finally(() => setLedgerLoading(false));
   }, [userId, selectedCustomerId, from, to]);
 
+  // ─── DERIVED / SORTED DATA ──────────────────────────────────────────────────
+
   const sortedLedger = useMemo(() => {
     if (!customerLedger) return [];
-
     const list = [...customerLedger.ledger];
 
     return list.sort((a, b) => {
@@ -429,32 +430,16 @@ export default function SalesPage() {
     });
   }, [customers, customerSortMode]);
 
-  const sortedUnits = useMemo(() => {
-    if (!summary?.quantities) return [];
-
-    const units = Object.keys(summary.quantities);
-    const priorityOrder = ["box", "kg", "litre", "l", "piece", "gm", "ml"];
-
-    return units.sort((a, b) => {
-      const aIndex = priorityOrder.indexOf(a.toLowerCase());
-      const bIndex = priorityOrder.indexOf(b.toLowerCase());
-
-      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-      if (aIndex !== -1) return -1;
-      if (bIndex !== -1) return 1;
-      return a.localeCompare(b);
-    });
-  }, [summary?.quantities]);
-
   const dailyDisplayUnits = useMemo(() => {
     if (!summary?.quantities) return [];
-
     const entries = Object.entries(summary.quantities);
     return entries
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([unit]) => unit);
   }, [summary?.quantities]);
+
+  // ─── PRESET BUTTONS ─────────────────────────────────────────────────────────
 
   const presetButtons: { key: RangePreset; label: string }[] = [
     { key: "today", label: "Today" },
@@ -467,12 +452,17 @@ export default function SalesPage() {
     { key: "all", label: "All time" },
   ];
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <DashboardNavbar />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 md:px-6 py-6 md:py-8 space-y-6">
-        {/* Header + Filters */}
+
+        {/* ── PAGE HEADER + DATE FILTER ─────────────────────────────────── */}
         <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-blue-700 flex items-center gap-2">
@@ -480,7 +470,7 @@ export default function SalesPage() {
               Sales Analytics
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Track total sales, payments, credits/debits and customer khata.
+              Track total sales, payments, credits/debits, product sold, and customer khata.
             </p>
           </div>
 
@@ -536,12 +526,13 @@ export default function SalesPage() {
           </div>
         </section>
 
-        {/* ✅ NEW: View Mode Tabs */}
+        {/* ── VIEW MODE TABS ────────────────────────────────────────────── */}
         <section className="flex items-center justify-center">
-          <div className="inline-flex bg-white rounded-xl shadow-sm border border-gray-200 p-1">
+          <div className="inline-flex bg-white rounded-xl shadow-sm border border-gray-200 p-1 gap-1">
+            {/* Overview */}
             <button
               onClick={() => setViewMode("overview")}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                 viewMode === "overview"
                   ? "bg-blue-600 text-white shadow-md"
                   : "text-gray-600 hover:bg-gray-50"
@@ -550,9 +541,24 @@ export default function SalesPage() {
               <LayoutGrid className="w-4 h-4" />
               Overview
             </button>
+
+            {/* ✅ Product Sales — replaces old quantity sold */}
+            <button
+              onClick={() => setViewMode("products")}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                viewMode === "products"
+                  ? "bg-emerald-600 text-white shadow-md"
+                  : "text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              Product Sales
+            </button>
+
+            {/* Insights */}
             <button
               onClick={() => setViewMode("insights")}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                 viewMode === "insights"
                   ? "bg-blue-600 text-white shadow-md"
                   : "text-gray-600 hover:bg-gray-50"
@@ -564,7 +570,7 @@ export default function SalesPage() {
           </div>
         </section>
 
-        {/* ✅ CRITICAL: Order Counting Rules Indicator */}
+        {/* ── COUNTING RULES BANNER ─────────────────────────────────────── */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
           <div className="text-xs text-blue-800">
@@ -582,15 +588,24 @@ export default function SalesPage() {
                 <Clock className="w-3 h-3" />
                 Pending/Unsettled orders excluded
               </span>
+              {viewMode === "products" && (
+                <span className="flex items-center gap-1 text-emerald-700 font-semibold">
+                  <Package className="w-3 h-3" />
+                  Product counted sold only when delivery = Delivered
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {/* ✅ CONDITIONAL RENDERING: Overview or Insights */}
-        {viewMode === "overview" ? (
+        {/* ── CONDITIONAL CONTENT ──────────────────────────────────────── */}
+
+        {/* ════════════════ OVERVIEW TAB ════════════════ */}
+        {viewMode === "overview" && (
           <>
             {/* Top stat cards */}
             <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Total Sales */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-500 uppercase">
@@ -607,10 +622,11 @@ export default function SalesPage() {
                 </p>
                 <span className="text-xs text-gray-400 flex items-center gap-1">
                   <CheckCircle className="w-3 h-3" />
-                  Delivered & settled only
+                  Delivered &amp; settled only
                 </span>
               </div>
 
+              {/* Total Orders */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-500 uppercase">
@@ -626,10 +642,11 @@ export default function SalesPage() {
                     : "--"}
                 </p>
                 <span className="text-xs text-gray-400">
-                  Delivered & settled
+                  Delivered &amp; settled
                 </span>
               </div>
 
+              {/* Business Receivables */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-500 uppercase">
@@ -656,6 +673,7 @@ export default function SalesPage() {
                 </p>
               </div>
 
+              {/* Payment Split */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-1">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-gray-500 uppercase">
@@ -665,17 +683,13 @@ export default function SalesPage() {
                 <p className="text-xs text-gray-600">
                   Cash:{" "}
                   <span className="font-semibold text-gray-800">
-                    {summary
-                      ? formatINR(summary.paymentBreakdown.cash)
-                      : "--"}
+                    {summary ? formatINR(summary.paymentBreakdown.cash) : "--"}
                   </span>
                 </p>
                 <p className="text-xs text-gray-600">
                   Bank/UPI:{" "}
                   <span className="font-semibold text-gray-800">
-                    {summary
-                      ? formatINR(summary.paymentBreakdown.bank)
-                      : "--"}
+                    {summary ? formatINR(summary.paymentBreakdown.bank) : "--"}
                   </span>
                 </p>
                 <p className="text-xs text-gray-600">
@@ -689,132 +703,78 @@ export default function SalesPage() {
               </div>
             </section>
 
-            {/* Quantities + Daily timeline */}
-            <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 xl:col-span-1">
-                <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-blue-500" />
-                  Total Quantities Sold
-                </h2>
-                <div className="grid grid-cols-2 gap-3 text-sm max-h-80 overflow-y-auto">
-                  {summaryLoading ? (
-                    <div className="col-span-2 text-center py-4 text-gray-400">
-                      Loading...
-                    </div>
-                  ) : sortedUnits.length === 0 ? (
-                    <div className="col-span-2 text-center py-4 text-gray-400 text-xs">
-                      No quantities to display
-                    </div>
-                  ) : (
-                    sortedUnits.map((unit) => {
-                      const value = summary?.quantities[unit] || 0;
-                      return (
-                        <div
+            {/* Daily timeline (no quantity-sold grid — that's moved to Product Sales tab) */}
+            <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
+              <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-purple-500" />
+                Daily Timeline (Latest First)
+              </h2>
+              <div className="overflow-auto max-h-72 text-xs">
+                <table className="min-w-full text-left">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold text-gray-500">Date</th>
+                      <th className="px-3 py-2 font-semibold text-gray-500">Orders</th>
+                      <th className="px-3 py-2 font-semibold text-gray-500">Sales</th>
+                      <th className="px-3 py-2 font-semibold text-gray-500">Cash</th>
+                      <th className="px-3 py-2 font-semibold text-gray-500">Bank/UPI</th>
+                      {dailyDisplayUnits.map((unit) => (
+                        <th
                           key={unit}
-                          className="flex flex-col border border-gray-100 rounded-lg px-3 py-2 bg-gray-50/60"
+                          className="px-3 py-2 font-semibold text-gray-500 capitalize"
                         >
-                          <span className="text-xs text-gray-500 capitalize">
-                            {getUnitDisplayName(unit)}
-                          </span>
-                          <span className="text-base font-semibold text-gray-800">
-                            {formatQuantity(value, unit)}
-                          </span>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 xl:col-span-2 overflow-hidden">
-                <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-purple-500" />
-                  Daily Timeline (Latest First)
-                </h2>
-                <div className="overflow-auto max-h-72 text-xs">
-                  <table className="min-w-full text-left">
-                    <thead className="bg-gray-50 sticky top-0 z-10">
+                          {getUnitDisplayName(unit)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summaryLoading && (
                       <tr>
-                        <th className="px-3 py-2 font-semibold text-gray-500">
-                          Date
-                        </th>
-                        <th className="px-3 py-2 font-semibold text-gray-500">
-                          Orders
-                        </th>
-                        <th className="px-3 py-2 font-semibold text-gray-500">
-                          Sales
-                        </th>
-                        <th className="px-3 py-2 font-semibold text-gray-500">
-                          Cash
-                        </th>
-                        <th className="px-3 py-2 font-semibold text-gray-500">
-                          Bank/UPI
-                        </th>
-                        {dailyDisplayUnits.map((unit) => (
-                          <th
-                            key={unit}
-                            className="px-3 py-2 font-semibold text-gray-500 capitalize"
-                          >
-                            {getUnitDisplayName(unit)}
-                          </th>
-                        ))}
+                        <td
+                          colSpan={5 + dailyDisplayUnits.length}
+                          className="px-3 py-4 text-center text-gray-400"
+                        >
+                          Loading...
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {summaryLoading && (
-                        <tr>
-                          <td
-                            colSpan={5 + dailyDisplayUnits.length}
-                            className="px-3 py-4 text-center text-gray-400"
-                          >
-                            Loading...
+                    )}
+                    {!summaryLoading && summary && summary.daily.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5 + dailyDisplayUnits.length}
+                          className="px-3 py-4 text-center text-gray-400"
+                        >
+                          No data in this range
+                        </td>
+                      </tr>
+                    )}
+                    {!summaryLoading &&
+                      summary &&
+                      summary.daily.map((d) => (
+                        <tr key={d.date} className="border-t text-gray-700">
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {formatDate(d.date)}
                           </td>
+                          <td className="px-3 py-2">{d.totalOrders}</td>
+                          <td className="px-3 py-2">{formatINR(d.totalSales)}</td>
+                          <td className="px-3 py-2">{formatINR(d.cashReceived)}</td>
+                          <td className="px-3 py-2">{formatINR(d.bankReceived)}</td>
+                          {dailyDisplayUnits.map((unit) => (
+                            <td key={unit} className="px-3 py-2">
+                              {Math.round(d.quantities[unit] || 0)}
+                            </td>
+                          ))}
                         </tr>
-                      )}
-                      {!summaryLoading &&
-                        summary &&
-                        summary.daily.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan={5 + dailyDisplayUnits.length}
-                              className="px-3 py-4 text-center text-gray-400"
-                            >
-                              No data in this range
-                            </td>
-                          </tr>
-                        )}
-                      {!summaryLoading &&
-                        summary &&
-                        summary.daily.map((d) => (
-                          <tr key={d.date} className="border-t text-gray-700">
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              {formatDate(d.date)}
-                            </td>
-                            <td className="px-3 py-2">{d.totalOrders}</td>
-                            <td className="px-3 py-2">
-                              {formatINR(d.totalSales)}
-                            </td>
-                            <td className="px-3 py-2">
-                              {formatINR(d.cashReceived)}
-                            </td>
-                            <td className="px-3 py-2">
-                              {formatINR(d.bankReceived)}
-                            </td>
-                            {dailyDisplayUnits.map((unit) => (
-                              <td key={unit} className="px-3 py-2">
-                                {Math.round(d.quantities[unit] || 0)}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
+                      ))}
+                  </tbody>
+                </table>
               </div>
             </section>
 
             {/* Customer Khata Section */}
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Customer List */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 lg:col-span-1">
                 <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Users className="w-4 h-4 text-blue-500" />
@@ -881,6 +841,7 @@ export default function SalesPage() {
                 </div>
               </div>
 
+              {/* Customer Ledger */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 lg:col-span-2">
                 <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <IndianRupee className="w-4 h-4 text-green-500" />
@@ -899,6 +860,7 @@ export default function SalesPage() {
 
                 {selectedCustomerId && !ledgerLoading && customerLedger && (
                   <div className="space-y-3">
+                    {/* Customer summary header */}
                     <div className="flex flex-wrap justify-between gap-2 text-xs bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
                       <div>
                         <p className="font-semibold text-gray-800">
@@ -936,6 +898,7 @@ export default function SalesPage() {
                       </div>
                     </div>
 
+                    {/* Sort */}
                     <div className="flex justify-end mb-2">
                       <select
                         value={ledgerSortMode}
@@ -952,16 +915,13 @@ export default function SalesPage() {
                       </select>
                     </div>
 
+                    {/* Ledger table */}
                     <div className="overflow-auto max-h-80 text-xs border rounded-lg">
                       <table className="min-w-full text-left">
                         <thead className="bg-gray-50 sticky top-0 z-10">
                           <tr>
-                            <th className="px-3 py-2 font-semibold text-gray-500">
-                              Date
-                            </th>
-                            <th className="px-3 py-2 font-semibold text-gray-500">
-                              Type
-                            </th>
+                            <th className="px-3 py-2 font-semibold text-gray-500">Date</th>
+                            <th className="px-3 py-2 font-semibold text-gray-500">Type</th>
                             <th className="px-3 py-2 font-semibold text-gray-500">
                               Note / Order
                             </th>
@@ -1034,8 +994,19 @@ export default function SalesPage() {
               </div>
             </section>
           </>
-        ) : (
-          /* ✅ INSIGHTS TAB */
+        )}
+
+        {/* ════════════════ PRODUCT SALES TAB ════════════════ */}
+        {viewMode === "products" && userId && (
+          <ProductSalesTab
+            userId={userId}
+            from={from}
+            to={to}
+          />
+        )}
+
+        {/* ════════════════ INSIGHTS TAB ════════════════ */}
+        {viewMode === "insights" && (
           <SalesInsights
             daily={summary?.daily || []}
             quantities={summary?.quantities || {}}
@@ -1051,7 +1022,10 @@ export default function SalesPage() {
           />
         )}
 
-        {summaryError && <p className="text-xs text-red-500">{summaryError}</p>}
+        {/* Error message */}
+        {summaryError && (
+          <p className="text-xs text-red-500">{summaryError}</p>
+        )}
       </main>
 
       <Footer />

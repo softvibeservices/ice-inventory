@@ -243,6 +243,54 @@ export async function PATCH(req: NextRequest) {
       }
 
       await order.save();
+      // ✅ Write ProductSalesLog when delivery is completed
+if (deliveryStatus === "Delivered") {
+  try {
+    const ProductSalesLog = (await import("@/models/ProductSalesLog")).default;
+    
+    // idempotent — skip if already logged for this order
+    const alreadyLogged = await ProductSalesLog.findOne({ orderId: order._id });
+    if (!alreadyLogged) {
+      // Enrich items with product details (category, unit)
+      const allProductIds = [
+        ...(order.items || []).map((i: any) => i.productId),
+        ...(order.freeItems || []).map((i: any) => i.productId),
+      ].filter(Boolean);
+
+      const ProductModel = (await import("@/models/Product")).default;
+      const products = await ProductModel.find(
+        { _id: { $in: allProductIds } },
+        { name: 1, category: 1, unit: 1 }
+      ).lean();
+      const productMap: Record<string, any> = {};
+      products.forEach((p: any) => (productMap[String(p._id)] = p));
+
+      const mapItem = (it: any) => ({
+        productId: it.productId,
+        productName: it.productName,
+        category: productMap[String(it.productId)]?.category || "",
+        unit: it.unit || productMap[String(it.productId)]?.unit || "",
+        quantity: it.quantity,
+      });
+
+      await ProductSalesLog.create({
+        userId: order.userId,
+        orderId: order._id,
+        serialNumber: order.serialNumber || "",
+        customerId: order.customerId || undefined,
+        customerName: order.customerName,
+        shopName: order.shopName,
+        soldDate: order.deliveryCompletedAt || new Date(),
+        items: (order.items || []).filter((i: any) => i.productId).map(mapItem),
+        freeItems: (order.freeItems || []).filter((i: any) => i.productId).map(mapItem),
+        orderTotal: order.total || 0,
+      });
+    }
+  } catch (logErr) {
+    // ⚠️ Log error but DO NOT fail the main request
+    console.error("ProductSalesLog write failed:", logErr);
+  }
+}
       return NextResponse.json(
         { success: true, order, message: `Delivery status changed from ${oldStatus} to ${deliveryStatus}` },
         { status: 200 }
