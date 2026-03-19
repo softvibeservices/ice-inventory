@@ -222,11 +222,29 @@ export async function PATCH(req: NextRequest) {
       }
 
       const oldStatus = order.deliveryStatus || "Pending";
+
+      // ✅ GUARD: If already Delivered and trying to change via this action,
+      //    force admin to use the dedicated /api/orders/revert-delivery endpoint instead.
+      //    This keeps revert logic clean and auditable.
+      if (oldStatus === "Delivered" && deliveryStatus !== "Delivered") {
+        return NextResponse.json(
+          {
+            error:
+              "Cannot revert a Delivered order via this endpoint. " +
+              "Use the 'Revert Delivery' button which calls /api/orders/revert-delivery.",
+            code: "USE_REVERT_ENDPOINT",
+          },
+          { status: 400 }
+        );
+      }
+
       order.deliveryStatus = deliveryStatus;
 
       if (deliveryStatus === "On the Way" && !order.deliveryOnTheWayAt) {
         order.deliveryOnTheWayAt = new Date();
       }
+
+      // ✅ When setting to Delivered: stamp completedAt + write ProductSalesLog
       if (deliveryStatus === "Delivered" && !order.deliveryCompletedAt) {
         order.deliveryCompletedAt = new Date();
       }
@@ -243,54 +261,55 @@ export async function PATCH(req: NextRequest) {
       }
 
       await order.save();
-      // ✅ Write ProductSalesLog when delivery is completed
-if (deliveryStatus === "Delivered") {
-  try {
-    const ProductSalesLog = (await import("@/models/ProductSalesLog")).default;
-    
-    // idempotent — skip if already logged for this order
-    const alreadyLogged = await ProductSalesLog.findOne({ orderId: order._id });
-    if (!alreadyLogged) {
-      // Enrich items with product details (category, unit)
-      const allProductIds = [
-        ...(order.items || []).map((i: any) => i.productId),
-        ...(order.freeItems || []).map((i: any) => i.productId),
-      ].filter(Boolean);
 
-      const ProductModel = (await import("@/models/Product")).default;
-      const products = await ProductModel.find(
-        { _id: { $in: allProductIds } },
-        { name: 1, category: 1, unit: 1 }
-      ).lean();
-      const productMap: Record<string, any> = {};
-      products.forEach((p: any) => (productMap[String(p._id)] = p));
+      // ✅ Write ProductSalesLog when delivery is completed (idempotent via unique orderId index)
+      if (deliveryStatus === "Delivered") {
+        try {
+          const { default: ProductSalesLog } = await import("@/models/ProductSalesLog");
 
-      const mapItem = (it: any) => ({
-        productId: it.productId,
-        productName: it.productName,
-        category: productMap[String(it.productId)]?.category || "",
-        unit: it.unit || productMap[String(it.productId)]?.unit || "",
-        quantity: it.quantity,
-      });
+          const alreadyLogged = await ProductSalesLog.findOne({ orderId: order._id });
+          if (!alreadyLogged) {
+            const allProductIds = [
+              ...(order.items    || []).map((i: any) => i.productId),
+              ...(order.freeItems|| []).map((i: any) => i.productId),
+            ].filter(Boolean);
 
-      await ProductSalesLog.create({
-        userId: order.userId,
-        orderId: order._id,
-        serialNumber: order.serialNumber || "",
-        customerId: order.customerId || undefined,
-        customerName: order.customerName,
-        shopName: order.shopName,
-        soldDate: order.deliveryCompletedAt || new Date(),
-        items: (order.items || []).filter((i: any) => i.productId).map(mapItem),
-        freeItems: (order.freeItems || []).filter((i: any) => i.productId).map(mapItem),
-        orderTotal: order.total || 0,
-      });
-    }
-  } catch (logErr) {
-    // ⚠️ Log error but DO NOT fail the main request
-    console.error("ProductSalesLog write failed:", logErr);
-  }
-}
+            const { default: ProductModel } = await import("@/models/Product");
+            const products = await ProductModel.find(
+              { _id: { $in: allProductIds } },
+              { name: 1, category: 1, unit: 1 }
+            ).lean();
+
+            const productMap: Record<string, any> = {};
+            products.forEach((p: any) => (productMap[String(p._id)] = p));
+
+            const mapItem = (it: any) => ({
+              productId:   it.productId,
+              productName: it.productName,
+              category:    productMap[String(it.productId)]?.category || "",
+              unit:        it.unit || productMap[String(it.productId)]?.unit || "",
+              quantity:    it.quantity,
+            });
+
+            await ProductSalesLog.create({
+              userId:       order.userId,
+              orderId:      order._id,
+              serialNumber: order.serialNumber || "",
+              customerId:   order.customerId   || undefined,
+              customerName: order.customerName,
+              shopName:     order.shopName,
+              soldDate:     order.deliveryCompletedAt || new Date(),
+              items:        (order.items     || []).filter((i: any) => i.productId).map(mapItem),
+              freeItems:    (order.freeItems || []).filter((i: any) => i.productId).map(mapItem),
+              orderTotal:   order.total || 0,
+            });
+          }
+        } catch (logErr) {
+          // ⚠️ Log error but do NOT fail the main request
+          console.error("ProductSalesLog write failed:", logErr);
+        }
+      }
+
       return NextResponse.json(
         { success: true, order, message: `Delivery status changed from ${oldStatus} to ${deliveryStatus}` },
         { status: 200 }

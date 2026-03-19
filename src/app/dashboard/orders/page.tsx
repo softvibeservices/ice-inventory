@@ -749,6 +749,7 @@ export default function OrdersPage() {
             settledOrders={settledOrders}
             debtOrders={debtOrders}
             discardedOrders={discardedOrders}
+            userId={userId}  
           />
         </div>
       </main>

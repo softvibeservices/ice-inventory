@@ -5,6 +5,9 @@ import { useMemo, useState, useEffect } from "react";
 import OrderCard from "./OrderCard";
 import { Order, CustomerLite, TabFilter, SortMode } from "@/types/orders.type";
 import DownloadReportButton from "./DownloadReportButton";
+import RevertDeliveryModal from "./RevertDeliveryModal";
+import toast from "react-hot-toast";
+import { RotateCcw } from "lucide-react";
 
 type OrderListProps = {
     tab: TabFilter;
@@ -13,6 +16,7 @@ type OrderListProps = {
     search: string;
     sortMode: SortMode;
     loading: boolean;
+    userId: string | null;                   // ✅ NEW — needed for revert API call
     onRefresh: () => void;
     onClearFilters: () => void;
     onSetSearch: (search: string) => void;
@@ -29,9 +33,7 @@ type OrderListProps = {
     discardedOrders: Order[];
 };
 
-// ─── Internal sort type — fully decoupled from parent SortMode ───────────────
-// This avoids any TypeScript narrowing issues when using delivery/settlement sorts
-// that don't exist in the parent's SortMode union.
+// ─── Internal sort type ──────────────────────────────────────────────────────
 type InternalSortMode =
     | "date-desc"
     | "date-asc"
@@ -56,7 +58,6 @@ type InternalSortMode =
     | "updated-desc"
     | "updated-asc";
 
-// Delivery status filter type
 type DeliveryFilter = "All" | "Pending" | "On the Way" | "Delivered" | "Unassigned";
 
 type SortButtonDef = {
@@ -64,7 +65,6 @@ type SortButtonDef = {
     icon: string;
     ascMode: InternalSortMode;
     descMode: InternalSortMode;
-    // which tabs this button is relevant for (empty = all tabs)
     tabs?: TabFilter[];
 };
 
@@ -79,13 +79,12 @@ const SORT_BUTTONS: SortButtonDef[] = [
     { label: "Updated",    icon: "🔄", ascMode: "updated-asc",   descMode: "updated-desc"   },
 ];
 
-// Delivery status filter pills — only shown on Unsettled tab (and optionally Debt)
 const DELIVERY_FILTERS: { label: string; value: DeliveryFilter; icon: string }[] = [
-    { label: "All",         value: "All",        icon: "🔘" },
-    { label: "Pending",     value: "Pending",    icon: "⏳" },
-    { label: "On the Way",  value: "On the Way", icon: "🚚" },
-    { label: "Delivered",   value: "Delivered",  icon: "✅" },
-    { label: "Unassigned",  value: "Unassigned", icon: "❌" },
+    { label: "All",        value: "All",        icon: "🔘" },
+    { label: "Pending",    value: "Pending",    icon: "⏳" },
+    { label: "On the Way", value: "On the Way", icon: "🚚" },
+    { label: "Delivered",  value: "Delivered",  icon: "✅" },
+    { label: "Unassigned", value: "Unassigned", icon: "❌" },
 ];
 
 export default function OrderList({
@@ -95,6 +94,7 @@ export default function OrderList({
     search,
     sortMode,
     loading,
+    userId,
     onRefresh,
     onClearFilters,
     onSetSearch,
@@ -111,10 +111,13 @@ export default function OrderList({
     discardedOrders,
 }: OrderListProps) {
     const ITEMS_PER_PAGE = 10;
-    const [currentPage, setCurrentPage]     = useState(1);
-    const [viewAll, setViewAll]             = useState(false);
-    const [internalSort, setInternalSort]   = useState<InternalSortMode>("date-desc");
+    const [currentPage,    setCurrentPage]    = useState(1);
+    const [viewAll,        setViewAll]        = useState(false);
+    const [internalSort,   setInternalSort]   = useState<InternalSortMode>("date-desc");
     const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("All");
+
+    // ✅ NEW — revert delivery modal state
+    const [revertOrder,    setRevertOrder]    = useState<Order | null>(null);
 
     // ─── customer lookup map ─────────────────────────────────────────────────
     const customerById = useMemo(() => {
@@ -123,7 +126,7 @@ export default function OrderList({
         return map;
     }, [customers]);
 
-    // ─── sort button click handler ───────────────────────────────────────────
+    // ─── sort button handlers ────────────────────────────────────────────────
     const handleSortClick = (btn: SortButtonDef) => {
         const isActive = internalSort === btn.ascMode || internalSort === btn.descMode;
         if (!isActive) {
@@ -131,7 +134,6 @@ export default function OrderList({
         } else {
             setInternalSort(internalSort === btn.ascMode ? btn.descMode : btn.ascMode);
         }
-        // Sync parent for the modes that exist in parent SortMode
         setCurrentPage(1);
     };
 
@@ -140,9 +142,9 @@ export default function OrderList({
 
     const getSortArrow = (btn: SortButtonDef): string => {
         if (!isButtonActive(btn)) return "";
-        if (btn.label === "Customer" || btn.label === "Shop" || btn.label === "Area" || btn.label === "Serial No.")
+        if (["Customer","Shop","Area","Serial No."].includes(btn.label))
             return internalSort === btn.ascMode ? " A→Z" : " Z→A";
-        if (btn.label === "Date" || btn.label === "Updated")
+        if (["Date","Updated"].includes(btn.label))
             return internalSort === btn.ascMode ? " Old→New" : " New→Old";
         return internalSort === btn.ascMode ? " ↑" : " ↓";
     };
@@ -163,16 +165,14 @@ export default function OrderList({
         const q = search.trim().toLowerCase();
 
         let list = orders.map((order) => {
-            const cust   = order.customerId ? customerById[order.customerId] : undefined;
-            const area   = (cust?.area || "").trim();
+            const cust = order.customerId ? customerById[order.customerId] : undefined;
+            const area = (cust?.area || "").trim();
             return { order, customer: cust, area, areaLower: area.toLowerCase() };
         });
 
-        // text search (all existing fields preserved)
         if (q) {
             list = list.filter(({ order, customer, areaLower }) => {
-                const hay: string[] = [];
-                hay.push(
+                const hay: string[] = [
                     order.shopName || "",
                     order.customerName || "",
                     order.customerAddress || "",
@@ -182,11 +182,11 @@ export default function OrderList({
                     order.remarks || "",
                     order.status || "",
                     order.deliveryStatus || "",
-                );
+                ];
                 if (order.settlementMethod) hay.push(order.settlementMethod);
-                if (customer?.name)        hay.push(customer.name);
-                if (customer?.shopName)    hay.push(customer.shopName);
-                if (customer?.shopAddress) hay.push(customer.shopAddress);
+                if (customer?.name)         hay.push(customer.name);
+                if (customer?.shopName)     hay.push(customer.shopName);
+                if (customer?.shopAddress)  hay.push(customer.shopAddress);
                 if (customer?.contacts?.length) hay.push(customer.contacts.join(" "));
                 if (areaLower) hay.push(areaLower);
                 if (order.items?.length)     for (const it of order.items)     if (it.productName) hay.push(it.productName);
@@ -198,13 +198,8 @@ export default function OrderList({
         // delivery status filter
         if (deliveryFilter !== "All") {
             list = list.filter(({ order }) => {
-                if (deliveryFilter === "Unassigned") {
-                    return !order.deliveryPartnerId;
-                }
-                if (deliveryFilter === "Pending") {
-                    // Pending = explicitly Pending OR no deliveryStatus set (default is Pending)
-                    return !order.deliveryStatus || order.deliveryStatus === "Pending";
-                }
+                if (deliveryFilter === "Unassigned") return !order.deliveryPartnerId;
+                if (deliveryFilter === "Pending")    return !order.deliveryStatus || order.deliveryStatus === "Pending";
                 return order.deliveryStatus === deliveryFilter;
             });
         }
@@ -216,65 +211,47 @@ export default function OrderList({
                 (x ?? "").localeCompare(y ?? "", undefined, { sensitivity: "base" });
 
             switch (internalSort) {
-                case "date-asc":
-                    return new Date(oa.createdAt || 0).getTime() - new Date(ob.createdAt || 0).getTime();
-                case "date-desc":
-                    return new Date(ob.createdAt || 0).getTime() - new Date(oa.createdAt || 0).getTime();
-                case "updated-asc":
-                    return new Date(oa.updatedAt || oa.createdAt || 0).getTime() - new Date(ob.updatedAt || ob.createdAt || 0).getTime();
-                case "updated-desc":
-                    return new Date(ob.updatedAt || ob.createdAt || 0).getTime() - new Date(oa.updatedAt || oa.createdAt || 0).getTime();
-                case "total-asc":
-                    return (oa.total || 0) - (ob.total || 0);
-                case "total-desc":
-                    return (ob.total || 0) - (oa.total || 0);
-                case "discount-asc":
-                    return (oa.discountPercentage || 0) - (ob.discountPercentage || 0);
-                case "discount-desc":
-                    return (ob.discountPercentage || 0) - (oa.discountPercentage || 0);
-                case "shop-asc":
-                    return cmpStr(oa.shopName, ob.shopName);
-                case "shop-desc":
-                    return cmpStr(ob.shopName, oa.shopName);
-                case "customer-asc":
-                    return cmpStr(oa.customerName, ob.customerName);
-                case "customer-desc":
-                    return cmpStr(ob.customerName, oa.customerName);
-                case "area-asc":
-                    return a.areaLower.localeCompare(b.areaLower);
-                case "area-desc":
-                    return b.areaLower.localeCompare(a.areaLower);
-                case "serial-asc":
-                    return cmpStr(oa.serialNumber, ob.serialNumber);
-                case "serial-desc":
-                    return cmpStr(ob.serialNumber, oa.serialNumber);
-                // group by delivery status
+                case "date-asc":    return new Date(oa.createdAt || 0).getTime() - new Date(ob.createdAt || 0).getTime();
+                case "date-desc":   return new Date(ob.createdAt || 0).getTime() - new Date(oa.createdAt || 0).getTime();
+                case "updated-asc": return new Date(oa.updatedAt || oa.createdAt || 0).getTime() - new Date(ob.updatedAt || ob.createdAt || 0).getTime();
+                case "updated-desc":return new Date(ob.updatedAt || ob.createdAt || 0).getTime() - new Date(oa.updatedAt || oa.createdAt || 0).getTime();
+                case "total-asc":   return (oa.total || 0) - (ob.total || 0);
+                case "total-desc":  return (ob.total || 0) - (oa.total || 0);
+                case "discount-asc":  return (oa.discountPercentage || 0) - (ob.discountPercentage || 0);
+                case "discount-desc": return (ob.discountPercentage || 0) - (oa.discountPercentage || 0);
+                case "shop-asc":      return cmpStr(oa.shopName, ob.shopName);
+                case "shop-desc":     return cmpStr(ob.shopName, oa.shopName);
+                case "customer-asc":  return cmpStr(oa.customerName, ob.customerName);
+                case "customer-desc": return cmpStr(ob.customerName, oa.customerName);
+                case "area-asc":      return a.areaLower.localeCompare(b.areaLower);
+                case "area-desc":     return b.areaLower.localeCompare(a.areaLower);
+                case "serial-asc":    return cmpStr(oa.serialNumber, ob.serialNumber);
+                case "serial-desc":   return cmpStr(ob.serialNumber, oa.serialNumber);
                 case "delivery-pending": {
-                    const rank = (s?: string | null) => s === "Pending" ? 0 : s === "On the Way" ? 1 : s === "Delivered" ? 2 : 3;
-                    return rank(oa.deliveryStatus) - rank(ob.deliveryStatus);
+                    const r = (s?: string | null) => s === "Pending" ? 0 : s === "On the Way" ? 1 : s === "Delivered" ? 2 : 3;
+                    return r(oa.deliveryStatus) - r(ob.deliveryStatus);
                 }
                 case "delivery-onway": {
-                    const rank = (s?: string | null) => s === "On the Way" ? 0 : s === "Pending" ? 1 : s === "Delivered" ? 2 : 3;
-                    return rank(oa.deliveryStatus) - rank(ob.deliveryStatus);
+                    const r = (s?: string | null) => s === "On the Way" ? 0 : s === "Pending" ? 1 : s === "Delivered" ? 2 : 3;
+                    return r(oa.deliveryStatus) - r(ob.deliveryStatus);
                 }
                 case "delivery-delivered": {
-                    const rank = (s?: string | null) => s === "Delivered" ? 0 : s === "On the Way" ? 1 : s === "Pending" ? 2 : 3;
-                    return rank(oa.deliveryStatus) - rank(ob.deliveryStatus);
+                    const r = (s?: string | null) => s === "Delivered" ? 0 : s === "On the Way" ? 1 : s === "Pending" ? 2 : 3;
+                    return r(oa.deliveryStatus) - r(ob.deliveryStatus);
                 }
                 case "settlement-cash": {
-                    const rank = (m?: string | null) => m === "Cash" ? 0 : m === "Bank/UPI" ? 1 : m === "Debt" ? 2 : 3;
-                    return rank(oa.settlementMethod) - rank(ob.settlementMethod);
+                    const r = (m?: string | null) => m === "Cash" ? 0 : m === "Bank/UPI" ? 1 : m === "Debt" ? 2 : 3;
+                    return r(oa.settlementMethod) - r(ob.settlementMethod);
                 }
                 case "settlement-bank": {
-                    const rank = (m?: string | null) => m === "Bank/UPI" ? 0 : m === "Cash" ? 1 : m === "Debt" ? 2 : 3;
-                    return rank(oa.settlementMethod) - rank(ob.settlementMethod);
+                    const r = (m?: string | null) => m === "Bank/UPI" ? 0 : m === "Cash" ? 1 : m === "Debt" ? 2 : 3;
+                    return r(oa.settlementMethod) - r(ob.settlementMethod);
                 }
                 case "settlement-debt": {
-                    const rank = (m?: string | null) => m === "Debt" ? 0 : m === "Cash" ? 1 : m === "Bank/UPI" ? 2 : 3;
-                    return rank(oa.settlementMethod) - rank(ob.settlementMethod);
+                    const r = (m?: string | null) => m === "Debt" ? 0 : m === "Cash" ? 1 : m === "Bank/UPI" ? 2 : 3;
+                    return r(oa.settlementMethod) - r(ob.settlementMethod);
                 }
-                default:
-                    return 0;
+                default: return 0;
             }
         });
 
@@ -290,15 +267,8 @@ export default function OrderList({
         return displayOrders.slice(start, start + ITEMS_PER_PAGE);
     }, [displayOrders, currentPage, viewAll]);
 
-    // reset page on any filter/sort/tab change
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [search, sortMode, tab, internalSort, deliveryFilter]);
-
-    // reset delivery filter when tab changes
-    useEffect(() => {
-        setDeliveryFilter("All");
-    }, [tab]);
+    useEffect(() => { setCurrentPage(1); }, [search, sortMode, tab, internalSort, deliveryFilter]);
+    useEffect(() => { setDeliveryFilter("All"); }, [tab]);
 
     const handlePageChange = (page: number) => {
         setCurrentPage(page);
@@ -340,18 +310,20 @@ export default function OrderList({
             Unassigned: 0,
         };
         for (const o of orders) {
-            // Count delivery status independently — an order can have a status
-            // regardless of whether a partner is assigned yet
             if (o.deliveryStatus === "Pending")         counts.Pending++;
             else if (o.deliveryStatus === "On the Way") counts["On the Way"]++;
             else if (o.deliveryStatus === "Delivered")  counts.Delivered++;
-            else counts.Pending++; // default status is Pending when not set
-
-            // Unassigned = no delivery partner linked
+            else counts.Pending++;
             if (!o.deliveryPartnerId) counts.Unassigned++;
         }
         return counts;
     }, [orders]);
+
+    // ✅ NEW — how many Delivered orders are visible in current list
+    const deliveredCount = useMemo(
+        () => orders.filter((o) => o.deliveryStatus === "Delivered").length,
+        [orders]
+    );
 
     // ─── pagination renderer ─────────────────────────────────────────────────
     const renderPagination = () => {
@@ -417,7 +389,7 @@ export default function OrderList({
     return (
         <div className="space-y-4">
 
-            {/* ── HEADER: stats + view-all button ── */}
+            {/* ── HEADER ── */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 shadow-sm">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     {/* Stats */}
@@ -450,6 +422,17 @@ export default function OrderList({
                                 <div className="text-sm font-bold leading-tight">{deliveryFilter}</div>
                             </div>
                         )}
+
+                        {/* ✅ NEW — Delivered orders revert reminder badge */}
+                        {deliveredCount > 0 && (tab === "Unsettled" || tab === "Debt") && (
+                            <div className="bg-orange-50 border border-orange-200 px-4 py-2 rounded-lg shadow-sm">
+                                <div className="text-xs text-orange-600 font-medium">Delivered Orders</div>
+                                <div className="text-sm font-bold text-orange-700 flex items-center gap-1">
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    {deliveredCount} can be reverted
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* View All button */}
@@ -459,16 +442,12 @@ export default function OrderList({
                     >
                         {viewAll ? (
                             <>
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                                </svg>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
                                 Show Paginated
                             </>
                         ) : (
                             <>
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                                </svg>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
                                 View All Orders
                             </>
                         )}
@@ -476,16 +455,12 @@ export default function OrderList({
                 </div>
             </div>
 
-            {/* ── SORT BUTTONS ROW ── */}
+            {/* ── SORT BUTTONS ── */}
             <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1 hidden sm:inline whitespace-nowrap">
-                        Sort:
-                    </span>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1 hidden sm:inline whitespace-nowrap">Sort:</span>
 
-                    {SORT_BUTTONS.filter((btn) =>
-                        !btn.tabs || btn.tabs.includes(tab as TabFilter)
-                    ).map((btn) => {
+                    {SORT_BUTTONS.filter((btn) => !btn.tabs || btn.tabs.includes(tab as TabFilter)).map((btn) => {
                         const active = isButtonActive(btn);
                         return (
                             <button
@@ -499,26 +474,20 @@ export default function OrderList({
                             >
                                 <span>{btn.icon}</span>
                                 <span>Sort by {btn.label}</span>
-                                {active && (
-                                    <span className="font-bold opacity-90 text-xs">
-                                        {getSortArrow(btn)}
-                                    </span>
-                                )}
+                                {active && <span className="font-bold opacity-90 text-xs">{getSortArrow(btn)}</span>}
                             </button>
                         );
                     })}
 
-                    {/* ── Extra sort buttons: Delivery & Settlement ── */}
+                    {/* Delivery sort */}
                     {(tab === "Unsettled" || tab === "Debt") && (
                         <>
                             <div className="h-6 w-px bg-gray-200 hidden sm:block mx-1" />
-                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:inline whitespace-nowrap">
-                                Delivery:
-                            </span>
+                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:inline whitespace-nowrap">Delivery:</span>
                             {[
-                                { label: "Pending First",   mode: "delivery-pending"   as InternalSortMode, icon: "⏳" },
-                                { label: "On the Way First",mode: "delivery-onway"     as InternalSortMode, icon: "🚚" },
-                                { label: "Delivered First", mode: "delivery-delivered" as InternalSortMode, icon: "✅" },
+                                { label: "Pending First",    mode: "delivery-pending"   as InternalSortMode, icon: "⏳" },
+                                { label: "On the Way First", mode: "delivery-onway"     as InternalSortMode, icon: "🚚" },
+                                { label: "Delivered First",  mode: "delivery-delivered" as InternalSortMode, icon: "✅" },
                             ].map((btn) => (
                                 <button
                                     key={btn.mode}
@@ -529,19 +498,17 @@ export default function OrderList({
                                             : "bg-white text-gray-700 border-gray-300 hover:bg-purple-50 hover:border-purple-300"
                                     }`}
                                 >
-                                    <span>{btn.icon}</span>
-                                    <span>{btn.label}</span>
+                                    <span>{btn.icon}</span><span>{btn.label}</span>
                                 </button>
                             ))}
                         </>
                     )}
 
+                    {/* Settlement sort */}
                     {tab === "Settled" && (
                         <>
                             <div className="h-6 w-px bg-gray-200 hidden sm:block mx-1" />
-                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:inline whitespace-nowrap">
-                                Payment:
-                            </span>
+                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:inline whitespace-nowrap">Payment:</span>
                             {[
                                 { label: "Cash First",     mode: "settlement-cash" as InternalSortMode, icon: "💵" },
                                 { label: "Bank/UPI First", mode: "settlement-bank" as InternalSortMode, icon: "🏦" },
@@ -555,8 +522,7 @@ export default function OrderList({
                                             : "bg-white text-gray-700 border-gray-300 hover:bg-green-50 hover:border-green-300"
                                     }`}
                                 >
-                                    <span>{btn.icon}</span>
-                                    <span>{btn.label}</span>
+                                    <span>{btn.icon}</span><span>{btn.label}</span>
                                 </button>
                             ))}
                         </>
@@ -573,17 +539,11 @@ export default function OrderList({
                 </div>
             </div>
 
-            {/* ── DELIVERY STATUS FILTER PILLS ── */}
+            {/* ── DELIVERY FILTER PILLS ── */}
             {(tab === "Unsettled" || tab === "Debt") && (
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
-                    <div
-                        className="flex items-center gap-2 overflow-x-auto pb-1"
-                        style={{ scrollbarWidth: "thin" }}
-                    >
-                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap mr-1 hidden sm:inline">
-                            Delivery:
-                        </span>
-
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "thin" }}>
+                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap mr-1 hidden sm:inline">Delivery:</span>
                         {DELIVERY_FILTERS.map((f) => (
                             <button
                                 key={f.value}
@@ -597,9 +557,7 @@ export default function OrderList({
                                 <span>{f.icon}</span>
                                 <span>{f.label}</span>
                                 <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                                    deliveryFilter === f.value
-                                        ? "bg-white/25 text-white"
-                                        : "bg-gray-100 text-gray-500"
+                                    deliveryFilter === f.value ? "bg-white/25 text-white" : "bg-gray-100 text-gray-500"
                                 }`}>
                                     {deliveryCounts[f.value] ?? 0}
                                 </span>
@@ -609,7 +567,7 @@ export default function OrderList({
                 </div>
             )}
 
-            {/* ── SEARCH + UTILITY ── */}
+            {/* ── SEARCH + UTILITY ROW ── */}
             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                 <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
                     <input
@@ -637,11 +595,7 @@ export default function OrderList({
                         >
                             ✖ Clear All
                         </button>
-                        <DownloadReportButton
-                            tab={tab}
-                            orders={orders}
-                            customers={customers}
-                        />
+                        <DownloadReportButton tab={tab} orders={orders} customers={customers} />
                         <DownloadReportButton
                             tab="All"
                             orders={orders}
@@ -658,7 +612,7 @@ export default function OrderList({
             {/* Pagination — top */}
             {renderPagination()}
 
-            {/* Orders List */}
+            {/* ── ORDER CARDS ── */}
             {loading ? (
                 <div className="py-16 text-center">
                     <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4" />
@@ -692,13 +646,19 @@ export default function OrderList({
                         const globalIndex = viewAll
                             ? displayOrders.findIndex((o) => o.order._id === order._id) + 1
                             : (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
+
+                        // ✅ Is this order delivered? — show revert button
+                        const isDelivered = order.deliveryStatus === "Delivered";
+
                         return (
                             <div key={order._id} className="relative">
+                                {/* Order number badge */}
                                 <div className="absolute -left-2 -top-2 z-10">
                                     <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold shadow-md">
                                         {globalIndex}
                                     </div>
                                 </div>
+
                                 <OrderCard
                                     order={order}
                                     area={area}
@@ -710,6 +670,19 @@ export default function OrderList({
                                     onEdit={onEdit}
                                     onChangeDeliveryStatus={onChangeDeliveryStatus}
                                 />
+
+                                {/* ✅ NEW — Revert Delivery button appears under delivered orders */}
+                                {isDelivered && userId && (
+                                    <div className="mt-1.5 flex justify-end px-1">
+                                        <button
+                                            onClick={() => setRevertOrder(order)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 hover:border-orange-300 transition shadow-sm"
+                                        >
+                                            <RotateCcw className="w-3.5 h-3.5" />
+                                            Revert Delivery
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
@@ -748,9 +721,9 @@ export default function OrderList({
                                     <span className="text-gray-600 font-medium">Sorted by:</span>
                                     <span className="ml-2 text-blue-600 font-bold">
                                         {SORT_BUTTONS.find((b) => b.ascMode === internalSort || b.descMode === internalSort)?.label
-                                            ?? (internalSort.startsWith("delivery-") ? "Delivery Status"
-                                            : internalSort.startsWith("settlement-") ? "Payment Method"
-                                            : "Custom")}
+                                            ?? (internalSort.startsWith("delivery-")   ? "Delivery Status"
+                                            :  internalSort.startsWith("settlement-")  ? "Payment Method"
+                                            :  "Custom")}
                                     </span>
                                 </div>
                             )}
@@ -763,6 +736,23 @@ export default function OrderList({
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* ✅ NEW — Revert Delivery Modal (rendered at root level so z-index works correctly) */}
+            {revertOrder && userId && (
+                <RevertDeliveryModal
+                    orderId={revertOrder._id}
+                    serialNumber={revertOrder.serialNumber}
+                    customerName={revertOrder.customerName}
+                    shopName={revertOrder.shopName}
+                    userId={userId}
+                    onClose={() => setRevertOrder(null)}
+                    onReverted={(_updatedOrder) => {
+                        setRevertOrder(null);
+                        // ✅ Refresh the full order list so the reverted status is reflected
+                        onRefresh();
+                    }}
+                />
             )}
         </div>
     );
