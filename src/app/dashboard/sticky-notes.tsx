@@ -59,11 +59,13 @@ export function StickyNotesPanel() {
 
     const fetchMasterData = async () => {
       try {
-        const [prodRes, custRes, notesRes] = await Promise.all([
-          fetch(`/api/products?userId=${encodeURIComponent(userId)}`),
-          fetch(`/api/customers?userId=${encodeURIComponent(userId)}`),
-          fetch(`/api/sticky-notes?userId=${encodeURIComponent(userId)}`),
-        ]);
+        const token = localStorage.getItem("token");
+const headers = { "Authorization": `Bearer ${token}` };
+const [prodRes, custRes, notesRes] = await Promise.all([
+  fetch(`/api/products`, { headers }),
+  fetch(`/api/customers`, { headers }),
+  fetch(`/api/sticky-notes`, { headers }),
+]);
 
         if (!prodRes.ok) throw new Error("Products fetch failed");
         if (!custRes.ok) throw new Error("Customers fetch failed");
@@ -156,11 +158,15 @@ export function StickyNotesPanel() {
 
     try {
       setDeleting(true);
-      const res = await fetch("/api/sticky-notes", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: noteToDelete._id, userId }),
-      });
+     const token = localStorage.getItem("token");
+const res = await fetch("/api/sticky-notes", {
+  method: "DELETE",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ id: noteToDelete._id }),  // userId removed
+});
 
       const data = await res.json();
       if (!res.ok) {

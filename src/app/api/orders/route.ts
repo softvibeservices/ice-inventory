@@ -6,6 +6,7 @@ import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Product from "@/models/Product";
 import Customer from "@/models/Customer";
+import { verifyUserRequest } from "@/lib/userAuth";
 
 function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
   if (!id) return undefined;
@@ -13,15 +14,15 @@ function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined
   return new mongoose.Types.ObjectId(id);
 }
 
-// CREATE ORDER
 export async function POST(req: NextRequest) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   await connectDB();
 
   try {
     const body = await req.json();
-
     const {
-      userId,
       orderId,
       serialNumber,
       shopName,
@@ -38,15 +39,11 @@ export async function POST(req: NextRequest) {
       remarks,
     } = body;
 
-    if (!userId || !orderId || !serialNumber) {
+    if (!orderId || !serialNumber) {
       return NextResponse.json(
-        { error: "userId, orderId and serialNumber are required." },
+        { error: "orderId and serialNumber are required." },
         { status: 400 }
       );
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
     if (!customerId || !customerName || !customerAddress || !customerContact) {
@@ -63,7 +60,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+    // Use auth.userId — never trust userId from body
+    const userObjectId = new mongoose.Types.ObjectId(auth.userId);
     const customerObjectId = toObjectId(customerId);
 
     const mappedItems = items.map((it: any) => ({
@@ -72,16 +70,17 @@ export async function POST(req: NextRequest) {
     }));
 
     const mappedFreeItems = Array.isArray(freeItems)
-      ? freeItems.map((it: any) => ({ ...it, productId: toObjectId(it.productId) }))
+      ? freeItems.map((it: any) => ({
+          ...it,
+          productId: toObjectId(it.productId),
+        }))
       : [];
 
-    // ── START TRANSACTION ─────────────────────────────────────────
     const session = await mongoose.startSession();
     let order: any;
 
     try {
       await session.withTransaction(async () => {
-        // 1. Create Order
         const [createdOrder] = await Order.create(
           [
             {
@@ -108,7 +107,6 @@ export async function POST(req: NextRequest) {
         );
         order = createdOrder;
 
-        // 2. Decrease stock for all products
         const allItems = [...mappedItems, ...mappedFreeItems];
         const stockUpdates = allItems
           .filter(
@@ -126,8 +124,6 @@ export async function POST(req: NextRequest) {
           );
         if (stockUpdates.length) await Promise.all(stockUpdates);
 
-        // 3. Update customer debit & totalSales
-        //    ✅ Only runs if Order creation + stock update succeeded.
         if (customerObjectId && typeof total === "number" && total > 0) {
           await Customer.findByIdAndUpdate(
             customerObjectId,
@@ -150,24 +146,19 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET ORDERS
 export async function GET(req: NextRequest) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   await connectDB();
 
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
     const status = searchParams.get("status");
 
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
-
-    const query: any = { userId: new mongoose.Types.ObjectId(userId) };
+    const query: any = {
+      userId: new mongoose.Types.ObjectId(auth.userId),
+    };
     if (status === "Unsettled" || status === "settled") {
       query.status = status;
     }
@@ -183,30 +174,35 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PATCH: discard / settle / settleDebt / changeDeliveryStatus
 export async function PATCH(req: NextRequest) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   await connectDB();
 
   try {
     const body = await req.json();
-    const { action, orderId, userId, method, amount, deliveryStatus } = body;
+    const { action, orderId, method, amount, deliveryStatus } = body;
 
-    if (!orderId || !userId || !action) {
+    if (!orderId || !action) {
       return NextResponse.json(
-        { error: "orderId, userId and action are required." },
+        { error: "orderId and action are required." },
         { status: 400 }
       );
     }
 
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
-
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-    const order: any = await Order.findOne({ _id: orderId, userId: userObjectId });
+    // Use auth.userId — never trust userId from body
+    const userObjectId = new mongoose.Types.ObjectId(auth.userId);
+    const order: any = await Order.findOne({
+      _id: orderId,
+      userId: userObjectId,
+    });
 
     if (!order) {
-      return NextResponse.json({ error: "Order not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Order not found." },
+        { status: 404 }
+      );
     }
 
     const billTotal = Number(order.total || 0);
@@ -215,17 +211,19 @@ export async function PATCH(req: NextRequest) {
       totalPaid >= billTotal && delStatus === "Delivered";
 
     // ===== CHANGE DELIVERY STATUS =====
-    // No financial changes — no transaction needed
     if (action === "changeDeliveryStatus") {
-      if (!deliveryStatus || !["Pending", "On the Way", "Delivered"].includes(deliveryStatus)) {
-        return NextResponse.json({ error: "Invalid delivery status." }, { status: 400 });
+      if (
+        !deliveryStatus ||
+        !["Pending", "On the Way", "Delivered"].includes(deliveryStatus)
+      ) {
+        return NextResponse.json(
+          { error: "Invalid delivery status." },
+          { status: 400 }
+        );
       }
 
       const oldStatus = order.deliveryStatus || "Pending";
 
-      // ✅ GUARD: If already Delivered and trying to change via this action,
-      //    force admin to use the dedicated /api/orders/revert-delivery endpoint instead.
-      //    This keeps revert logic clean and auditable.
       if (oldStatus === "Delivered" && deliveryStatus !== "Delivered") {
         return NextResponse.json(
           {
@@ -244,14 +242,19 @@ export async function PATCH(req: NextRequest) {
         order.deliveryOnTheWayAt = new Date();
       }
 
-      // ✅ When setting to Delivered: stamp completedAt + write ProductSalesLog
       if (deliveryStatus === "Delivered" && !order.deliveryCompletedAt) {
         order.deliveryCompletedAt = new Date();
       }
 
-      const totalPaid = typeof order.settlementAmount === "number" ? order.settlementAmount : 0;
+      const totalPaid =
+        typeof order.settlementAmount === "number"
+          ? order.settlementAmount
+          : 0;
 
-      if (order.status === "settled" && order.settlementMethod === "Debt") {
+      if (
+        order.status === "settled" &&
+        order.settlementMethod === "Debt"
+      ) {
         if (shouldMoveToSettled(totalPaid, deliveryStatus)) {
           const lastPayment = [...(order.settlementHistory || [])]
             .reverse()
@@ -262,16 +265,19 @@ export async function PATCH(req: NextRequest) {
 
       await order.save();
 
-      // ✅ Write ProductSalesLog when delivery is completed (idempotent via unique orderId index)
       if (deliveryStatus === "Delivered") {
         try {
-          const { default: ProductSalesLog } = await import("@/models/ProductSalesLog");
+          const { default: ProductSalesLog } = await import(
+            "@/models/ProductSalesLog"
+          );
 
-          const alreadyLogged = await ProductSalesLog.findOne({ orderId: order._id });
+          const alreadyLogged = await ProductSalesLog.findOne({
+            orderId: order._id,
+          });
           if (!alreadyLogged) {
             const allProductIds = [
-              ...(order.items    || []).map((i: any) => i.productId),
-              ...(order.freeItems|| []).map((i: any) => i.productId),
+              ...(order.items || []).map((i: any) => i.productId),
+              ...(order.freeItems || []).map((i: any) => i.productId),
             ].filter(Boolean);
 
             const { default: ProductModel } = await import("@/models/Product");
@@ -281,37 +287,49 @@ export async function PATCH(req: NextRequest) {
             ).lean();
 
             const productMap: Record<string, any> = {};
-            products.forEach((p: any) => (productMap[String(p._id)] = p));
+            products.forEach(
+              (p: any) => (productMap[String(p._id)] = p)
+            );
 
             const mapItem = (it: any) => ({
-              productId:   it.productId,
+              productId: it.productId,
               productName: it.productName,
-              category:    productMap[String(it.productId)]?.category || "",
-              unit:        it.unit || productMap[String(it.productId)]?.unit || "",
-              quantity:    it.quantity,
+              category: productMap[String(it.productId)]?.category || "",
+              unit:
+                it.unit ||
+                productMap[String(it.productId)]?.unit ||
+                "",
+              quantity: it.quantity,
             });
 
             await ProductSalesLog.create({
-              userId:       order.userId,
-              orderId:      order._id,
+              userId: order.userId,
+              orderId: order._id,
               serialNumber: order.serialNumber || "",
-              customerId:   order.customerId   || undefined,
+              customerId: order.customerId || undefined,
               customerName: order.customerName,
-              shopName:     order.shopName,
-              soldDate:     order.deliveryCompletedAt || new Date(),
-              items:        (order.items     || []).filter((i: any) => i.productId).map(mapItem),
-              freeItems:    (order.freeItems || []).filter((i: any) => i.productId).map(mapItem),
-              orderTotal:   order.total || 0,
+              shopName: order.shopName,
+              soldDate: order.deliveryCompletedAt || new Date(),
+              items: (order.items || [])
+                .filter((i: any) => i.productId)
+                .map(mapItem),
+              freeItems: (order.freeItems || [])
+                .filter((i: any) => i.productId)
+                .map(mapItem),
+              orderTotal: order.total || 0,
             });
           }
         } catch (logErr) {
-          // ⚠️ Log error but do NOT fail the main request
           console.error("ProductSalesLog write failed:", logErr);
         }
       }
 
       return NextResponse.json(
-        { success: true, order, message: `Delivery status changed from ${oldStatus} to ${deliveryStatus}` },
+        {
+          success: true,
+          order,
+          message: `Delivery status changed from ${oldStatus} to ${deliveryStatus}`,
+        },
         { status: 200 }
       );
     }
@@ -330,14 +348,17 @@ export async function PATCH(req: NextRequest) {
         ...(Array.isArray(order.freeItems) ? order.freeItems : []),
       ];
 
-      // ── TRANSACTION: stock restore + customer debit undo + order update ──
       const session = await mongoose.startSession();
 
       try {
         await session.withTransaction(async () => {
-          // 1. Restore stock
           const stockUpdates = allItems
-            .filter((it: any) => it.productId && typeof it.quantity === "number" && it.quantity > 0)
+            .filter(
+              (it: any) =>
+                it.productId &&
+                typeof it.quantity === "number" &&
+                it.quantity > 0
+            )
             .map((it: any) =>
               Product.findOneAndUpdate(
                 { _id: it.productId, userId: userObjectId },
@@ -347,24 +368,30 @@ export async function PATCH(req: NextRequest) {
             );
           if (stockUpdates.length) await Promise.all(stockUpdates);
 
-          // 2. Reverse customer debit (undo the original bill's debit)
-          //    ✅ Only runs if stock restore succeeded.
           if (order.customerId && order.total) {
             await Customer.findByIdAndUpdate(
               order.customerId,
-              { $inc: { debit: -order.total, totalSales: -order.total } },
+              {
+                $inc: {
+                  debit: -order.total,
+                  totalSales: -order.total,
+                },
+              },
               { session }
             );
           }
 
-          // 3. Mark order as discarded
           order.status = "settled";
           order.discardedAt = new Date();
           order.settlementMethod = "Discarded";
           order.settlementAmount = 0;
           order.settledAt = null;
           order.settlementHistory = order.settlementHistory || [];
-          order.settlementHistory.push({ action: "Discarded", amountPaid: 0, at: new Date() });
+          order.settlementHistory.push({
+            action: "Discarded",
+            amountPaid: 0,
+            at: new Date(),
+          });
           await order.save({ session });
         });
       } finally {
@@ -377,12 +404,18 @@ export async function PATCH(req: NextRequest) {
     // ===== SETTLE =====
     if (action === "settle") {
       if (method !== "Cash" && method !== "Bank/UPI" && method !== "Debt") {
-        return NextResponse.json({ error: "Invalid settlement method." }, { status: 400 });
+        return NextResponse.json(
+          { error: "Invalid settlement method." },
+          { status: 400 }
+        );
       }
 
       if (
         order.status !== "Unsettled" &&
-        !(order.status === "settled" && order.settlementMethod === "Debt")
+        !(
+          order.status === "settled" &&
+          order.settlementMethod === "Debt"
+        )
       ) {
         return NextResponse.json(
           { error: "This order cannot be settled from this tab anymore." },
@@ -390,11 +423,13 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
-      // Debt settlement: no money changes hands yet — no customer credit change
       if (method === "Debt") {
         order.status = "settled";
         order.settlementMethod = "Debt";
-        const previousPaid = typeof order.settlementAmount === "number" ? order.settlementAmount : 0;
+        const previousPaid =
+          typeof order.settlementAmount === "number"
+            ? order.settlementAmount
+            : 0;
         order.settlementAmount = previousPaid;
         order.settledAt = new Date();
         order.settlementHistory = order.settlementHistory || [];
@@ -406,7 +441,10 @@ export async function PATCH(req: NextRequest) {
           note: "Marked as Debt",
         });
         await order.save();
-        return NextResponse.json({ success: true, order }, { status: 200 });
+        return NextResponse.json(
+          { success: true, order },
+          { status: 200 }
+        );
       }
 
       const payAmount = Math.max(0, Number(amount || 0));
@@ -417,22 +455,29 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
-      const previousPaid = typeof order.settlementAmount === "number" ? order.settlementAmount : 0;
-      const remainingForThisOrder = Math.max(0, billTotal - previousPaid);
+      const previousPaid =
+        typeof order.settlementAmount === "number"
+          ? order.settlementAmount
+          : 0;
+      const remainingForThisOrder = Math.max(
+        0,
+        billTotal - previousPaid
+      );
       const totalPaid = previousPaid + payAmount;
       const currentDeliveryStatus = order.deliveryStatus || "Pending";
-      const moveToSettled = shouldMoveToSettled(totalPaid, currentDeliveryStatus);
+      const moveToSettled = shouldMoveToSettled(
+        totalPaid,
+        currentDeliveryStatus
+      );
 
-      // ── TRANSACTION: customer credit update + order update ──
       const session = await mongoose.startSession();
 
       try {
         await session.withTransaction(async () => {
-          // 1. Update customer credit/debit
-          //    ✅ Reduces debit by amount paid (up to what's owed for this order),
-          //       and any overpayment goes to credit.
           if (order.customerId && payAmount > 0) {
-            const customer: any = await Customer.findById(order.customerId).session(session);
+            const customer: any = await Customer.findById(
+              order.customerId
+            ).session(session);
             if (customer) {
               const currentDebit = Number(customer.debit || 0);
               const appliedToDebit = Math.min(
@@ -454,7 +499,6 @@ export async function PATCH(req: NextRequest) {
             }
           }
 
-          // 2. Update order
           order.status = "settled";
           order.settlementMethod = moveToSettled ? method : "Debt";
           order.settlementAmount = totalPaid;
@@ -504,21 +548,26 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
-      const prevPaid = typeof order.settlementAmount === "number" ? order.settlementAmount : 0;
+      const prevPaid =
+        typeof order.settlementAmount === "number"
+          ? order.settlementAmount
+          : 0;
       const remainingForThisOrder = Math.max(0, billTotal - prevPaid);
       const newTotalPaid = prevPaid + payAmount;
       const currentDeliveryStatus = order.deliveryStatus || "Pending";
-      const moveToSettled = shouldMoveToSettled(newTotalPaid, currentDeliveryStatus);
+      const moveToSettled = shouldMoveToSettled(
+        newTotalPaid,
+        currentDeliveryStatus
+      );
 
-      // ── TRANSACTION: customer credit update + order update ──
       const session = await mongoose.startSession();
 
       try {
         await session.withTransaction(async () => {
-          // 1. Update customer credit/debit
-          //    ✅ Only runs atomically — if order update fails, credit stays unchanged.
           if (order.customerId && payAmount > 0) {
-            const customer: any = await Customer.findById(order.customerId).session(session);
+            const customer: any = await Customer.findById(
+              order.customerId
+            ).session(session);
             if (customer) {
               const currentDebit = Number(customer.debit || 0);
               const appliedToDebit = Math.min(
@@ -540,7 +589,6 @@ export async function PATCH(req: NextRequest) {
             }
           }
 
-          // 2. Update order
           order.status = "settled";
           order.settlementAmount = newTotalPaid;
           order.settlementMethod = moveToSettled ? method : "Debt";
@@ -566,7 +614,10 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true, order }, { status: 200 });
     }
 
-    return NextResponse.json({ error: "Invalid action." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid action." },
+      { status: 400 }
+    );
   } catch (err: any) {
     console.error("Error updating order:", err);
     return NextResponse.json(
