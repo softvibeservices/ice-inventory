@@ -32,7 +32,8 @@ export async function GET(req: Request) {
       matchStage["items.productId"] = new mongoose.Types.ObjectId(productId);
     }
 
-    // Aggregation: unwind items, group by product + date/month
+    // ✅ FIX: Count unique orders properly
+    // Strategy: Group by product+date, then use $addToSet to collect unique orderIds
     const pipeline: any[] = [
       { $match: matchStage },
       { $unwind: "$items" },
@@ -50,7 +51,8 @@ export async function GET(req: Request) {
               : { $dateToString: { format: "%Y-%m-%d", date: "$soldDate" } },
           },
           totalQuantity: { $sum: "$items.quantity" },
-          orderCount: { $sum: 1 },
+          // ✅ FIXED: Collect unique orderIds and count them
+          uniqueOrders: { $addToSet: "$orderId" },
           totalRevenue: { $sum: "$orderTotal" },
         },
       },
@@ -63,7 +65,8 @@ export async function GET(req: Request) {
           unit: "$_id.unit",
           date: "$_id.date",
           totalQuantity: 1,
-          orderCount: 1,
+          // ✅ FIXED: Count the size of unique orders array
+          orderCount: { $size: "$uniqueOrders" },
           totalRevenue: 1,
         },
       },
@@ -86,7 +89,8 @@ export async function GET(req: Request) {
             unit: "$items.unit",
           },
           totalQuantity: { $sum: "$items.quantity" },
-          orderCount: { $sum: 1 },
+          // ✅ FIXED: Collect unique orderIds for summary too
+          uniqueOrders: { $addToSet: "$orderId" },
         },
       },
       {
@@ -97,7 +101,8 @@ export async function GET(req: Request) {
           category: "$_id.category",
           unit: "$_id.unit",
           totalQuantity: 1,
-          orderCount: 1,
+          // ✅ FIXED: Count unique orders
+          orderCount: { $size: "$uniqueOrders" },
         },
       },
       { $sort: { totalQuantity: -1 } },

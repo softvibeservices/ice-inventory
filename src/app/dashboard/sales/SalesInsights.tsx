@@ -1,13 +1,14 @@
 // src/app/dashboard/sales/SalesInsights.tsx
-
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   AreaChart,
   Area,
   BarChart,
   Bar,
+  LineChart,
+  Line,
   PieChart,
   Pie,
   Cell,
@@ -22,15 +23,20 @@ import {
 import {
   TrendingUp,
   DollarSign,
-  Package,
   Users,
   Wallet,
-  CreditCard,
   BarChart3,
   PieChart as PieChartIcon,
   Calendar,
   IndianRupee,
   AlertCircle,
+  Activity,
+  ArrowUpRight,
+  ArrowDownRight,
+  Percent,
+  Package,
+  ShoppingCart,
+  Target,
 } from "lucide-react";
 
 // ===== TYPE DEFINITIONS =====
@@ -60,25 +66,53 @@ type CustomerItem = {
   totalSales: number;
 };
 
+type ProductSalesRow = {
+  productId: string;
+  productName: string;
+  category?: string;
+  unit: string;
+  date: string;
+  totalQuantity: number;
+  orderCount: number;
+  totalRevenue: number;
+};
+
+type ProductSalesSummary = {
+  productId: string;
+  productName: string;
+  category?: string;
+  unit: string;
+  totalQuantity: number;
+  orderCount: number;
+};
+
+type ProductSalesResponse = {
+  rows: ProductSalesRow[];
+  summary: ProductSalesSummary[];
+};
+
 interface SalesInsightsProps {
   daily: DailyStat[];
   quantities: QuantityTotals;
   paymentBreakdown: PaymentBreakdown;
   customers: CustomerItem[];
+  productSales: ProductSalesResponse | null;
   loading?: boolean;
 }
 
 // ===== COLOR SYSTEM =====
 const COLORS = {
-  primary: "#3b82f6", // blue
-  success: "#10b981", // green
-  warning: "#f59e0b", // amber/orange
-  danger: "#ef4444", // red
+  primary: "#3b82f6",
+  success: "#10b981",
+  warning: "#f59e0b",
+  danger: "#ef4444",
   purple: "#8b5cf6",
   teal: "#14b8a6",
   pink: "#ec4899",
   indigo: "#6366f1",
   cyan: "#06b6d4",
+  emerald: "#059669",
+  orange: "#f97316",
 };
 
 const CHART_COLORS = [
@@ -90,6 +124,8 @@ const CHART_COLORS = [
   COLORS.pink,
   COLORS.indigo,
   COLORS.cyan,
+  COLORS.emerald,
+  COLORS.orange,
 ];
 
 // ===== UTILITY FUNCTIONS =====
@@ -142,29 +178,11 @@ function getUnitDisplayName(unit: string): string {
     box: "Box",
     boxes: "Box",
   };
+
   return (
     displayMap[unit.toLowerCase()] ||
     unit.charAt(0).toUpperCase() + unit.slice(1)
   );
-}
-
-function formatQuantity(value: number, unit: string): string {
-  const roundedValue = Math.round(value);
-  const unitFormatMap: Record<string, string> = {
-    ml: "ml",
-    l: "L",
-    litre: "L",
-    litres: "L",
-    gm: "gm",
-    g: "gm",
-    kg: "kg",
-    piece: "pc",
-    pieces: "pc",
-    box: "box",
-    boxes: "box",
-  };
-  const formattedUnit = unitFormatMap[unit.toLowerCase()] || unit;
-  return `${roundedValue} ${formattedUnit}`;
 }
 
 // ===== CUSTOM TOOLTIP COMPONENTS =====
@@ -172,7 +190,7 @@ interface CustomTooltipProps extends TooltipProps<number, string> {
   active?: boolean;
   payload?: any[];
   label?: string;
-  type?: "currency" | "number" | "quantity";
+  type?: "currency" | "number";
 }
 
 const CustomTooltip: React.FC<CustomTooltipProps> = ({
@@ -198,13 +216,41 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({
           <span className="font-semibold text-gray-800">
             {type === "currency"
               ? formatINR(entry.value)
-              : type === "number"
-              ? entry.value.toLocaleString("en-IN")
-              : entry.value}
+              : entry.value.toLocaleString("en-IN")}
           </span>
         </div>
       ))}
     </div>
+  );
+};
+
+// Pie chart label renderer
+const renderCustomPieLabel = ({
+  cx,
+  cy,
+  midAngle,
+  innerRadius,
+  outerRadius,
+  percent,
+}: any) => {
+  if (percent < 0.05) return null;
+
+  const RADIAN = Math.PI / 180;
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="white"
+      textAnchor={x > cx ? "start" : "end"}
+      dominantBaseline="central"
+      className="text-xs font-semibold"
+    >
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
   );
 };
 
@@ -214,13 +260,12 @@ export default function SalesInsights({
   quantities,
   paymentBreakdown,
   customers,
+  productSales,
   loading,
 }: SalesInsightsProps) {
-  const [selectedChart, setSelectedChart] = useState<string | null>(null);
-
   // ===== DATA PROCESSING =====
 
-  // 1. Sales Over Time (Reversed: oldest → newest for chronological flow)
+  // 1. Sales Over Time
   const salesOverTimeData = useMemo(() => {
     return [...daily]
       .reverse()
@@ -228,83 +273,11 @@ export default function SalesInsights({
         date: formatDate(d.date),
         fullDate: formatDateLong(d.date),
         sales: d.totalSales,
-        cash: d.cashReceived,
-        bank: d.bankReceived,
-      }));
-  }, [daily]);
-
-  // 2. Orders Count Trend
-  const ordersCountData = useMemo(() => {
-    return [...daily]
-      .reverse()
-      .map((d) => ({
-        date: formatDate(d.date),
-        fullDate: formatDateLong(d.date),
         orders: d.totalOrders,
       }));
   }, [daily]);
 
-  // 3. Quantity by Unit (Pie Chart)
-  const quantityByUnitData = useMemo(() => {
-    return Object.entries(quantities)
-      .filter(([_, value]) => value > 0)
-      .map(([unit, value]) => ({
-        name: getUnitDisplayName(unit),
-        value: Math.round(value),
-        unit,
-        formatted: formatQuantity(value, unit),
-      }))
-      .sort((a, b) => b.value - a.value);
-  }, [quantities]);
-
-  // 4. Payment Split (Pie Chart)
-  const paymentSplitData = useMemo(() => {
-    const data = [
-      {
-        name: "Cash",
-        value: paymentBreakdown.cash,
-        color: COLORS.success,
-        percentage: 0,
-      },
-      {
-        name: "Bank/UPI",
-        value: paymentBreakdown.bank,
-        color: COLORS.primary,
-        percentage: 0,
-      },
-      {
-        name: "Outstanding",
-        value: paymentBreakdown.outstandingDebt,
-        color: COLORS.danger,
-        percentage: 0,
-      },
-    ].filter((item) => item.value > 0);
-
-    const total = data.reduce((sum, item) => sum + item.value, 0);
-    return data.map((item) => ({
-      ...item,
-      percentage: total > 0 ? ((item.value / total) * 100).toFixed(1) : "0",
-    }));
-  }, [paymentBreakdown]);
-
-  // 5. Top Customers by Outstanding
-  const topCustomersData = useMemo(() => {
-    return [...customers]
-      .map((c) => ({
-        name: c.name.length > 20 ? c.name.substring(0, 20) + "..." : c.name,
-        fullName: c.name,
-        shopName: c.shopName,
-        outstanding: c.debit - c.credit,
-        debit: c.debit,
-        credit: c.credit,
-        totalSales: c.totalSales,
-      }))
-      .filter((c) => c.outstanding > 0)
-      .sort((a, b) => b.outstanding - a.outstanding)
-      .slice(0, 10);
-  }, [customers]);
-
-  // 6. Daily Payment Methods Breakdown (Stacked Bar)
+  // 2. Daily Payment Methods
   const dailyPaymentData = useMemo(() => {
     return [...daily]
       .reverse()
@@ -316,69 +289,151 @@ export default function SalesInsights({
       }));
   }, [daily]);
 
-  // 7. Top Units Sold (Bar Chart)
-  const topUnitsData = useMemo(() => {
-    return quantityByUnitData.slice(0, 5);
-  }, [quantityByUnitData]);
+  // 3. Payment Split
+  const paymentSplitData = useMemo(() => {
+    const { cash, bank, outstandingDebt } = paymentBreakdown;
+    const total = cash + bank + outstandingDebt;
 
-  // 8. Summary Statistics
+    if (total === 0) return [];
+
+    const data = [];
+    if (cash > 0) {
+      data.push({
+        name: "Cash",
+        value: cash,
+        color: COLORS.success,
+        percentage: ((cash / total) * 100).toFixed(1),
+      });
+    }
+    if (bank > 0) {
+      data.push({
+        name: "Bank/UPI",
+        value: bank,
+        color: COLORS.primary,
+        percentage: ((bank / total) * 100).toFixed(1),
+      });
+    }
+    if (outstandingDebt > 0) {
+      data.push({
+        name: "Outstanding",
+        value: outstandingDebt,
+        color: COLORS.danger,
+        percentage: ((outstandingDebt / total) * 100).toFixed(1),
+      });
+    }
+
+    return data;
+  }, [paymentBreakdown]);
+
+  // 4. Top Customers by Outstanding
+  const topCustomersData = useMemo(() => {
+    return customers
+      .map((c) => ({
+        name: c.name.length > 12 ? c.name.substring(0, 12) + "..." : c.name,
+        fullName: c.name,
+        shopName: c.shopName,
+        outstanding: c.debit - c.credit,
+        totalSales: c.totalSales,
+      }))
+      .filter((c) => c.outstanding > 0)
+      .sort((a, b) => b.outstanding - a.outstanding)
+      .slice(0, 10);
+  }, [customers]);
+
+  // 5. Top Products by Quantity
+  const topProductsData = useMemo(() => {
+    if (!productSales?.summary) return [];
+    
+    return productSales.summary
+      .slice(0, 10)
+      .map((p) => ({
+        name: p.productName.length > 15 ? p.productName.substring(0, 15) + "..." : p.productName,
+        fullName: p.productName,
+        quantity: p.totalQuantity,
+        orders: p.orderCount,
+        unit: p.unit,
+      }));
+  }, [productSales]);
+
+  // 6. Category-wise Product Distribution
+  const categoryDistribution = useMemo(() => {
+    if (!productSales?.summary) return [];
+
+    const categoryMap = new Map<string, number>();
+    
+    productSales.summary.forEach((p) => {
+      const cat = p.category || "Uncategorized";
+      categoryMap.set(cat, (categoryMap.get(cat) || 0) + p.totalQuantity);
+    });
+
+    return Array.from(categoryMap.entries())
+      .map(([name, value], index) => ({
+        name,
+        value,
+        color: CHART_COLORS[index % CHART_COLORS.length],
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+  }, [productSales]);
+
+  // 7. Sales Trend Analysis
+  const salesTrendAnalysis = useMemo(() => {
+    if (daily.length < 2) return null;
+
+    const sortedDaily = [...daily].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    const midpoint = Math.floor(sortedDaily.length / 2);
+    const firstHalf = sortedDaily.slice(0, midpoint);
+    const secondHalf = sortedDaily.slice(midpoint);
+
+    const firstHalfAvg =
+      firstHalf.reduce((sum, d) => sum + d.totalSales, 0) / firstHalf.length;
+    const secondHalfAvg =
+      secondHalf.reduce((sum, d) => sum + d.totalSales, 0) / secondHalf.length;
+
+    const percentChange =
+      firstHalfAvg > 0
+        ? ((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100
+        : 0;
+
+    return {
+      firstHalfAvg,
+      secondHalfAvg,
+      percentChange,
+      isIncreasing: secondHalfAvg > firstHalfAvg,
+    };
+  }, [daily]);
+
+  // 8. Summary Stats
   const summaryStats = useMemo(() => {
     const totalSales = daily.reduce((sum, d) => sum + d.totalSales, 0);
     const totalOrders = daily.reduce((sum, d) => sum + d.totalOrders, 0);
-    const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
     const totalCash = daily.reduce((sum, d) => sum + d.cashReceived, 0);
     const totalBank = daily.reduce((sum, d) => sum + d.bankReceived, 0);
     const totalPayments = totalCash + totalBank;
+    const outstandingDebt = paymentBreakdown.outstandingDebt;
+    const avgOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
 
     return {
       totalSales,
       totalOrders,
-      avgOrderValue,
       totalCash,
       totalBank,
       totalPayments,
-      outstandingDebt: paymentBreakdown.outstandingDebt,
+      outstandingDebt,
+      avgOrderValue,
     };
-  }, [daily, paymentBreakdown.outstandingDebt]);
-
-  // ===== CUSTOM PIE LABEL =====
-  const renderCustomPieLabel = ({
-    cx,
-    cy,
-    midAngle,
-    innerRadius,
-    outerRadius,
-    percent,
-    name,
-  }: any) => {
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-    if (percent < 0.05) return null; // Hide labels for very small slices
-
-    return (
-      <text
-        x={x}
-        y={y}
-        fill="white"
-        textAnchor={x > cx ? "start" : "end"}
-        dominantBaseline="central"
-        className="text-xs font-semibold"
-      >
-        {`${name} ${(percent * 100).toFixed(0)}%`}
-      </text>
-    );
-  };
+  }, [daily, paymentBreakdown]);
 
   // ===== LOADING STATE =====
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-500 text-sm">Loading insights...</p>
+          <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-sm text-gray-500">Loading insights...</p>
         </div>
       </div>
     );
@@ -387,14 +442,13 @@ export default function SalesInsights({
   // ===== EMPTY STATE =====
   if (daily.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-gray-100">
-        <Package className="w-20 h-20 text-gray-300 mb-4" />
-        <h3 className="text-lg font-semibold text-gray-700 mb-2">
-          No Sales Data Available
+      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
+        <AlertCircle className="w-12 h-12 text-yellow-600 mx-auto mb-3" />
+        <h3 className="text-lg font-semibold text-yellow-900 mb-2">
+          No Data Available
         </h3>
-        <p className="text-gray-500 text-sm text-center max-w-md">
-          No sales data found in the selected date range. Try adjusting your
-          filters or create some orders to see insights here.
+        <p className="text-sm text-yellow-700">
+          There is no sales data in the selected date range.
         </p>
       </div>
     );
@@ -403,126 +457,181 @@ export default function SalesInsights({
   // ===== RENDER =====
   return (
     <div className="space-y-6">
-      {/* Info Banner */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-        <div className="text-sm text-blue-900">
-          <p className="font-semibold mb-1">Data Insights Overview</p>
-          <p className="text-xs text-blue-700">
-            All charts and statistics are calculated from{" "}
-            <span className="font-semibold">settled and delivered orders only</span>.
-            Unsettled, pending, or discarded orders are excluded from all
-            calculations.
-          </p>
-        </div>
-      </div>
-
-      {/* Summary Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-5 border border-green-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
-              <IndianRupee className="w-5 h-5 text-green-700" />
-            </div>
-            <span className="text-xs text-green-700 font-semibold bg-green-200 px-2 py-1 rounded-full">
-              Total
+      {/* KPI Cards Row */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Average Order Value */}
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-blue-700 uppercase">
+              Avg Order Value
             </span>
+            <IndianRupee className="w-4 h-4 text-blue-600" />
           </div>
-          <p className="text-xs text-green-700 font-semibold uppercase tracking-wide mb-1">
-            Total Sales
-          </p>
-          <p className="text-2xl font-bold text-green-800">
-            {formatINR(summaryStats.totalSales)}
-          </p>
-          <p className="text-xs text-green-600 mt-2">
-            From {summaryStats.totalOrders} orders
-          </p>
-        </div>
-
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-5 border border-blue-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 bg-blue-200 rounded-lg flex items-center justify-center">
-              <BarChart3 className="w-5 h-5 text-blue-700" />
-            </div>
-            <span className="text-xs text-blue-700 font-semibold bg-blue-200 px-2 py-1 rounded-full">
-              Avg
-            </span>
-          </div>
-          <p className="text-xs text-blue-700 font-semibold uppercase tracking-wide mb-1">
-            Avg Order Value
-          </p>
-          <p className="text-2xl font-bold text-blue-800">
+          <p className="text-2xl font-bold text-blue-900">
             {formatINR(summaryStats.avgOrderValue)}
           </p>
-          <p className="text-xs text-blue-600 mt-2">
-            Per order delivered
-          </p>
+          <p className="text-xs text-blue-600 mt-1">Per delivered order</p>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-5 border border-purple-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 bg-purple-200 rounded-lg flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-purple-700" />
-            </div>
-            <span className="text-xs text-purple-700 font-semibold bg-purple-200 px-2 py-1 rounded-full">
-              Received
+        {/* Collection Rate */}
+        <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-green-700 uppercase">
+              Collection Rate
             </span>
+            <Percent className="w-4 h-4 text-green-600" />
           </div>
-          <p className="text-xs text-purple-700 font-semibold uppercase tracking-wide mb-1">
-            Payments Collected
+          <p className="text-2xl font-bold text-green-900">
+            {summaryStats.totalSales > 0
+              ? (
+                  (summaryStats.totalPayments / summaryStats.totalSales) *
+                  100
+                ).toFixed(1)
+              : 0}
+            %
           </p>
-          <p className="text-2xl font-bold text-purple-800">
-            {formatINR(summaryStats.totalPayments)}
-          </p>
-          <p className="text-xs text-purple-600 mt-2 flex items-center gap-2">
-            <span>Cash: {formatINR(summaryStats.totalCash)}</span>
-            <span className="text-purple-400">|</span>
-            <span>Bank: {formatINR(summaryStats.totalBank)}</span>
-          </p>
+          <p className="text-xs text-green-600 mt-1">Sales collected</p>
         </div>
 
-        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-5 border border-red-200 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 bg-red-200 rounded-lg flex items-center justify-center">
-              <CreditCard className="w-5 h-5 text-red-700" />
+        {/* Sales Trend */}
+        {salesTrendAnalysis && (
+          <div
+            className={`bg-gradient-to-br rounded-xl p-4 border ${
+              salesTrendAnalysis.isIncreasing
+                ? "from-emerald-50 to-teal-50 border-emerald-200"
+                : "from-orange-50 to-red-50 border-orange-200"
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span
+                className={`text-xs font-semibold uppercase ${
+                  salesTrendAnalysis.isIncreasing
+                    ? "text-emerald-700"
+                    : "text-orange-700"
+                }`}
+              >
+                Sales Trend
+              </span>
+              {salesTrendAnalysis.isIncreasing ? (
+                <ArrowUpRight className="w-4 h-4 text-emerald-600" />
+              ) : (
+                <ArrowDownRight className="w-4 h-4 text-orange-600" />
+              )}
             </div>
-            <span className="text-xs text-red-700 font-semibold bg-red-200 px-2 py-1 rounded-full">
-              Pending
-            </span>
+            <p
+              className={`text-2xl font-bold ${
+                salesTrendAnalysis.isIncreasing
+                  ? "text-emerald-900"
+                  : "text-orange-900"
+              }`}
+            >
+              {salesTrendAnalysis.isIncreasing ? "+" : ""}
+              {salesTrendAnalysis.percentChange.toFixed(1)}%
+            </p>
+            <p
+              className={`text-xs mt-1 ${
+                salesTrendAnalysis.isIncreasing
+                  ? "text-emerald-600"
+                  : "text-orange-600"
+              }`}
+            >
+              Period comparison
+            </p>
           </div>
-          <p className="text-xs text-red-700 font-semibold uppercase tracking-wide mb-1">
-            Outstanding Debt
+        )}
+
+        {/* Products Sold */}
+        <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-purple-700 uppercase">
+              Products Sold
+            </span>
+            <Package className="w-4 h-4 text-purple-600" />
+          </div>
+          <p className="text-2xl font-bold text-purple-900">
+            {productSales?.summary?.length || 0}
           </p>
-          <p className="text-2xl font-bold text-red-800">
-            {formatINR(summaryStats.outstandingDebt)}
-          </p>
-          <p className="text-xs text-red-600 mt-2">
-            From {topCustomersData.length} customers
-          </p>
+          <p className="text-xs text-purple-600 mt-1">Unique products</p>
         </div>
       </div>
 
-      {/* Row 1: Sales Trend + Orders Trend */}
+      {/* Row 1: Sales & Orders Trend */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sales Over Time */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-green-600" />
               <h3 className="text-base font-semibold text-gray-800">
-                Sales Trend
+                Sales & Orders Trend
               </h3>
             </div>
             <Calendar className="w-4 h-4 text-gray-400" />
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={salesOverTimeData}>
-              <defs>
-                <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={COLORS.success} stopOpacity={0.4} />
-                  <stop offset="95%" stopColor={COLORS.success} stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <LineChart data={salesOverTimeData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: "#6b7280", fontSize: 11 }}
+                tickLine={false}
+                axisLine={{ stroke: "#e5e7eb" }}
+              />
+              <YAxis
+                yAxisId="left"
+                tick={{ fill: "#6b7280", fontSize: 11 }}
+                tickLine={false}
+                axisLine={{ stroke: "#e5e7eb" }}
+                tickFormatter={(value) => {
+                  if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
+                  if (value >= 1000) return `₹${(value / 1000).toFixed(0)}k`;
+                  return `₹${value}`;
+                }}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                tick={{ fill: "#6b7280", fontSize: 11 }}
+                tickLine={false}
+                axisLine={{ stroke: "#e5e7eb" }}
+              />
+              <Tooltip content={<CustomTooltip type="currency" />} />
+              <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
+              <Line
+                yAxisId="left"
+                type="monotone"
+                dataKey="sales"
+                name="Sales"
+                stroke={COLORS.success}
+                strokeWidth={3}
+                dot={{ r: 4 }}
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="orders"
+                name="Orders"
+                stroke={COLORS.primary}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Payment Methods */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-purple-600" />
+              <h3 className="text-base font-semibold text-gray-800">
+                Payment Methods
+              </h3>
+            </div>
+            <Calendar className="w-4 h-4 text-gray-400" />
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={dailyPaymentData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis
                 dataKey="date"
@@ -541,189 +650,161 @@ export default function SalesInsights({
                 }}
               />
               <Tooltip content={<CustomTooltip type="currency" />} />
-              <Area
-                type="monotone"
-                dataKey="sales"
-                name="Sales"
-                stroke={COLORS.success}
-                strokeWidth={3}
-                fill="url(#salesGradient)"
-                animationDuration={1000}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Orders Count Trend */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-blue-600" />
-              <h3 className="text-base font-semibold text-gray-800">
-                Orders Trend
-              </h3>
-            </div>
-            <Calendar className="w-4 h-4 text-gray-400" />
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={ordersCountData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: "#6b7280", fontSize: 11 }}
-                tickLine={false}
-                axisLine={{ stroke: "#e5e7eb" }}
-              />
-              <YAxis
-                tick={{ fill: "#6b7280", fontSize: 11 }}
-                tickLine={false}
-                axisLine={{ stroke: "#e5e7eb" }}
-              />
-              <Tooltip content={<CustomTooltip type="number" />} />
+              <Legend wrapperStyle={{ fontSize: "12px" }} iconType="circle" />
               <Bar
-                dataKey="orders"
-                name="Orders"
+                dataKey="Cash"
+                stackId="payment"
+                fill={COLORS.success}
+                radius={[0, 0, 0, 0]}
+              />
+              <Bar
+                dataKey="Bank/UPI"
+                stackId="payment"
                 fill={COLORS.primary}
                 radius={[8, 8, 0, 0]}
-                animationDuration={1000}
               />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Row 2: Payment Methods Over Time */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Wallet className="w-5 h-5 text-purple-600" />
-            <h3 className="text-base font-semibold text-gray-800">
-              Payment Methods Over Time
-            </h3>
-          </div>
-          <Calendar className="w-4 h-4 text-gray-400" />
-        </div>
-        <ResponsiveContainer width="100%" height={350}>
-          <BarChart data={dailyPaymentData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis
-              dataKey="date"
-              tick={{ fill: "#6b7280", fontSize: 11 }}
-              tickLine={false}
-              axisLine={{ stroke: "#e5e7eb" }}
-            />
-            <YAxis
-              tick={{ fill: "#6b7280", fontSize: 11 }}
-              tickLine={false}
-              axisLine={{ stroke: "#e5e7eb" }}
-              tickFormatter={(value) => {
-                if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
-                if (value >= 1000) return `₹${(value / 1000).toFixed(0)}k`;
-                return `₹${value}`;
-              }}
-            />
-            <Tooltip content={<CustomTooltip type="currency" />} />
-            <Legend
-              wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }}
-              iconType="circle"
-            />
-            <Bar
-              dataKey="Cash"
-              stackId="payment"
-              fill={COLORS.success}
-              radius={[0, 0, 0, 0]}
-              animationDuration={1000}
-            />
-            <Bar
-              dataKey="Bank/UPI"
-              stackId="payment"
-              fill={COLORS.primary}
-              radius={[8, 8, 0, 0]}
-              animationDuration={1000}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Row 3: Quantity Breakdown + Payment Split */}
+      {/* Row 2: Product Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Quantity Sold by Unit */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+        {/* Top Products */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Package className="w-5 h-5 text-purple-600" />
+              <Package className="w-5 h-5 text-emerald-600" />
               <h3 className="text-base font-semibold text-gray-800">
-                Quantity Sold by Unit
+                Top 10 Products by Quantity
+              </h3>
+            </div>
+            <BarChart3 className="w-4 h-4 text-gray-400" />
+          </div>
+          {topProductsData.length === 0 ? (
+            <div className="flex items-center justify-center h-80 text-gray-400 text-sm">
+              No product sales data
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart
+                data={topProductsData}
+                layout="vertical"
+                margin={{ left: 10, right: 10 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis
+                  type="number"
+                  tick={{ fill: "#6b7280", fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  tick={{ fill: "#6b7280", fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e5e7eb" }}
+                  width={100}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload || payload.length === 0) return null;
+                    const data = payload[0].payload;
+                    return (
+                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
+                        <p className="font-semibold text-gray-800 mb-1">
+                          {data.fullName}
+                        </p>
+                        <p className="text-gray-600">
+                          Quantity: <span className="font-semibold">{data.quantity.toLocaleString()}</span> {getUnitDisplayName(data.unit)}
+                        </p>
+                        <p className="text-gray-600">
+                          Orders: <span className="font-semibold">{data.orders}</span>
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar
+                  dataKey="quantity"
+                  name="Quantity"
+                  fill={COLORS.emerald}
+                  radius={[0, 8, 8, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Category Distribution */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-indigo-600" />
+              <h3 className="text-base font-semibold text-gray-800">
+                Sales by Category
               </h3>
             </div>
             <PieChartIcon className="w-4 h-4 text-gray-400" />
           </div>
-          {quantityByUnitData.length === 0 ? (
+          {categoryDistribution.length === 0 ? (
             <div className="flex items-center justify-center h-80 text-gray-400 text-sm">
-              No quantity data available
+              No category data
             </div>
           ) : (
             <div className="flex flex-col">
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={quantityByUnitData}
+                    data={categoryDistribution}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
                     label={renderCustomPieLabel}
-                    outerRadius={100}
-                    fill="#8884d8"
+                    outerRadius={110}
                     dataKey="value"
-                    animationDuration={1000}
                   >
-                    {quantityByUnitData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={CHART_COLORS[index % CHART_COLORS.length]}
-                      />
+                    {categoryDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <Tooltip
                     content={({ active, payload }) => {
-                      if (!active || !payload || payload.length === 0)
-                        return null;
+                      if (!active || !payload || payload.length === 0) return null;
                       const data = payload[0].payload;
                       return (
                         <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
-                          <p className="font-semibold text-gray-800 mb-1">
-                            {data.name}
+                          <p className="font-semibold text-gray-800">{data.name}</p>
+                          <p className="text-gray-600">
+                            Quantity: {data.value.toLocaleString()}
                           </p>
-                          <p className="text-gray-600">{data.formatted}</p>
                         </div>
                       );
                     }}
                   />
                 </PieChart>
               </ResponsiveContainer>
-              {/* Legend */}
-              <div className="grid grid-cols-2 gap-2 mt-4 px-4">
-                {quantityByUnitData.slice(0, 6).map((item, index) => (
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                {categoryDistribution.map((item, index) => (
                   <div key={index} className="flex items-center gap-2 text-xs">
                     <div
                       className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{
-                        backgroundColor:
-                          CHART_COLORS[index % CHART_COLORS.length],
-                      }}
+                      style={{ backgroundColor: item.color }}
                     />
-                    <span className="text-gray-700 truncate">
-                      {item.name}: <span className="font-semibold">{item.formatted}</span>
-                    </span>
+                    <span className="text-gray-700 truncate">{item.name}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
         </div>
+      </div>
 
-        {/* Payment Split */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+      {/* Row 3: Financial Analysis */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Payment Distribution */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-orange-600" />
@@ -735,7 +816,7 @@ export default function SalesInsights({
           </div>
           {paymentSplitData.length === 0 ? (
             <div className="flex items-center justify-center h-80 text-gray-400 text-sm">
-              No payment data available
+              No payment data
             </div>
           ) : (
             <div className="flex flex-col">
@@ -748,9 +829,7 @@ export default function SalesInsights({
                     labelLine={false}
                     label={renderCustomPieLabel}
                     outerRadius={100}
-                    fill="#8884d8"
                     dataKey="value"
-                    animationDuration={1000}
                   >
                     {paymentSplitData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
@@ -758,8 +837,7 @@ export default function SalesInsights({
                   </Pie>
                   <Tooltip
                     content={({ active, payload }) => {
-                      if (!active || !payload || payload.length === 0)
-                        return null;
+                      if (!active || !payload || payload.length === 0) return null;
                       const data = payload[0].payload;
                       return (
                         <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
@@ -775,26 +853,19 @@ export default function SalesInsights({
                   />
                 </PieChart>
               </ResponsiveContainer>
-              {/* Legend */}
-              <div className="grid grid-cols-1 gap-3 mt-4 px-4">
+              <div className="grid grid-cols-1 gap-3 mt-4">
                 {paymentSplitData.map((item, index) => (
                   <div
                     key={index}
                     className="flex items-center justify-between text-xs border-l-4 pl-3 py-1"
                     style={{ borderColor: item.color }}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-700 font-medium">
-                        {item.name}
-                      </span>
-                    </div>
+                    <span className="text-gray-700 font-medium">{item.name}</span>
                     <div className="text-right">
                       <p className="font-semibold text-gray-800">
                         {formatINR(item.value)}
                       </p>
-                      <p className="text-gray-500 text-[10px]">
-                        {item.percentage}%
-                      </p>
+                      <p className="text-gray-500 text-[10px]">{item.percentage}%</p>
                     </div>
                   </div>
                 ))}
@@ -802,81 +873,14 @@ export default function SalesInsights({
             </div>
           )}
         </div>
-      </div>
 
-      {/* Row 4: Top Units Sold + Top Customers by Outstanding */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top 5 Units Sold */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Package className="w-5 h-5 text-teal-600" />
-              <h3 className="text-base font-semibold text-gray-800">
-                Top 5 Units Sold
-              </h3>
-            </div>
-            <BarChart3 className="w-4 h-4 text-gray-400" />
-          </div>
-          {topUnitsData.length === 0 ? (
-            <div className="flex items-center justify-center h-80 text-gray-400 text-sm">
-              No unit data available
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart
-                data={topUnitsData}
-                layout="vertical"
-                margin={{ left: 20, right: 20 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis
-                  type="number"
-                  tick={{ fill: "#6b7280", fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={{ stroke: "#e5e7eb" }}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  tick={{ fill: "#6b7280", fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={{ stroke: "#e5e7eb" }}
-                  width={80}
-                />
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload || payload.length === 0)
-                      return null;
-                    const data = payload[0].payload;
-                    return (
-                      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
-                        <p className="font-semibold text-gray-800 mb-1">
-                          {data.name}
-                        </p>
-                        <p className="text-gray-600">{data.formatted}</p>
-                      </div>
-                    );
-                  }}
-                />
-                <Bar
-                  dataKey="value"
-                  name="Quantity"
-                  fill={COLORS.teal}
-                  radius={[0, 8, 8, 0]}
-                  animationDuration={1000}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        {/* Top Customers by Outstanding */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+        {/* Top Outstanding Customers */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-red-600" />
               <h3 className="text-base font-semibold text-gray-800">
-                Top 10 Outstanding Customers
+                Top Outstanding Customers
               </h3>
             </div>
             <BarChart3 className="w-4 h-4 text-gray-400" />
@@ -910,12 +914,11 @@ export default function SalesInsights({
                   tick={{ fill: "#6b7280", fontSize: 10 }}
                   tickLine={false}
                   axisLine={{ stroke: "#e5e7eb" }}
-                  width={100}
+                  width={90}
                 />
                 <Tooltip
                   content={({ active, payload }) => {
-                    if (!active || !payload || payload.length === 0)
-                      return null;
+                    if (!active || !payload || payload.length === 0) return null;
                     const data = payload[0].payload;
                     return (
                       <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
@@ -948,7 +951,6 @@ export default function SalesInsights({
                   name="Outstanding"
                   fill={COLORS.danger}
                   radius={[0, 8, 8, 0]}
-                  animationDuration={1000}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -956,15 +958,15 @@ export default function SalesInsights({
         </div>
       </div>
 
-      {/* Additional Insights Section */}
+      {/* Performance Summary */}
       <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200">
         <h3 className="text-base font-semibold text-indigo-900 mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5" />
-          Key Performance Indicators
+          <Activity className="w-5 h-5" />
+          Key Performance Metrics
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg p-4 border border-indigo-100">
-            <p className="text-xs text-gray-500 mb-1">Collection Rate</p>
+            <p className="text-xs text-gray-500 mb-1">Collection Efficiency</p>
             <p className="text-xl font-bold text-indigo-700">
               {summaryStats.totalSales > 0
                 ? (
@@ -974,9 +976,7 @@ export default function SalesInsights({
                 : 0}
               %
             </p>
-            <p className="text-[10px] text-gray-400 mt-1">
-              Of total sales collected
-            </p>
+            <p className="text-[10px] text-gray-400 mt-1">Sales collected</p>
           </div>
           <div className="bg-white rounded-lg p-4 border border-indigo-100">
             <p className="text-xs text-gray-500 mb-1">Cash vs Digital</p>
@@ -987,7 +987,7 @@ export default function SalesInsights({
                     100
                   ).toFixed(0)
                 : 0}
-              % :{" "}
+              %:{" "}
               {summaryStats.totalPayments > 0
                 ? (
                     (summaryStats.totalBank / summaryStats.totalPayments) *
@@ -996,10 +996,10 @@ export default function SalesInsights({
                 : 0}
               %
             </p>
-            <p className="text-[10px] text-gray-400 mt-1">Payment split ratio</p>
+            <p className="text-[10px] text-gray-400 mt-1">Payment split</p>
           </div>
           <div className="bg-white rounded-lg p-4 border border-indigo-100">
-            <p className="text-xs text-gray-500 mb-1">Debt Ratio</p>
+            <p className="text-xs text-gray-500 mb-1">Outstanding Rate</p>
             <p className="text-xl font-bold text-indigo-700">
               {summaryStats.totalSales > 0
                 ? (
@@ -1009,9 +1009,14 @@ export default function SalesInsights({
                 : 0}
               %
             </p>
-            <p className="text-[10px] text-gray-400 mt-1">
-              Of sales still outstanding
+            <p className="text-[10px] text-gray-400 mt-1">Sales pending</p>
+          </div>
+          <div className="bg-white rounded-lg p-4 border border-indigo-100">
+            <p className="text-xs text-gray-500 mb-1">Product Diversity</p>
+            <p className="text-xl font-bold text-indigo-700">
+              {productSales?.summary?.length || 0}
             </p>
+            <p className="text-[10px] text-gray-400 mt-1">Unique products sold</p>
           </div>
         </div>
       </div>

@@ -1,12 +1,10 @@
 // src/app/dashboard/sales/page.tsx
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import SalesInsights from "./SalesInsights";
-import ProductSalesTab from "./ProductSalesTab";
 
 import {
   IndianRupee,
@@ -21,6 +19,13 @@ import {
   LayoutGrid,
   LineChart,
   Package,
+  Search,
+  Download,
+  Filter,
+  X,
+  Calendar,
+  TrendingDown,
+  ShoppingCart,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -112,8 +117,35 @@ type CustomerSortMode =
   | "name-desc"
   | "sales-desc";
 
-// ✅ Added "products" as third tab
 type ViewMode = "overview" | "insights" | "products";
+
+// ✅ Product Sales Types
+type ProductSalesRow = {
+  productId: string;
+  productName: string;
+  category?: string;
+  unit: string;
+  date: string;
+  totalQuantity: number;
+  orderCount: number;
+  totalRevenue: number;
+};
+
+type ProductSalesSummary = {
+  productId: string;
+  productName: string;
+  category?: string;
+  unit: string;
+  totalQuantity: number;
+  orderCount: number;
+};
+
+type ProductSalesResponse = {
+  rows: ProductSalesRow[];
+  summary: ProductSalesSummary[];
+};
+
+type ProductGroupBy = "date" | "month";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -135,6 +167,27 @@ function formatDate(d: string) {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatMonthYear(dateStr: string) {
+  // "YYYY-MM" format
+  if (!dateStr || dateStr.length < 7) return dateStr;
+  const [year, month] = dateStr.split("-");
+  const monthNames = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  return `${monthNames[parseInt(month) - 1]} ${year}`;
 }
 
 function toDateInputValue(date: Date): string {
@@ -166,6 +219,132 @@ function getUnitDisplayName(unit: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PAGINATION COMPONENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+  totalItems?: number;
+  itemsPerPage?: number;
+}
+
+function Pagination({ currentPage, totalPages, onPageChange, totalItems, itemsPerPage }: PaginationProps) {
+  if (totalPages <= 1) return null;
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 5;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push("...");
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push("...");
+        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push("...");
+        pages.push(currentPage - 1);
+        pages.push(currentPage);
+        pages.push(currentPage + 1);
+        pages.push("...");
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
+  };
+
+  const startItem = (currentPage - 1) * (itemsPerPage || 10) + 1;
+  const endItem = Math.min(currentPage * (itemsPerPage || 10), totalItems || 0);
+
+  return (
+    <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-b-lg">
+      <div className="flex flex-1 justify-between sm:hidden">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Previous
+        </button>
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Next
+        </button>
+      </div>
+      <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm text-gray-700">
+            Showing <span className="font-medium">{startItem}</span> to{" "}
+            <span className="font-medium">{endItem}</span> of{" "}
+            <span className="font-medium">{totalItems}</span> results
+          </p>
+        </div>
+        <div>
+          <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+            <button
+              onClick={() => onPageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="sr-only">Previous</span>
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+              </svg>
+            </button>
+            {getPageNumbers().map((page, idx) =>
+              typeof page === "number" ? (
+                <button
+                  key={idx}
+                  onClick={() => onPageChange(page)}
+                  className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
+                    currentPage === page
+                      ? "z-10 bg-blue-600 text-white focus:z-20"
+                      : "text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20"
+                  }`}
+                >
+                  {page}
+                </button>
+              ) : (
+                <span
+                  key={idx}
+                  className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300"
+                >
+                  ...
+                </span>
+              )
+            )}
+            <button
+              onClick={() => onPageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="sr-only">Next</span>
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -184,15 +363,37 @@ export default function SalesPage() {
   const [customers, setCustomers] = useState<CustomerItem[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
 
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [customerLedger, setCustomerLedger] = useState<CustomerLedgerResponse | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
+    null
+  );
+  const [customerLedger, setCustomerLedger] =
+    useState<CustomerLedgerResponse | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
 
-  const [ledgerSortMode, setLedgerSortMode] = useState<LedgerSortMode>("date-desc");
-  const [customerSortMode, setCustomerSortMode] = useState<CustomerSortMode>("net-desc");
+  const [ledgerSortMode, setLedgerSortMode] =
+    useState<LedgerSortMode>("date-desc");
+  const [customerSortMode, setCustomerSortMode] =
+    useState<CustomerSortMode>("net-desc");
 
-  // ✅ View mode — now has three tabs
   const [viewMode, setViewMode] = useState<ViewMode>("overview");
+
+  // ✅ Product Sales State
+  const [productSales, setProductSales] =
+    useState<ProductSalesResponse | null>(null);
+  const [productSalesLoading, setProductSalesLoading] = useState(false);
+  const [productGroupBy, setProductGroupBy] =
+    useState<ProductGroupBy>("date");
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  
+  // Pagination for Product Sales
+  const [productSummaryPage, setProductSummaryPage] = useState(1);
+  const [productDetailPage, setProductDetailPage] = useState(1);
+  const PRODUCTS_PER_PAGE = 10;
+
+  // Pagination for Customer Ledger
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const LEDGER_ITEMS_PER_PAGE = 10;
 
   // ─── HANDLERS ───────────────────────────────────────────────────────────────
 
@@ -246,45 +447,53 @@ export default function SalesPage() {
   // ─── DATE RANGE PRESET → from/to ────────────────────────────────────────────
 
   useEffect(() => {
-    if (rangePreset === "all") {
-      setFrom("");
-      setTo("");
-      return;
-    }
     if (rangePreset === "custom") return;
 
     const now = new Date();
-    let fromDate = new Date(now);
-    let toDate = new Date(now);
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
 
     switch (rangePreset) {
       case "today":
+        startDate = new Date(now);
+        endDate = new Date(now);
         break;
       case "yesterday":
-        fromDate.setDate(fromDate.getDate() - 1);
-        toDate.setDate(toDate.getDate() - 1);
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 1);
+        endDate = new Date(startDate);
         break;
       case "thisMonth":
-        fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now);
         break;
       case "thisYear":
-        fromDate = new Date(now.getFullYear(), 0, 1);
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now);
         break;
       case "7d":
-        fromDate.setDate(fromDate.getDate() - 6);
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 6);
+        endDate = new Date(now);
         break;
       case "30d":
-        fromDate.setDate(fromDate.getDate() - 29);
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 29);
+        endDate = new Date(now);
         break;
       case "90d":
-        fromDate.setDate(fromDate.getDate() - 89);
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 89);
+        endDate = new Date(now);
         break;
-      default:
-        break;
+      case "all":
+        setFrom("");
+        setTo("");
+        return;
     }
 
-    setFrom(toDateInputValue(fromDate));
-    setTo(toDateInputValue(toDate));
+    if (startDate) setFrom(toDateInputValue(startDate));
+    if (endDate) setTo(toDateInputValue(endDate));
   }, [rangePreset]);
 
   // ─── FETCH SALES SUMMARY ────────────────────────────────────────────────────
@@ -292,28 +501,31 @@ export default function SalesPage() {
   useEffect(() => {
     if (!userId) return;
 
-    const params = new URLSearchParams({ userId });
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
+    const fetchSummary = async () => {
+      setSummaryLoading(true);
+      setSummaryError(null);
 
-    const url = `/api/sales/summary?${params.toString()}`;
+      const params = new URLSearchParams({ userId });
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
 
-    setSummaryLoading(true);
-    setSummaryError(null);
-
-    fetch(url)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(await res.text());
-        return res.json();
-      })
-      .then((data: SalesSummaryResponse) => {
+      try {
+        const res = await fetch(`/api/sales/summary?${params.toString()}`);
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || "Failed to fetch summary");
+        }
+        const data = await res.json();
         setSummary(data);
-      })
-      .catch((err) => {
-        console.error(err);
-        setSummaryError("Failed to load sales summary");
-      })
-      .finally(() => setSummaryLoading(false));
+      } catch (err: any) {
+        console.error("fetchSummary error:", err);
+        setSummaryError(err.message || "Unknown error");
+      } finally {
+        setSummaryLoading(false);
+      }
+    };
+
+    fetchSummary();
   }, [userId, from, to]);
 
   // ─── FETCH CUSTOMERS ────────────────────────────────────────────────────────
@@ -321,71 +533,98 @@ export default function SalesPage() {
   useEffect(() => {
     if (!userId) return;
 
-    const params = new URLSearchParams({ userId });
-    const url = `/api/customers?${params.toString()}`;
+    const fetchCustomers = async () => {
+      setCustomersLoading(true);
 
-    setCustomersLoading(true);
-
-    fetch(url)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(await res.text());
-        return res.json();
-      })
-      .then((data: any[]) => {
-        const mapped: CustomerItem[] = data.map((c: any) => ({
-          _id: String(c._id),
-          name: c.name,
-          shopName: c.shopName,
-          debit: Number(c.debit || 0),
-          credit: Number(c.credit || 0),
-          totalSales: Number(c.totalSales || 0),
-        }));
-        setCustomers(mapped);
-        if (mapped.length && !selectedCustomerId) {
-          setSelectedCustomerId(mapped[0]._id);
+      try {
+        const res = await fetch(`/api/customers?userId=${userId}`);
+        if (!res.ok) {
+          console.error("Failed to fetch customers");
+          return;
         }
-      })
-      .catch((err) => {
-        console.error(err);
-      })
-      .finally(() => setCustomersLoading(false));
-  }, [userId, selectedCustomerId]);
+        const data = await res.json();
+        setCustomers(data);
+      } catch (err) {
+        console.error("fetchCustomers error:", err);
+      } finally {
+        setCustomersLoading(false);
+      }
+    };
+
+    fetchCustomers();
+  }, [userId]);
 
   // ─── FETCH CUSTOMER LEDGER ──────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!userId || !selectedCustomerId) return;
+    if (!selectedCustomerId || !userId) {
+      setCustomerLedger(null);
+      return;
+    }
 
-    const params = new URLSearchParams({
-      userId,
-      customerId: selectedCustomerId,
-    });
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
+    const fetchLedger = async () => {
+      setLedgerLoading(true);
+      const params = new URLSearchParams({
+        userId,
+        customerId: selectedCustomerId,
+      });
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
 
-    const url = `/api/sales/customer-ledger?${params.toString()}`;
-
-    setLedgerLoading(true);
-    setCustomerLedger(null);
-
-    fetch(url)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(await res.text());
-        return res.json();
-      })
-      .then((data: CustomerLedgerResponse) => {
+      try {
+        const res = await fetch(`/api/sales/customer-ledger?${params.toString()}`);
+        if (!res.ok) {
+          console.error("Failed to fetch ledger");
+          return;
+        }
+        const data = await res.json();
         setCustomerLedger(data);
-      })
-      .catch((err) => {
-        console.error(err);
-      })
-      .finally(() => setLedgerLoading(false));
-  }, [userId, selectedCustomerId, from, to]);
+      } catch (err) {
+        console.error("fetchLedger error:", err);
+      } finally {
+        setLedgerLoading(false);
+      }
+    };
 
-  // ─── DERIVED / SORTED DATA ──────────────────────────────────────────────────
+    fetchLedger();
+  }, [selectedCustomerId, userId, from, to]);
+
+  // ✅ ─── FETCH PRODUCT SALES ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!userId || viewMode !== "products") return;
+
+    const fetchProductSales = async () => {
+      setProductSalesLoading(true);
+      const params = new URLSearchParams({
+        userId,
+        groupBy: productGroupBy,
+      });
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+
+      try {
+        const res = await fetch(`/api/sales/product-sales?${params.toString()}`);
+        if (!res.ok) {
+          console.error("Failed to fetch product sales");
+          return;
+        }
+        const data = await res.json();
+        setProductSales(data);
+      } catch (err) {
+        console.error("fetchProductSales error:", err);
+      } finally {
+        setProductSalesLoading(false);
+      }
+    };
+
+    fetchProductSales();
+  }, [userId, from, to, productGroupBy, viewMode]);
+
+  // ─── MEMOIZED SORTED DATA ───────────────────────────────────────────────────
 
   const sortedLedger = useMemo(() => {
-    if (!customerLedger) return [];
+    if (!customerLedger?.ledger) return [];
     const list = [...customerLedger.ledger];
 
     return list.sort((a, b) => {
@@ -405,6 +644,21 @@ export default function SalesPage() {
       }
     });
   }, [customerLedger, ledgerSortMode]);
+
+  // Paginated Ledger
+  const paginatedLedger = useMemo(() => {
+    const start = (ledgerPage - 1) * LEDGER_ITEMS_PER_PAGE;
+    return sortedLedger.slice(start, start + LEDGER_ITEMS_PER_PAGE);
+  }, [sortedLedger, ledgerPage]);
+
+  const totalLedgerPages = useMemo(() => {
+    return Math.ceil(sortedLedger.length / LEDGER_ITEMS_PER_PAGE);
+  }, [sortedLedger]);
+
+  // Reset ledger page when customer changes or sort changes
+  useEffect(() => {
+    setLedgerPage(1);
+  }, [selectedCustomerId, ledgerSortMode]);
 
   const sortedCustomers = useMemo(() => {
     const list = [...customers];
@@ -430,14 +684,78 @@ export default function SalesPage() {
     });
   }, [customers, customerSortMode]);
 
-  const dailyDisplayUnits = useMemo(() => {
-    if (!summary?.quantities) return [];
-    const entries = Object.entries(summary.quantities);
-    return entries
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([unit]) => unit);
-  }, [summary?.quantities]);
+  // ✅ Filtered Product Sales with Pagination
+  const filteredProductSales = useMemo(() => {
+    if (!productSales) {
+      return { 
+        rows: [], 
+        summary: [], 
+        totalSummary: 0,
+        totalRows: 0,
+        totalSummaryPages: 1,
+        totalDetailPages: 1
+      };
+    }
+
+    let filteredSummary = [...productSales.summary];
+    let filteredRows = [...productSales.rows];
+
+    // Category filter
+    if (selectedCategory !== "all") {
+      filteredSummary = filteredSummary.filter(
+        (p) => p.category === selectedCategory
+      );
+      filteredRows = filteredRows.filter((p) => p.category === selectedCategory);
+    }
+
+    // Search filter
+    if (productSearchQuery.trim()) {
+      const query = productSearchQuery.toLowerCase();
+      filteredSummary = filteredSummary.filter((p) =>
+        p.productName.toLowerCase().includes(query)
+      );
+      filteredRows = filteredRows.filter((p) =>
+        p.productName.toLowerCase().includes(query)
+      );
+    }
+
+    // Calculate total pages
+    const totalSummaryPages = Math.max(1, Math.ceil(filteredSummary.length / PRODUCTS_PER_PAGE));
+    const totalDetailPages = Math.max(1, Math.ceil(filteredRows.length / PRODUCTS_PER_PAGE));
+
+    // Paginate summary
+    const summaryStart = (productSummaryPage - 1) * PRODUCTS_PER_PAGE;
+    const paginatedSummary = filteredSummary.slice(summaryStart, summaryStart + PRODUCTS_PER_PAGE);
+
+    // Paginate rows
+    const rowsStart = (productDetailPage - 1) * PRODUCTS_PER_PAGE;
+    const paginatedRows = filteredRows.slice(rowsStart, rowsStart + PRODUCTS_PER_PAGE);
+
+    return { 
+      rows: paginatedRows, 
+      summary: paginatedSummary,
+      totalSummary: filteredSummary.length,
+      totalRows: filteredRows.length,
+      totalSummaryPages,
+      totalDetailPages
+    };
+  }, [productSales, selectedCategory, productSearchQuery, productSummaryPage, productDetailPage]);
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setProductSummaryPage(1);
+    setProductDetailPage(1);
+  }, [selectedCategory, productSearchQuery]);
+
+  // Get unique categories from product sales
+  const productCategories = useMemo(() => {
+    if (!productSales?.summary) return [];
+    const cats = new Set<string>();
+    productSales.summary.forEach((p) => {
+      if (p.category) cats.add(p.category);
+    });
+    return Array.from(cats).sort();
+  }, [productSales]);
 
   // ─── PRESET BUTTONS ─────────────────────────────────────────────────────────
 
@@ -461,7 +779,6 @@ export default function SalesPage() {
       <DashboardNavbar />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 md:px-6 py-6 md:py-8 space-y-6">
-
         {/* ── PAGE HEADER + DATE FILTER ─────────────────────────────────── */}
         <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
@@ -470,7 +787,7 @@ export default function SalesPage() {
               Sales Analytics
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Track total sales, payments, credits/debits, product sold, and customer khata.
+              Track sales, product performance, and customer accounts.
             </p>
           </div>
 
@@ -529,7 +846,6 @@ export default function SalesPage() {
         {/* ── VIEW MODE TABS ────────────────────────────────────────────── */}
         <section className="flex items-center justify-center">
           <div className="inline-flex bg-white rounded-xl shadow-sm border border-gray-200 p-1 gap-1">
-            {/* Overview */}
             <button
               onClick={() => setViewMode("overview")}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
@@ -542,7 +858,6 @@ export default function SalesPage() {
               Overview
             </button>
 
-            {/* ✅ Product Sales — replaces old quantity sold */}
             <button
               onClick={() => setViewMode("products")}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
@@ -555,12 +870,11 @@ export default function SalesPage() {
               Product Sales
             </button>
 
-            {/* Insights */}
             <button
               onClick={() => setViewMode("insights")}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                 viewMode === "insights"
-                  ? "bg-blue-600 text-white shadow-md"
+                  ? "bg-purple-600 text-white shadow-md"
                   : "text-gray-600 hover:bg-gray-50"
               }`}
             >
@@ -586,19 +900,17 @@ export default function SalesPage() {
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3" />
-                Pending/Unsettled orders excluded
+                Pending/Unsettled excluded
               </span>
               {viewMode === "products" && (
                 <span className="flex items-center gap-1 text-emerald-700 font-semibold">
                   <Package className="w-3 h-3" />
-                  Product counted sold only when delivery = Delivered
+                  Products counted when delivered
                 </span>
               )}
             </div>
           </div>
         </div>
-
-        {/* ── CONDITIONAL CONTENT ──────────────────────────────────────── */}
 
         {/* ════════════════ OVERVIEW TAB ════════════════ */}
         {viewMode === "overview" && (
@@ -693,7 +1005,7 @@ export default function SalesPage() {
                   </span>
                 </p>
                 <p className="text-xs text-gray-600">
-                  On Debt (outstanding):{" "}
+                  On Debt:{" "}
                   <span className="font-semibold text-red-600">
                     {summary
                       ? formatINR(summary.paymentBreakdown.outstandingDebt)
@@ -703,52 +1015,56 @@ export default function SalesPage() {
               </div>
             </section>
 
-            {/* Daily timeline (no quantity-sold grid — that's moved to Product Sales tab) */}
+            {/* Daily timeline */}
             <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
               <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-purple-500" />
-                Daily Timeline (Latest First)
+                <Calendar className="w-4 h-4 text-purple-500" />
+                Daily Sales Timeline
               </h2>
               <div className="overflow-auto max-h-72 text-xs">
                 <table className="min-w-full text-left">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
-                      <th className="px-3 py-2 font-semibold text-gray-500">Date</th>
-                      <th className="px-3 py-2 font-semibold text-gray-500">Orders</th>
-                      <th className="px-3 py-2 font-semibold text-gray-500">Sales</th>
-                      <th className="px-3 py-2 font-semibold text-gray-500">Cash</th>
-                      <th className="px-3 py-2 font-semibold text-gray-500">Bank/UPI</th>
-                      {dailyDisplayUnits.map((unit) => (
-                        <th
-                          key={unit}
-                          className="px-3 py-2 font-semibold text-gray-500 capitalize"
-                        >
-                          {getUnitDisplayName(unit)}
-                        </th>
-                      ))}
+                      <th className="px-3 py-2 font-semibold text-gray-500">
+                        Date
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-gray-500">
+                        Orders
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-gray-500">
+                        Sales
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-gray-500">
+                        Cash
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-gray-500">
+                        Bank/UPI
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {summaryLoading && (
                       <tr>
                         <td
-                          colSpan={5 + dailyDisplayUnits.length}
+                          colSpan={5}
                           className="px-3 py-4 text-center text-gray-400"
                         >
                           Loading...
                         </td>
                       </tr>
                     )}
-                    {!summaryLoading && summary && summary.daily.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={5 + dailyDisplayUnits.length}
-                          className="px-3 py-4 text-center text-gray-400"
-                        >
-                          No data in this range
-                        </td>
-                      </tr>
-                    )}
+                    {!summaryLoading &&
+                      summary &&
+                      summary.daily.length === 0 && (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="px-3 py-4 text-center text-gray-400"
+                          >
+                            No data in this range
+                          </td>
+                        </tr>
+                      )}
                     {!summaryLoading &&
                       summary &&
                       summary.daily.map((d) => (
@@ -757,14 +1073,15 @@ export default function SalesPage() {
                             {formatDate(d.date)}
                           </td>
                           <td className="px-3 py-2">{d.totalOrders}</td>
-                          <td className="px-3 py-2">{formatINR(d.totalSales)}</td>
-                          <td className="px-3 py-2">{formatINR(d.cashReceived)}</td>
-                          <td className="px-3 py-2">{formatINR(d.bankReceived)}</td>
-                          {dailyDisplayUnits.map((unit) => (
-                            <td key={unit} className="px-3 py-2">
-                              {Math.round(d.quantities[unit] || 0)}
-                            </td>
-                          ))}
+                          <td className="px-3 py-2">
+                            {formatINR(d.totalSales)}
+                          </td>
+                          <td className="px-3 py-2">
+                            {formatINR(d.cashReceived)}
+                          </td>
+                          <td className="px-3 py-2">
+                            {formatINR(d.bankReceived)}
+                          </td>
                         </tr>
                       ))}
                   </tbody>
@@ -843,62 +1160,61 @@ export default function SalesPage() {
 
               {/* Customer Ledger */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 lg:col-span-2">
-                <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                  <IndianRupee className="w-4 h-4 text-green-500" />
-                  Customer Credit / Debit History
+                <h2 className="text-sm font-semibold text-gray-700 mb-3">
+                  Customer Ledger
                 </h2>
 
                 {!selectedCustomerId && (
-                  <div className="text-xs text-gray-500">
-                    Select a customer to view their khata.
+                  <div className="flex items-center justify-center py-12 text-gray-400 text-sm">
+                    Select a customer to view ledger
                   </div>
                 )}
 
                 {selectedCustomerId && ledgerLoading && (
-                  <div className="text-xs text-gray-500">Loading ledger...</div>
+                  <div className="flex items-center justify-center py-12 text-gray-400 text-sm">
+                    Loading ledger...
+                  </div>
                 )}
 
                 {selectedCustomerId && !ledgerLoading && customerLedger && (
-                  <div className="space-y-3">
-                    {/* Customer summary header */}
-                    <div className="flex flex-wrap justify-between gap-2 text-xs bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
-                      <div>
-                        <p className="font-semibold text-gray-800">
-                          {customerLedger.customer.name}
-                        </p>
-                        <p className="text-[11px] text-gray-500">
-                          {customerLedger.customer.shopName}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[11px] text-gray-500">
-                          Debit:{" "}
-                          <span className="font-semibold text-gray-800">
-                            {formatINR(customerLedger.totals.debit)}
-                          </span>
-                        </p>
-                        <p className="text-[11px] text-gray-500">
-                          Credit:{" "}
-                          <span className="font-semibold text-gray-800">
-                            {formatINR(customerLedger.totals.credit)}
-                          </span>
-                        </p>
-                        <p className="text-[11px] text-gray-500">
-                          Net Balance:{" "}
-                          <span
-                            className={`font-semibold ${
+                  <div>
+                    {/* Customer info card */}
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-3 mb-4 border border-blue-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <p className="font-semibold text-gray-800 text-sm">
+                            {customerLedger.customer.name}
+                          </p>
+                          <p className="text-xs text-gray-600">
+                            {customerLedger.customer.shopName}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-600">
+                            Net Balance
+                          </p>
+                          <p
+                            className={`text-sm font-bold ${
                               customerLedger.totals.netBalance > 0
                                 ? "text-red-600"
                                 : "text-green-600"
                             }`}
                           >
                             {formatINR(customerLedger.totals.netBalance)}
-                          </span>
-                        </p>
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 text-xs">
+                        <span className="text-red-700">
+                          Debit: {formatINR(customerLedger.totals.debit)}
+                        </span>
+                        <span className="text-green-700">
+                          Credit: {formatINR(customerLedger.totals.credit)}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Sort */}
+                    {/* Sort controls */}
                     <div className="flex justify-end mb-2">
                       <select
                         value={ledgerSortMode}
@@ -907,8 +1223,8 @@ export default function SalesPage() {
                         }
                         className="border border-gray-300 rounded-md px-2 py-1 text-xs text-gray-700 bg-white"
                       >
-                        <option value="date-desc">Date: Latest first</option>
-                        <option value="date-asc">Date: Oldest first</option>
+                        <option value="date-desc">Date: Newest First</option>
+                        <option value="date-asc">Date: Oldest First</option>
                         <option value="debit-desc">Debit: High → Low</option>
                         <option value="credit-desc">Credit: High → Low</option>
                         <option value="type">Type</option>
@@ -916,78 +1232,95 @@ export default function SalesPage() {
                     </div>
 
                     {/* Ledger table */}
-                    <div className="overflow-auto max-h-80 text-xs border rounded-lg">
-                      <table className="min-w-full text-left">
-                        <thead className="bg-gray-50 sticky top-0 z-10">
-                          <tr>
-                            <th className="px-3 py-2 font-semibold text-gray-500">Date</th>
-                            <th className="px-3 py-2 font-semibold text-gray-500">Type</th>
-                            <th className="px-3 py-2 font-semibold text-gray-500">
-                              Note / Order
-                            </th>
-                            <th className="px-3 py-2 font-semibold text-gray-500">
-                              Method
-                            </th>
-                            <th className="px-3 py-2 font-semibold text-gray-500">
-                              Debit
-                            </th>
-                            <th className="px-3 py-2 font-semibold text-gray-500">
-                              Credit
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sortedLedger.length === 0 && (
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="overflow-auto text-xs">
+                        <table className="min-w-full text-left">
+                          <thead className="bg-gray-50 sticky top-0">
                             <tr>
-                              <td
-                                colSpan={6}
-                                className="px-3 py-4 text-center text-gray-400"
-                              >
-                                No entries found in this range
-                              </td>
+                              <th className="px-3 py-2 font-semibold text-gray-500">
+                                Date
+                              </th>
+                              <th className="px-3 py-2 font-semibold text-gray-500">
+                                Type
+                              </th>
+                              <th className="px-3 py-2 font-semibold text-gray-500">
+                                Details
+                              </th>
+                              <th className="px-3 py-2 font-semibold text-gray-500">
+                                Method
+                              </th>
+                              <th className="px-3 py-2 font-semibold text-gray-500">
+                                Debit
+                              </th>
+                              <th className="px-3 py-2 font-semibold text-gray-500">
+                                Credit
+                              </th>
                             </tr>
-                          )}
-                          {sortedLedger.map((e) => (
-                            <tr key={e.id} className="border-t text-gray-700">
-                              <td className="px-3 py-2 whitespace-nowrap">
-                                {formatDate(e.at)}
-                              </td>
-                              <td className="px-3 py-2">
-                                {e.type === "Sale" && (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
-                                    Sale
-                                  </span>
-                                )}
-                                {e.type === "Payment" && (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700">
-                                    Payment
-                                  </span>
-                                )}
-                                {e.type === "Adjustment" && (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700">
-                                    Adj.
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2">
-                                <span className="block">{e.note || "-"}</span>
-                                {e.serialNumber && (
-                                  <span className="text-[11px] text-gray-400">
-                                    Serial: {e.serialNumber}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2">{e.method || "-"}</td>
-                              <td className="px-3 py-2 text-red-600">
-                                {e.debit ? formatINR(e.debit) : "-"}
-                              </td>
-                              <td className="px-3 py-2 text-green-600">
-                                {e.credit ? formatINR(e.credit) : "-"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {paginatedLedger.length === 0 && (
+                              <tr>
+                                <td
+                                  colSpan={6}
+                                  className="px-3 py-4 text-center text-gray-400"
+                                >
+                                  No entries found in this range
+                                </td>
+                              </tr>
+                            )}
+                            {paginatedLedger.map((e) => (
+                              <tr key={e.id} className="border-t text-gray-700">
+                                <td className="px-3 py-2 whitespace-nowrap">
+                                  {formatDate(e.at)}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {e.type === "Sale" && (
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                                      Sale
+                                    </span>
+                                  )}
+                                  {e.type === "Payment" && (
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-50 text-green-700">
+                                      Payment
+                                    </span>
+                                  )}
+                                  {e.type === "Adjustment" && (
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-700">
+                                      Adj.
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className="block">{e.note || "-"}</span>
+                                  {e.serialNumber && (
+                                    <span className="text-[11px] text-gray-400">
+                                      Serial: {e.serialNumber}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2">{e.method || "-"}</td>
+                                <td className="px-3 py-2 text-red-600">
+                                  {e.debit ? formatINR(e.debit) : "-"}
+                                </td>
+                                <td className="px-3 py-2 text-green-600">
+                                  {e.credit ? formatINR(e.credit) : "-"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* Pagination for Ledger */}
+                      {sortedLedger.length > 0 && (
+                        <Pagination
+                          currentPage={ledgerPage}
+                          totalPages={totalLedgerPages || 1}
+                          onPageChange={setLedgerPage}
+                          totalItems={sortedLedger.length}
+                          itemsPerPage={LEDGER_ITEMS_PER_PAGE}
+                        />
+                      )}
                     </div>
                   </div>
                 )}
@@ -997,12 +1330,343 @@ export default function SalesPage() {
         )}
 
         {/* ════════════════ PRODUCT SALES TAB ════════════════ */}
-        {viewMode === "products" && userId && (
-          <ProductSalesTab
-            userId={userId}
-            from={from}
-            to={to}
-          />
+        {viewMode === "products" && (
+          <>
+            {/* Filters & Controls */}
+            <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                {/* Search */}
+                <div className="flex-1 max-w-md">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={productSearchQuery}
+                      onChange={(e) => setProductSearchQuery(e.target.value)}
+                      placeholder="Search products..."
+                      className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    {productSearchQuery && (
+                      <button
+                        onClick={() => setProductSearchQuery("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Category Filter & Group By */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-gray-500" />
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white"
+                    >
+                      <option value="all">All Categories</option>
+                      {productCategories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-gray-600">
+                      Group By:
+                    </span>
+                    <div className="inline-flex bg-gray-100 rounded-lg p-0.5">
+                      <button
+                        onClick={() => setProductGroupBy("date")}
+                        className={`px-3 py-1 text-xs rounded-md transition ${
+                          productGroupBy === "date"
+                            ? "bg-white text-emerald-700 shadow"
+                            : "text-gray-600"
+                        }`}
+                      >
+                        Daily
+                      </button>
+                      <button
+                        onClick={() => setProductGroupBy("month")}
+                        className={`px-3 py-1 text-xs rounded-md transition ${
+                          productGroupBy === "month"
+                            ? "bg-white text-emerald-700 shadow"
+                            : "text-gray-600"
+                        }`}
+                      >
+                        Monthly
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Product Sales Summary Cards */}
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl shadow-sm border border-emerald-100 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-emerald-700 uppercase">
+                    Total Products Sold
+                  </span>
+                  <Package className="w-5 h-5 text-emerald-600" />
+                </div>
+                <p className="text-2xl font-bold text-emerald-900">
+                  {productSalesLoading
+                    ? "..."
+                    : filteredProductSales.totalSummary}
+                </p>
+                <p className="text-xs text-emerald-600 mt-1">
+                  Unique products delivered
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-sm border border-blue-100 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-blue-700 uppercase">
+                    Total Quantity
+                  </span>
+                  <ShoppingCart className="w-5 h-5 text-blue-600" />
+                </div>
+                <p className="text-2xl font-bold text-blue-900">
+                  {productSalesLoading
+                    ? "..."
+                    : (productSales?.summary || [])
+                        .filter(p => 
+                          (selectedCategory === "all" || p.category === selectedCategory) &&
+                          (!productSearchQuery.trim() || p.productName.toLowerCase().includes(productSearchQuery.toLowerCase()))
+                        )
+                        .reduce((sum, p) => sum + p.totalQuantity, 0)
+                        .toLocaleString()}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  All units combined
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl shadow-sm border border-purple-100 p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-purple-700 uppercase">
+                    Total Orders
+                  </span>
+                  <TrendingUp className="w-5 h-5 text-purple-600" />
+                </div>
+                <p className="text-2xl font-bold text-purple-900">
+                  {productSalesLoading
+                    ? "..."
+                    : (productSales?.summary || [])
+                        .filter(p => 
+                          (selectedCategory === "all" || p.category === selectedCategory) &&
+                          (!productSearchQuery.trim() || p.productName.toLowerCase().includes(productSearchQuery.toLowerCase()))
+                        )
+                        .reduce((sum, p) => sum + p.orderCount, 0)
+                        .toLocaleString()}
+                </p>
+                <p className="text-xs text-purple-600 mt-1">
+                  With product sales
+                </p>
+              </div>
+            </section>
+
+            {/* Top Products Summary */}
+            <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-emerald-500" />
+                    Top Products by Quantity Sold
+                  </h2>
+                  <span className="text-xs text-gray-500">
+                    {filteredProductSales.totalSummary} products
+                  </span>
+                </div>
+
+                <div className="overflow-auto text-xs">
+                  {productSalesLoading ? (
+                    <div className="flex items-center justify-center py-12 text-gray-400">
+                      Loading product sales...
+                    </div>
+                  ) : filteredProductSales.summary.length === 0 ? (
+                    <div className="flex items-center justify-center py-12 text-gray-400">
+                      No product sales in this period
+                    </div>
+                  ) : (
+                    <table className="min-w-full text-left">
+                      <thead className="bg-gray-50 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-3 py-2 font-semibold text-gray-500">
+                            #
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500">
+                            Product
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500">
+                            Category
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500">
+                            Unit
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500 text-right">
+                            Total Quantity
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500 text-right">
+                            Orders
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredProductSales.summary.map((product, idx) => {
+                          const globalIndex = (productSummaryPage - 1) * PRODUCTS_PER_PAGE + idx + 1;
+                          return (
+                            <tr
+                              key={product.productId}
+                              className="border-t hover:bg-gray-50 transition"
+                            >
+                              <td className="px-3 py-2 text-gray-500">
+                                {globalIndex}
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className="font-semibold text-gray-800">
+                                  {product.productName}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-gray-600">
+                                {product.category || "-"}
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-medium">
+                                  {getUnitDisplayName(product.unit)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-right font-semibold text-gray-800">
+                                {product.totalQuantity.toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-right text-gray-600">
+                                {product.orderCount}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+              
+              {/* Pagination for Summary */}
+              {!productSalesLoading && filteredProductSales.summary.length > 0 && (
+                <Pagination
+                  currentPage={productSummaryPage}
+                  totalPages={filteredProductSales.totalSummaryPages || 1}
+                  onPageChange={setProductSummaryPage}
+                  totalItems={filteredProductSales.totalSummary}
+                  itemsPerPage={PRODUCTS_PER_PAGE}
+                />
+              )}
+            </section>
+
+            {/* Date/Month-wise Product Sales */}
+            <section className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-purple-500" />
+                    {productGroupBy === "date"
+                      ? "Daily Product Sales"
+                      : "Monthly Product Sales"}
+                  </h2>
+                  <span className="text-xs text-gray-500">
+                    {filteredProductSales.totalRows} records
+                  </span>
+                </div>
+
+                <div className="overflow-auto text-xs">
+                  {productSalesLoading ? (
+                    <div className="flex items-center justify-center py-12 text-gray-400">
+                      Loading...
+                    </div>
+                  ) : filteredProductSales.rows.length === 0 ? (
+                    <div className="flex items-center justify-center py-12 text-gray-400">
+                      No data available
+                    </div>
+                  ) : (
+                    <table className="min-w-full text-left">
+                      <thead className="bg-gray-50 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-3 py-2 font-semibold text-gray-500">
+                            {productGroupBy === "date" ? "Date" : "Month"}
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500">
+                            Product
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500">
+                            Category
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500">
+                            Unit
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500 text-right">
+                            Quantity
+                          </th>
+                          <th className="px-3 py-2 font-semibold text-gray-500 text-right">
+                            Orders
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredProductSales.rows.map((row, idx) => (
+                          <tr
+                            key={`${row.productId}-${row.date}-${idx}`}
+                            className="border-t hover:bg-gray-50 transition"
+                          >
+                            <td className="px-3 py-2 whitespace-nowrap text-gray-600">
+                              {productGroupBy === "date"
+                                ? formatDate(row.date)
+                                : formatMonthYear(row.date)}
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className="font-medium text-gray-800">
+                                {row.productName}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-gray-600">
+                              {row.category || "-"}
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-medium">
+                                {getUnitDisplayName(row.unit)}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right font-semibold text-gray-800">
+                              {row.totalQuantity.toLocaleString()}
+                            </td>
+                            <td className="px-3 py-2 text-right text-gray-600">
+                              {row.orderCount}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+
+              {/* Pagination for Detail */}
+              {!productSalesLoading && filteredProductSales.rows.length > 0 && (
+                <Pagination
+                  currentPage={productDetailPage}
+                  totalPages={filteredProductSales.totalDetailPages || 1}
+                  onPageChange={setProductDetailPage}
+                  totalItems={filteredProductSales.totalRows}
+                  itemsPerPage={PRODUCTS_PER_PAGE}
+                />
+              )}
+            </section>
+          </>
         )}
 
         {/* ════════════════ INSIGHTS TAB ════════════════ */}
@@ -1018,14 +1682,13 @@ export default function SalesPage() {
               }
             }
             customers={customers}
-            loading={summaryLoading}
+            productSales={productSales}
+            loading={summaryLoading || productSalesLoading}
           />
         )}
 
         {/* Error message */}
-        {summaryError && (
-          <p className="text-xs text-red-500">{summaryError}</p>
-        )}
+        {summaryError && <p className="text-xs text-red-500">{summaryError}</p>}
       </main>
 
       <Footer />
