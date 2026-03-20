@@ -1,36 +1,38 @@
-// ✅ UPDATED FILE: src/app/api/profile/update-serial/route.ts
-// REPURPOSED: Instead of writing to User.lastSerialNumber (removed),
-// this now writes directly to the Counter collection so admins can
-// manually override the current sequence from the profile page.
-//
-// The SerialNumberComponent.tsx UI is unchanged — it still sends
-// { userId, serialNumber } where serialNumber is a 6-digit string YYMMXXXX.
-// We parse out YY, MM, XXXX and upsert the Counter doc accordingly.
+// src/app/api/profile/update-serial/route.ts
 
 import { NextResponse } from "next/server";
-import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Counter from "@/models/Counter";
+import { verifyUserRequest } from "@/lib/userAuth";
+import mongoose from "mongoose";
 
 export async function PUT(req: Request) {
+  // 1. Verify JWT
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
+  // 2. Only admins can update serial numbers
+  if (auth.role === "manager") {
+    return NextResponse.json(
+      { error: "Access denied: Managers cannot update serial numbers" },
+      { status: 403 }
+    );
+  }
+
   await connectDB();
 
   try {
     const body = await req.json();
-    const { userId, serialNumber } = body;
+    const { serialNumber } = body;
 
-    if (!userId || !serialNumber) {
+    if (!serialNumber) {
       return NextResponse.json(
-        { error: "userId and serialNumber are required" },
+        { error: "serialNumber is required" },
         { status: 400 }
       );
     }
 
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
-
-    // Validate: must be exactly 8 digits (YYMMXXXX)
+    // 3. Validate: must be exactly 8 digits (YYMMXXXX)
     if (!/^\d{8}$/.test(serialNumber)) {
       return NextResponse.json(
         { error: "Serial number must be exactly 8 digits (YYMMXXXX)" },
@@ -38,9 +40,9 @@ export async function PUT(req: Request) {
       );
     }
 
-    const year = parseInt(serialNumber.substring(0, 2), 10);   // YY
-    const month = parseInt(serialNumber.substring(2, 4), 10);  // MM
-    const seq = parseInt(serialNumber.substring(4), 10);        // XXXX
+    const year  = parseInt(serialNumber.substring(0, 2), 10);
+    const month = parseInt(serialNumber.substring(2, 4), 10);
+    const seq   = parseInt(serialNumber.substring(4),    10);
 
     if (month < 1 || month > 12) {
       return NextResponse.json(
@@ -56,12 +58,9 @@ export async function PUT(req: Request) {
       );
     }
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+    // 4. Use auth.userId — never trust userId from body
+    const userObjectId = new mongoose.Types.ObjectId(auth.userId);
 
-    // ✅ Upsert Counter so the NEXT bill after this override gets seq+1
-    // We store the value the admin typed as the CURRENT sequence,
-    // so getNextSerialNumber() will return seq+1 on the next bill.
-    // If admin types 0010, next bill = 0011. This matches old behaviour.
     await Counter.findOneAndUpdate(
       { userId: userObjectId, year, month },
       { $set: { sequence: seq } },
@@ -73,6 +72,7 @@ export async function PUT(req: Request) {
       message: "Serial number updated successfully",
       serialNumber,
     });
+
   } catch (err: any) {
     console.error("PUT /api/profile/update-serial error:", err);
     return NextResponse.json(

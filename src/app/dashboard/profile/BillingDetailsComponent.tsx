@@ -50,9 +50,10 @@ export default function BillingDetailsComponent({ userId }: Props) {
     if (!userId) return;
     (async () => {
       try {
-        const res = await fetch(
-          `/api/seller-details?userId=${encodeURIComponent(userId)}`
-        );
+       const token = localStorage.getItem("token");
+const res = await fetch(`/api/seller-details`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
         if (!res.ok) {
           return;
         }
@@ -213,11 +214,15 @@ export default function BillingDetailsComponent({ userId }: Props) {
     }
     setSaveLoading(true);
     try {
-      const res = await fetch("/api/seller-details", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, ...bill }),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch("/api/seller-details", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ ...bill }),  // userId removed — server uses token
+});
       const data = await res.json();
       if (!res.ok) {
         setSaveLoading(false);

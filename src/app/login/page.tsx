@@ -38,47 +38,52 @@ export default function LoginPage() {
   };
 
   /* ===== SUBMIT (LOGIC SAME, UI STATE ADDED) ===== */
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loading) return;
+// REPLACE the entire handleSubmit function with this:
 
-    try {
-      setLoading(true);
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (loading) return;
 
-      const res = await fetch("/api/login", {
-        method: "POST",
-        body: JSON.stringify(form),
-        headers: { "Content-Type": "application/json" },
-      });
+  try {
+    setLoading(true);
 
-      const data = await res.json();
+    const res = await fetch("/api/login", {
+      method: "POST",
+      body: JSON.stringify(form),
+      headers: { "Content-Type": "application/json" },
+    });
 
-      if (res.ok) {
-        // ⬇ STORE USER (ADMIN / MANAGER SAFE)
-        localStorage.setItem(
-          "user",
-          JSON.stringify({
-            _id: data.user._id,
-            managerId: data.user.managerId || null,
-            email: data.user.email,
-            name: data.user.name,
-            role: data.user.role,
-          })
-        );
+    const data = await res.json();
 
-        localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
+    if (res.ok) {
+      // Store user object (unchanged shape)
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          _id: data.user._id,
+          managerId: data.user.managerId || null,
+          email: data.user.email,
+          name: data.user.name,
+          role: data.user.role,
+        })
+      );
 
-        toast.success("Login successful! Redirecting...");
-        setTimeout(() => router.push("/dashboard"), 1800);
-      } else {
-        toast.error(data.error || "Invalid credentials!");
-        setLoading(false);
-      }
-    } catch {
-      toast.error("Something went wrong. Please try again.");
+      // ← NEW: store JWT for all subsequent API calls
+      localStorage.setItem("token", data.token);
+
+      localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
+
+      toast.success("Login successful! Redirecting...");
+      setTimeout(() => router.push("/dashboard"), 1800);
+    } else {
+      toast.error(data.error || "Invalid credentials!");
       setLoading(false);
     }
-  };
+  } catch {
+    toast.error("Something went wrong. Please try again.");
+    setLoading(false);
+  }
+};
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#020617] via-[#020b2c] to-[#031136] text-white">

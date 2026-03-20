@@ -1,25 +1,37 @@
 // src/app/api/manager/request-password-otp/route.ts
+
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { transporter } from "@/lib/nodemailer";
+import { verifyUserRequest } from "@/lib/userAuth";
 
 export async function POST(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
+  if (auth.role !== "admin") {
+    return NextResponse.json(
+      { error: "Only admins can reset manager passwords" },
+      { status: 403 }
+    );
+  }
+
   try {
     await connectDB();
 
-    const { managerId, adminId } = await req.json();
+    const { managerId } = await req.json();
 
-    if (!managerId || !adminId) {
-      return NextResponse.json({ error: "managerId & adminId required" }, { status: 400 });
+    if (!managerId) {
+      return NextResponse.json(
+        { error: "managerId is required" },
+        { status: 400 }
+      );
     }
 
-    if (!mongoose.Types.ObjectId.isValid(adminId)) {
-      return NextResponse.json({ error: "Invalid adminId" }, { status: 400 });
-    }
-
-    const adminObjId = new mongoose.Types.ObjectId(adminId);
+    // adminId comes from verified token
+    const adminObjId = new mongoose.Types.ObjectId(auth.userId);
 
     const manager = await User.findOne({
       _id: managerId,
@@ -28,34 +40,36 @@ export async function POST(req: Request) {
     });
 
     if (!manager) {
-      return NextResponse.json({ error: "Manager not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Manager not found" },
+        { status: 404 }
+      );
     }
 
     if (manager.isPending) {
-      return NextResponse.json({
-        error: "Cannot reset password for pending manager",
-      }, { status: 400 });
+      return NextResponse.json(
+        { error: "Cannot reset password for pending manager" },
+        { status: 400 }
+      );
     }
 
-    const admin = await User.findById(adminId);
-    if (!admin) {
-      return NextResponse.json({ error: "Admin not found" }, { status: 404 });
-    }
-
-    const adminEmail = admin.email;
-    if (!adminEmail) {
-      return NextResponse.json({ error: "Admin email missing in user record" }, { status: 500 });
+    // Send OTP to admin's own email (not manager's)
+    const admin = await User.findById(auth.userId).select("email name");
+    if (!admin?.email) {
+      return NextResponse.json(
+        { error: "Admin email not found" },
+        { status: 500 }
+      );
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
     manager.otp = otp;
     manager.otpExpires = new Date(Date.now() + 1000 * 60 * 10);
     await manager.save();
 
     await transporter.sendMail({
       from: process.env.EMAIL_USER!,
-      to: adminEmail,
+      to: admin.email,
       subject: "Manager Password Reset OTP",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -65,7 +79,7 @@ export async function POST(req: Request) {
           <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
             <p style="color: #333; font-size: 16px;">Hello Admin,</p>
             <p style="color: #666; font-size: 14px; line-height: 1.6;">
-              A password reset has been requested for manager <strong>${manager.name}</strong>. 
+              A password reset has been requested for manager <strong>${manager.name}</strong>.
               Please use the following OTP to complete the password reset:
             </p>
             <div style="background-color: #ffffff; padding: 20px; border-radius: 8px; text-align: center; margin: 25px 0; border: 2px dashed #f5576c;">
@@ -84,6 +98,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, message: "OTP sent" });
   } catch (e: any) {
     console.error("Error sending password reset OTP:", e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json(
+      { error: e.message },
+      { status: 500 }
+    );
   }
 }

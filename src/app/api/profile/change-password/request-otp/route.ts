@@ -5,26 +5,31 @@ import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
 import { transporter } from "@/lib/nodemailer";
+import { verifyUserRequest } from "@/lib/userAuth";
 
 export async function POST(req: Request) {
-  try {
-    const { userId, oldPassword } = await req.json();
+  // 1. Verify JWT
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
 
-    if (!userId || !oldPassword) {
+  try {
+    const { oldPassword } = await req.json();
+
+    if (!oldPassword) {
       return NextResponse.json(
-        { error: "userId and oldPassword are required" },
+        { error: "oldPassword is required" },
         { status: 400 }
       );
     }
 
     await connectDB();
 
-    const user = await User.findById(userId);
+    // 2. Use auth.userId
+    const user = await User.findById(auth.userId);
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Check old password
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) {
       return NextResponse.json(
@@ -33,7 +38,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Generate 6-digit OTP
+    // 3. Generate OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -41,7 +46,7 @@ export async function POST(req: Request) {
     user.otpExpires = expires;
     await user.save();
 
-    // Send OTP email
+    // 4. Send OTP email
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: user.email,
@@ -53,6 +58,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       message: "OTP sent to your registered email address",
     });
+
   } catch (error) {
     console.error("Error in request-otp:", error);
     return NextResponse.json(

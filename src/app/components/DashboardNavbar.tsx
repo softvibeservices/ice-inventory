@@ -91,11 +91,14 @@ export default function DashboardNavbar() {
     : "/dashboard/delivery-requests";
 
   /* ================= LOGOUT ================= */
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("rememberMe");
-    router.push("/login");
-  };
+ // REPLACE handleLogout with this:
+
+const handleLogout = () => {
+  localStorage.removeItem("user");
+  localStorage.removeItem("token");       // ← NEW
+  localStorage.removeItem("rememberMe");
+  router.push("/login");
+};
 
   return (
     <>
