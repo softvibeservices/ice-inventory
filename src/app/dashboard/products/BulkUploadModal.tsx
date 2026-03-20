@@ -35,7 +35,10 @@ export default function BulkUploadModal({
         setLoadingSettings(true);
         
         // Fetch settings
-        const settingsRes = await fetch(`/api/user-settings?userId=${encodeURIComponent(userId)}`);
+        const token = localStorage.getItem("token");
+const settingsRes = await fetch(`/api/user-settings`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
         const settingsData = await settingsRes.json();
         
         if (settingsRes.ok) {
@@ -46,7 +49,9 @@ export default function BulkUploadModal({
         }
 
         // ✅ NEW: Fetch existing products for duplicate detection
-        const productsRes = await fetch(`/api/products?userId=${encodeURIComponent(userId)}`);
+    const productsRes = await fetch(`/api/products`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
         const productsData = await productsRes.json();
         
         if (productsRes.ok) {
@@ -314,24 +319,29 @@ export default function BulkUploadModal({
     try {
       // Prepare payload
       const payload = validProducts.map((p) => ({
-        userId,
-        name: p.name,
-        category: p.category,
-        unit: p.unit,
-        packQuantity: p.packQuantity ? Number(p.packQuantity) : undefined,
-        packUnit: p.packUnit || undefined,
-        sellingPrice: Number(p.sellingPrice),
-        mrp: p.mrp ? Number(p.mrp) : undefined,
-        quantity: Number(p.quantity),
-        minStock: p.minStock ? Number(p.minStock) : undefined,
-        notes: p.notes || undefined,
-      }));
+  // userId removed — server uses token
+  name: p.name,
+  category: p.category,
+  unit: p.unit,
+  packQuantity: p.packQuantity ? Number(p.packQuantity) : undefined,
+  packUnit: p.packUnit || undefined,
+  sellingPrice: Number(p.sellingPrice),
+  mrp: p.mrp ? Number(p.mrp) : undefined,
+  quantity: Number(p.quantity),
+  minStock: p.minStock ? Number(p.minStock) : undefined,
+  notes: p.notes || undefined,
+}));
 
-      const res = await fetch("/api/products/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ products: payload }),
-      });
+    const token = localStorage.getItem("token");
+const res = await fetch("/api/products/bulk", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ products: payload }),
+  // Note: userId is removed from each product in the payload too
+});
 
       const data = await res.json();
 

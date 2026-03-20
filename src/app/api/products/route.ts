@@ -4,20 +4,15 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
+import { verifyUserRequest } from "@/lib/userAuth";
 
-// CREATE PRODUCT
 export async function POST(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
-    const { userId, name, unit, sellingPrice, quantity } = body;
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
+    const { name, unit, sellingPrice, quantity } = body;
 
     if (!name || unit === undefined || sellingPrice === undefined || quantity === undefined) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -26,7 +21,7 @@ export async function POST(req: Request) {
     await connectDB();
 
     const newProduct = await Product.create({
-      userId: new mongoose.Types.ObjectId(userId),
+      userId: new mongoose.Types.ObjectId(auth.userId),
       name,
       unit,
       sellingPrice,
@@ -45,23 +40,15 @@ export async function POST(req: Request) {
   }
 }
 
-// GET PRODUCTS BY USER
 export async function GET(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID required" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
-
     await connectDB();
+
     const products = await Product.find({
-      userId: new mongoose.Types.ObjectId(userId),
+      userId: new mongoose.Types.ObjectId(auth.userId),
     }).sort({ createdAt: -1 });
 
     return NextResponse.json(products);
@@ -70,29 +57,34 @@ export async function GET(req: Request) {
   }
 }
 
-// UPDATE PRODUCT
 export async function PUT(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
-    const { id, userId, ...updates } = body;
+    const { id, ...updates } = body;
 
-    if (!id || !userId) {
-      return NextResponse.json({ error: "Product ID and User ID required" }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "Product ID required" }, { status: 400 });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
+    // Remove userId from updates — never let client override it
+    delete updates.userId;
 
     await connectDB();
+
     const updated = await Product.findOneAndUpdate(
-      { _id: id, userId: new mongoose.Types.ObjectId(userId) },
+      { _id: id, userId: new mongoose.Types.ObjectId(auth.userId) },
       updates,
       { new: true, runValidators: true }
     );
 
     if (!updated) {
-      return NextResponse.json({ error: "Product not found or not authorized" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Product not found or not authorized" },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json(updated);
@@ -101,28 +93,30 @@ export async function PUT(req: Request) {
   }
 }
 
-// DELETE PRODUCT
 export async function DELETE(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const body = await req.json();
-    const { id, userId } = body;
+    const { id } = body;
 
-    if (!id || !userId) {
-      return NextResponse.json({ error: "Product ID and User ID required" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "Product ID required" }, { status: 400 });
     }
 
     await connectDB();
+
     const deleted = await Product.findOneAndDelete({
       _id: id,
-      userId: new mongoose.Types.ObjectId(userId),
+      userId: new mongoose.Types.ObjectId(auth.userId),
     });
 
     if (!deleted) {
-      return NextResponse.json({ error: "Product not found or not authorized" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Product not found or not authorized" },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({ success: true, id });

@@ -217,21 +217,23 @@ export default function BulkRestockModal({
 
         const newQuantity = product.quantity + Number(item.quantity);
 
-        return fetch("/api/products", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: product._id,
-            userId,
-            quantity: newQuantity,
-          }),
-        });
+       const token = localStorage.getItem("token");
+return fetch("/api/products", {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    id: product._id,
+    quantity: newQuantity,   // userId removed
+  }),
+});
       });
 
       await Promise.all(updatePromises);
 
       const restockHistoryPayload = {
-        userId,
         items: validItems.map((item) => ({
           productId: item.matchedProductId!,
           name: item.productName,
@@ -242,11 +244,17 @@ export default function BulkRestockModal({
         })),
       };
 
-      const historyRes = await fetch("/api/restockHistory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(restockHistoryPayload),
-      });
+    const token = localStorage.getItem("token");
+const historyRes = await fetch("/api/restockHistory", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    items: restockHistoryPayload.items,  // userId removed from payload
+  }),
+});
 
       if (!historyRes.ok) {
         throw new Error("Failed to save restock history");

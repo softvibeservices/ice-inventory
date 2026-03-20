@@ -50,9 +50,10 @@ export default function StockPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      const res = await fetch(
-        `/api/products?userId=${encodeURIComponent(userId)}`
-      );
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/products`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       if (!res.ok) throw new Error("Failed to fetch stocks");
       const data = await res.json();
       setProducts(Array.isArray(data) ? data : []);
@@ -274,11 +275,15 @@ export default function StockPage() {
 
     try {
       setEmptying(true);
-      const res = await fetch("/api/products/empty", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch("/api/products/empty", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({}),   // userId removed — server uses token
+});
 
       let data;
       try {
