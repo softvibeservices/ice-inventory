@@ -84,8 +84,8 @@ export default function DashboardNavbar() {
 
     fetchNotifications();
 
-    // Poll for updates every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000);
+    // Poll for updates every 15 MINUTES
+    const interval = setInterval(fetchNotifications, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [userId, role]);
 

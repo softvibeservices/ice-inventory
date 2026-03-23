@@ -1,4 +1,4 @@
-// ice-inventory/src/app/dashboard/profile/delivery-partners/DeliveryPartnersPage.tsx
+// src/app/dashboard/profile/delivery-partners/DeliveryPartnersPage.tsx
 
 "use client";
 
@@ -22,6 +22,23 @@ type Toast = {
   message: string;
 };
 
+// ── helper: get JWT token from localStorage ──────────────────────────────────
+function getToken(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("token") ?? "";
+}
+
+function authHeaders(): Record<string, string> {
+  return { Authorization: `Bearer ${getToken()}` };
+}
+
+function jsonAuthHeaders(): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${getToken()}`,
+  };
+}
+
 export default function DeliveryPartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(false);
@@ -34,22 +51,6 @@ export default function DeliveryPartnersPage() {
   const [qText, setQText] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
-
-  const getSession = () => {
-    try {
-      if (typeof window === "undefined") return null;
-      const raw = localStorage.getItem("user");
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  };
-
-  const API_BASE = typeof window !== "undefined" ? process.env.NEXT_PUBLIC_API_BASE_URL ?? "" : "";
-  const LIST_URL = `${API_BASE}/api/delivery/list`.replace(/([^:]\/)\/+/g, "$1");
-  const UPDATE_URL = `${API_BASE}/api/delivery/update`.replace(/([^:]\/)\/+/g, "$1");
-  const DELETE_URL = `${API_BASE}/api/delivery/delete`.replace(/([^:]\/)\/+/g, "$1");
 
   const pushToast = (type: "success" | "error" | "info", message: string) => {
     const id = String(Date.now()) + Math.random().toString(36).slice(2, 8);
@@ -64,22 +65,16 @@ export default function DeliveryPartnersPage() {
     return () => clearTimeout(t);
   }, [qText]);
 
+  // ── FETCH PARTNERS — token only, no userId in URL ─────────────────────────
   const fetchPartners = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const session = getSession();
-      const userId = session?.id ?? session?._id ?? null;
-
-      // ✅ FIXED: Always send userId (required by the backend)
-      const q = new URLSearchParams();
-      if (userId) {
-        q.set("userId", userId);
-      }
-
-      const url = `${LIST_URL}${q.toString() ? `?${q.toString()}` : ""}`;
-      const res = await fetch(url, { credentials: "include" });
+      // ✅ Token in header — no userId query param
+      const res = await fetch(`/api/delivery/list`, {
+        headers: authHeaders(),
+      });
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
@@ -89,7 +84,10 @@ export default function DeliveryPartnersPage() {
         return;
       }
 
-      const list: any[] = Array.isArray(data) ? data : data.partners ?? (data.partner ? [data.partner] : []);
+      const list: any[] = Array.isArray(data)
+        ? data
+        : data.partners ?? (data.partner ? [data.partner] : []);
+
       const normalized: Partner[] = list.map((p) => ({
         _id: String(p._id ?? p.id ?? ""),
         name: p.name ?? "Unknown",
@@ -111,7 +109,7 @@ export default function DeliveryPartnersPage() {
     } finally {
       setLoading(false);
     }
-  }, [LIST_URL]);
+  }, []);
 
   useEffect(() => {
     fetchPartners();
@@ -142,6 +140,7 @@ export default function DeliveryPartnersPage() {
     return true;
   };
 
+  // ── SAVE EDIT — token only, no userId in body ─────────────────────────────
   async function saveEdit(e?: React.FormEvent) {
     e?.preventDefault();
     if (!editing) return;
@@ -150,8 +149,8 @@ export default function DeliveryPartnersPage() {
     setSaving(true);
 
     try {
-      const session = getSession();
-      const body: any = {
+      // ✅ userId removed from body — server uses token
+      const body = {
         partnerId: editing._id,
         name: editing.name,
         email: (editing.email || "").toLowerCase(),
@@ -159,13 +158,9 @@ export default function DeliveryPartnersPage() {
         status: editing.status,
       };
 
-      if (session?.id) body.userId = session.id;
-      else if (session?._id) body.userId = session._id;
-
-      const res = await fetch(UPDATE_URL, {
+      const res = await fetch(`/api/delivery/update`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        headers: jsonAuthHeaders(),
         body: JSON.stringify(body),
       });
 
@@ -194,6 +189,7 @@ export default function DeliveryPartnersPage() {
     }
   }
 
+  // ── CONFIRM DELETE — token only, no userId in body ────────────────────────
   async function confirmDelete() {
     const target = confirmDeleteFor;
     if (!target) return;
@@ -201,17 +197,11 @@ export default function DeliveryPartnersPage() {
     setDeletingLoading(true);
 
     try {
-      const session = getSession();
-      const body: any = { partnerId: target._id };
-
-      if (session?.id) body.userId = session.id;
-      else if (session?._id) body.userId = session._id;
-
-      const res = await fetch(DELETE_URL, {
+      // ✅ userId removed from body — server uses token
+      const res = await fetch(`/api/delivery/delete`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(body),
+        headers: jsonAuthHeaders(),
+        body: JSON.stringify({ partnerId: target._id }),
       });
 
       const data = await res.json().catch(() => null);
