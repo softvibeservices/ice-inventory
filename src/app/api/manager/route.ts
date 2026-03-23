@@ -4,15 +4,17 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
+import Device from "@/models/Device";
 import bcrypt from "bcryptjs";
 import { verifyUserRequest } from "@/lib/userAuth";
 
-// CREATE MANAGER with OTP verification
+// ─────────────────────────────────────────────
+//  POST — Create manager (OTP verified)
+// ─────────────────────────────────────────────
 export async function POST(req: Request) {
   const auth = await verifyUserRequest(req);
   if (auth instanceof NextResponse) return auth;
 
-  // Only admins can create managers
   if (auth.role !== "admin") {
     return NextResponse.json(
       { error: "Only admins can create managers" },
@@ -32,7 +34,6 @@ export async function POST(req: Request) {
 
     await connectDB();
 
-    // adminId comes from verified token — never from body
     const adminObjId = new mongoose.Types.ObjectId(auth.userId);
 
     const pendingManager = await User.findOne({
@@ -91,6 +92,7 @@ export async function POST(req: Request) {
         isPending: false,
         otp: null,
         otpExpires: null,
+        tokenVersion: 0, // ✅ initialize tokenVersion
       },
       { new: true, select: "-password" }
     );
@@ -105,7 +107,9 @@ export async function POST(req: Request) {
   }
 }
 
-// GET MANAGER LIST
+// ─────────────────────────────────────────────
+//  GET — List managers
+// ─────────────────────────────────────────────
 export async function GET(req: Request) {
   const auth = await verifyUserRequest(req);
   if (auth instanceof NextResponse) return auth;
@@ -120,7 +124,6 @@ export async function GET(req: Request) {
   try {
     await connectDB();
 
-    // adminId comes from verified token
     const managers = await User.find({
       adminId: new mongoose.Types.ObjectId(auth.userId),
       role: "manager",
@@ -137,7 +140,9 @@ export async function GET(req: Request) {
   }
 }
 
-// UPDATE MANAGER
+// ─────────────────────────────────────────────
+//  PUT — Update manager info
+// ─────────────────────────────────────────────
 export async function PUT(req: Request) {
   const auth = await verifyUserRequest(req);
   if (auth instanceof NextResponse) return auth;
@@ -161,7 +166,6 @@ export async function PUT(req: Request) {
 
     await connectDB();
 
-    // adminId comes from verified token
     const updated = await User.findOneAndUpdate(
       {
         _id: id,
@@ -190,7 +194,97 @@ export async function PUT(req: Request) {
   }
 }
 
-// DELETE MANAGER
+// ─────────────────────────────────────────────
+//  PATCH — Block / Unblock / Ban a manager
+//  body: { id: string, action: "block" | "unblock" | "ban" }
+//  "block" and "ban" both: increment tokenVersion → force-logout all sessions
+//  "unblock": restore to approved
+// ─────────────────────────────────────────────
+export async function PATCH(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
+  if (auth.role !== "admin") {
+    return NextResponse.json(
+      { error: "Only admins can manage managers" },
+      { status: 403 }
+    );
+  }
+
+  try {
+    const { id, action } = await req.json();
+
+    if (!id || !action) {
+      return NextResponse.json(
+        { error: "Manager id and action are required" },
+        { status: 400 }
+      );
+    }
+
+    if (!["block", "unblock", "ban"].includes(action)) {
+      return NextResponse.json(
+        { error: "Invalid action. Use: block | unblock | ban" },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    const manager = await User.findOne({
+      _id: id,
+      adminId: new mongoose.Types.ObjectId(auth.userId),
+      role: "manager",
+      isPending: { $ne: true },
+    });
+
+    if (!manager) {
+      return NextResponse.json(
+        { error: "Manager not found" },
+        { status: 404 }
+      );
+    }
+
+    if (action === "block" || action === "ban") {
+      // ✅ Increment tokenVersion → invalidates ALL existing JWTs for this manager
+      const updated = await User.findByIdAndUpdate(
+        manager._id,
+        {
+          status: "blocked",
+          $inc: { tokenVersion: 1 }, // ← KEY: forces logout on next request
+        },
+        { new: true, select: "-password" }
+      );
+      return NextResponse.json({
+        success: true,
+        message: `Manager ${action === "ban" ? "banned" : "blocked"} and all sessions invalidated.`,
+        manager: updated,
+      });
+    }
+
+    if (action === "unblock") {
+      const updated = await User.findByIdAndUpdate(
+        manager._id,
+        { status: "approved" },
+        { new: true, select: "-password" }
+      );
+      return NextResponse.json({
+        success: true,
+        message: "Manager unblocked successfully.",
+        manager: updated,
+      });
+    }
+  } catch (e: any) {
+    console.error("Error updating manager status:", e);
+    return NextResponse.json(
+      { error: "Failed to update manager status" },
+      { status: 500 }
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+//  DELETE — Delete manager + wipe their devices
+// ─────────────────────────────────────────────
 export async function DELETE(req: Request) {
   const auth = await verifyUserRequest(req);
   if (auth instanceof NextResponse) return auth;
@@ -214,7 +308,6 @@ export async function DELETE(req: Request) {
 
     await connectDB();
 
-    // adminId comes from verified token — no need to trust it from body
     const deleted = await User.findOneAndDelete({
       _id: id,
       adminId: new mongoose.Types.ObjectId(auth.userId),
@@ -229,7 +322,13 @@ export async function DELETE(req: Request) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    // ✅ Clean up all device records for the deleted manager
+    await Device.deleteMany({ userId: deleted._id });
+
+    return NextResponse.json({
+      success: true,
+      message: "Manager and all associated sessions deleted.",
+    });
   } catch (e: any) {
     console.error("Error deleting manager:", e);
     return NextResponse.json(

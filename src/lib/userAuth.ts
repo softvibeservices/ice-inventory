@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
+import Device from "@/models/Device";
 
 // ─────────────────────────────────────────────
 //  Types
@@ -14,6 +15,7 @@ export interface AuthPayload {
   role: "admin" | "manager" | "superAdmin";
   managerId?: string;   // Only present for managers — their actual User._id
   adminId?: string;     // Only present for managers — same as userId, kept for clarity
+  deviceId?: string;    // ✅ NEW: fingerprint of the device
 }
 
 interface JwtDecoded {
@@ -21,6 +23,8 @@ interface JwtDecoded {
   role: "admin" | "manager" | "superAdmin";
   managerId?: string;
   adminId?: string;
+  deviceId?: string;    // ✅ NEW
+  tokenVersion?: number; // ✅ NEW
   iat: number;
   exp: number;
 }
@@ -67,7 +71,6 @@ export async function verifyUserRequest(
     try {
       decoded = jwt.verify(token, secret) as JwtDecoded;
     } catch (err: any) {
-      // Distinguish expired vs tampered
       if (err?.name === "TokenExpiredError") {
         return NextResponse.json(
           { error: "Session expired. Please login again." },
@@ -80,55 +83,107 @@ export async function verifyUserRequest(
       );
     }
 
-    // 3. Confirm the user still exists in DB and is in good standing
-    //    This also catches: deleted accounts, blocked accounts, pending accounts
+    // 3. Determine the ACTUAL user (_id) this token belongs to.
+    //    - For admin:   decoded.userId = admin._id   → actualUserId = decoded.userId
+    //    - For manager: decoded.userId = adminId     → actualUserId = decoded.managerId
+    const isManagerToken = decoded.role === "manager" && !!decoded.managerId;
+    const actualUserId = isManagerToken ? decoded.managerId! : decoded.userId;
+
     await connectDB();
 
-    const user = await User.findById(decoded.userId).select(
-      "_id role adminId status isPending isVerified"
+    // 4. Fetch the actual user (admin's own doc, or manager's own doc)
+    const actualUser = await User.findById(actualUserId).select(
+      "_id role adminId status isPending isVerified tokenVersion"
     );
 
-    if (!user) {
+    if (!actualUser) {
       return NextResponse.json(
         { error: "Account not found. Please login again." },
         { status: 401 }
       );
     }
 
-    if (!user.isVerified) {
+    if (!actualUser.isVerified) {
       return NextResponse.json(
         { error: "Account not verified." },
         { status: 401 }
       );
     }
 
-    if (user.isPending) {
+    if (actualUser.isPending) {
       return NextResponse.json(
         { error: "Account setup is incomplete." },
         { status: 401 }
       );
     }
 
-    if (user.status === "blocked") {
+    if (actualUser.status === "blocked") {
       return NextResponse.json(
         { error: "Your account has been blocked. Please contact support." },
         { status: 403 }
       );
     }
 
-    // 4. For managers: verify the admin they belong to still exists
-    //    and is not blocked/deleted
-    if (user.role === "manager") {
-      if (!user.adminId) {
-        return NextResponse.json(
-          { error: "Manager account is misconfigured. Please contact support." },
-          { status: 403 }
-        );
-      }
+    // ✅ NEW — 5. Token version check (force-logout on block/delete/ban)
+    //    If the stored tokenVersion is higher than what's in the JWT,
+    //    the token has been explicitly invalidated.
+    const dbTokenVersion = actualUser.tokenVersion ?? 0;
+    const jwtTokenVersion = decoded.tokenVersion ?? 0;
 
-      const admin = await User.findById(user.adminId).select(
-        "_id status isVerified"
+    if (dbTokenVersion > jwtTokenVersion) {
+      return NextResponse.json(
+        { error: "Session invalidated. Please login again.", code: "TOKEN_REVOKED" },
+        { status: 401 }
       );
+    }
+
+    // ✅ NEW — 6. Device-level security check
+    if (decoded.deviceId) {
+      const device = await Device.findOne({
+        userId: actualUserId,
+        deviceId: decoded.deviceId,
+      }).select("status blockedUntil");
+
+      if (device) {
+        if (device.status === "banned") {
+          return NextResponse.json(
+            { error: "This device has been banned. Please contact support.", code: "DEVICE_BANNED" },
+            { status: 403 }
+          );
+        }
+
+        if (device.status === "blocked") {
+          if (device.blockedUntil && device.blockedUntil > new Date()) {
+            return NextResponse.json(
+              {
+                error: `This device is blocked until ${device.blockedUntil.toLocaleDateString()}.`,
+                code: "DEVICE_BLOCKED",
+              },
+              { status: 403 }
+            );
+          }
+          // Block period expired — auto-restore to active
+          await Device.findOneAndUpdate(
+            { userId: actualUserId, deviceId: decoded.deviceId },
+            { status: "active", blockedUntil: null }
+          );
+        }
+
+        // Update lastSeen on every verified request (debounced — only if older than 5 min)
+        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+        if (!device.lastSeen || device.lastSeen < fiveMinAgo) {
+          Device.findOneAndUpdate(
+            { userId: actualUserId, deviceId: decoded.deviceId },
+            { lastSeen: new Date() }
+          ).exec(); // fire-and-forget, do not await
+        }
+      }
+    }
+
+    // 7. For managers: verify the admin they belong to still exists and is not blocked
+    if (isManagerToken) {
+      const adminId = decoded.userId; // decoded.userId is always adminId for managers
+      const admin = await User.findById(adminId).select("_id status isVerified");
 
       if (!admin) {
         return NextResponse.json(
@@ -145,21 +200,18 @@ export async function verifyUserRequest(
       }
     }
 
-    // 5. Build and return the verified auth payload
-    //    userId is always the adminId (the owner of all data)
-    //    This keeps every existing DB query working without any change —
-    //    they all filter by userId which is the admin's _id
+    // 8. Build and return the verified auth payload
     const payload: AuthPayload = {
-      userId: decoded.userId,             // admin's _id for both admin and manager
-      role: user.role as AuthPayload["role"],
-      ...(user.role === "manager" && {
-        managerId: user._id.toString(),   // manager's actual User._id
-        adminId: decoded.userId,          // same as userId, kept for clarity
+      userId: decoded.userId,
+      role: decoded.role,           // ✅ use role from JWT (not from admin doc)
+      deviceId: decoded.deviceId,
+      ...(isManagerToken && {
+        managerId: decoded.managerId,
+        adminId: decoded.userId,
       }),
     };
 
     return payload;
-
   } catch (err) {
     console.error("[verifyUserRequest] Unexpected error:", err);
     return NextResponse.json(
