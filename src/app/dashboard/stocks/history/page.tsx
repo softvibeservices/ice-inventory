@@ -42,7 +42,10 @@ export default function HistoryPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      const res = await fetch(`/api/restockHistory?userId=${encodeURIComponent(userId)}`);
+     const token = localStorage.getItem("token");
+const res = await fetch(`/api/restockHistory`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       if (!res.ok) throw new Error("Failed to fetch history");
       const data = await res.json();
       setHistory(Array.isArray(data) ? data : []);

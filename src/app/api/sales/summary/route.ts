@@ -5,11 +5,9 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Customer from "@/models/Customer";
-import User from "@/models/User";
+import { verifyUserRequest } from "@/lib/userAuth";
 
-interface QuantityTotals {
-  [unit: string]: number;
-}
+interface QuantityTotals { [unit: string]: number; }
 
 interface DailyStat {
   date: string;
@@ -39,9 +37,7 @@ function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
   return true;
 }
 
-function initQuantities(): QuantityTotals {
-  return {};
-}
+function initQuantities(): QuantityTotals { return {}; }
 
 function addQuantities(target: QuantityTotals, source: any) {
   if (!source || typeof source !== "object") return;
@@ -54,33 +50,28 @@ function addQuantities(target: QuantityTotals, source: any) {
 }
 
 export async function GET(req: Request) {
+  // ✅ JWT auth — role check now comes from token, not DB lookup
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
+  // Managers cannot access sales summary
+  if (auth.role === "manager") {
+    return NextResponse.json(
+      { error: "Access denied: Managers not allowed" },
+      { status: 403 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
 
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
-
     await connectDB();
-
-    const user = await User.findById(userId).select("role");
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-    if (user.role === "manager") {
-      return NextResponse.json({ error: "Access denied: Managers not allowed" }, { status: 403 });
-    }
 
     const from = parseDateParam(fromParam);
     const to = parseDateParam(toParam);
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const userObjectId = new mongoose.Types.ObjectId(auth.userId);
 
     const orderMatch: any = {
       userId: userObjectId,
@@ -120,7 +111,10 @@ export async function GET(req: Request) {
       const key = getDayKey(createdAt);
 
       if (!dailyMap[key]) {
-        dailyMap[key] = { date: key, totalSales: 0, totalOrders: 0, quantities: initQuantities(), cashReceived: 0, bankReceived: 0 };
+        dailyMap[key] = {
+          date: key, totalSales: 0, totalOrders: 0,
+          quantities: initQuantities(), cashReceived: 0, bankReceived: 0,
+        };
       }
 
       const orderTotal = Number(raw.total || 0) || 0;
@@ -146,7 +140,10 @@ export async function GET(req: Request) {
         const key = getDayKey(at);
 
         if (!dailyMap[key]) {
-          dailyMap[key] = { date: key, totalSales: 0, totalOrders: 0, quantities: initQuantities(), cashReceived: 0, bankReceived: 0 };
+          dailyMap[key] = {
+            date: key, totalSales: 0, totalOrders: 0,
+            quantities: initQuantities(), cashReceived: 0, bankReceived: 0,
+          };
         }
 
         if (method === "Cash") {
@@ -173,20 +170,15 @@ export async function GET(req: Request) {
 
     const daily = Object.values(dailyMap).sort((a, b) => b.date.localeCompare(a.date));
 
-    Object.keys(quantities).forEach(unit => { quantities[unit] = Math.round(quantities[unit]); });
-    daily.forEach(day => {
-      Object.keys(day.quantities).forEach(unit => { day.quantities[unit] = Math.round(day.quantities[unit]); });
+    Object.keys(quantities).forEach((unit) => { quantities[unit] = Math.round(quantities[unit]); });
+    daily.forEach((day) => {
+      Object.keys(day.quantities).forEach((unit) => { day.quantities[unit] = Math.round(day.quantities[unit]); });
     });
 
     return NextResponse.json({
-      totalSales,
-      totalOrders,
-      quantities,
+      totalSales, totalOrders, quantities,
       paymentBreakdown: { cash: cashReceived, bank: bankReceived, outstandingDebt },
-      overallDebit,
-      overallCredit,
-      netReceivable,
-      daily,
+      overallDebit, overallCredit, netReceivable, daily,
     });
   } catch (err: any) {
     console.error("GET /api/sales/summary error:", err);

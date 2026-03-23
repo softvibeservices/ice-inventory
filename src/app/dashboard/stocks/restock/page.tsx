@@ -43,7 +43,10 @@ export default function RestockPage() {
     if (!userId) return;
     try {
       setLoading(true);
-      const res = await fetch(`/api/products?userId=${encodeURIComponent(userId)}`);
+     const token = localStorage.getItem("token");
+const res = await fetch(`/api/products`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       if (!res.ok) throw new Error("Failed to fetch products");
       const data = await res.json();
       setProducts(Array.isArray(data) ? data : []);
@@ -111,11 +114,15 @@ export default function RestockPage() {
 
         const newQty = product.quantity + qty;
 
-        await fetch("/api/products", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, userId, quantity: newQty }),
-        });
+        const token = localStorage.getItem("token");
+await fetch("/api/products", {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ id, quantity: newQty }),  // userId removed
+});
 
        // ✅ AFTER — productId carries the full object so getRestockItemProduct() can read it later
 restockedItems.push({
@@ -125,11 +132,15 @@ restockedItems.push({
 });
       }
 
-      await fetch("/api/restockHistory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, items: restockedItems }),
-      });
+     const token = localStorage.getItem("token");
+await fetch("/api/restockHistory", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ items: restockedItems }),  // userId removed
+});
 
       toast.success("Stock updated & history saved!");
       setRestockValues({});

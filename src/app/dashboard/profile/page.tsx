@@ -49,12 +49,15 @@ export default function ProfilePage() {
       parsed = JSON.parse(stored);
     } catch {
       localStorage.removeItem("user");
+      localStorage.removeItem("token"); 
       localStorage.removeItem("rememberMe");
+      
       router.push("/login");
       return;
     }
     if (!parsed?._id) {
       localStorage.removeItem("user");
+      localStorage.removeItem("token"); 
       localStorage.removeItem("rememberMe");
       router.push("/login");
       return;
@@ -66,13 +69,17 @@ export default function ProfilePage() {
 
     const loadProfile = async () => {
       try {
-        const res = await fetch(
-          `/api/profile?userId=${encodeURIComponent(parsed._id)}`
-        );
+       const token = localStorage.getItem("token");
+const res = await fetch(`/api/profile`, {
+  headers: {
+    "Authorization": `Bearer ${token}`,
+  },
+});
         const data = await res.json().catch(() => null);
         if (!res.ok || !data || data.error) {
           toast.error(data?.error || "Failed to load profile ❌");
           localStorage.removeItem("user");
+          localStorage.removeItem("token"); 
           localStorage.removeItem("rememberMe");
           router.push("/login");
           return;
@@ -82,6 +89,7 @@ export default function ProfilePage() {
       } catch {
         toast.error("Failed to load profile ❌");
         localStorage.removeItem("user");
+        localStorage.removeItem("token"); 
         localStorage.removeItem("rememberMe");
         router.push("/login");
       }
@@ -94,9 +102,12 @@ export default function ProfilePage() {
     if (!user?._id) return;
     (async () => {
       try {
-        const res = await fetch(
-          `/api/seller-details?userId=${encodeURIComponent(user._id)}`
-        );
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/seller-details`, {
+  headers: {
+    "Authorization": `Bearer ${token}`,
+  },
+});
         if (!res.ok) return;
         const data = await res.json();
 
@@ -136,14 +147,17 @@ export default function ProfilePage() {
     if (!otpSent) {
       setLoading(true);
       try {
-        const res = await fetch("/api/profile/change-password/request-otp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: user._id,
-            oldPassword: passwordForm.oldPassword,
-          }),
-        });
+        const token = localStorage.getItem("token");
+const res = await fetch("/api/profile/change-password/request-otp", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    oldPassword: passwordForm.oldPassword,   // userId removed — server uses token
+  }),
+});
         const data = await res.json();
         setLoading(false);
         if (!res.ok) {
@@ -166,15 +180,18 @@ export default function ProfilePage() {
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/profile/change-password/verify", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user._id,
-          newPassword: passwordForm.newPassword,
-          otp: passwordForm.otp,
-        }),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch("/api/profile/change-password/verify", {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    newPassword: passwordForm.newPassword,   // userId removed
+    otp: passwordForm.otp,
+  }),
+});
       const data = await res.json();
       setLoading(false);
       if (!res.ok) {
@@ -193,9 +210,10 @@ export default function ProfilePage() {
   // Logout
   const logout = () => {
     localStorage.removeItem("user");
-    localStorage.removeItem("rememberMe");
-    toast.success("Logged out 👋");
-    router.push("/login");
+  localStorage.removeItem("token");      // ← ADD THIS LINE
+  localStorage.removeItem("rememberMe");
+  toast.success("Logged out 👋");
+  router.push("/login");
   };
 
   // Handle tab change and close mobile sidebar

@@ -1,30 +1,53 @@
 // src/app/api/seller-details/route.ts
+
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import SellerDetails from "@/models/SellerDetails";
+import { verifyUserRequest } from "@/lib/userAuth";
+
+export async function GET(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    await connectDB();
+
+    const details = await SellerDetails.findOne({
+      userId: new mongoose.Types.ObjectId(auth.userId),
+    });
+
+    return NextResponse.json(details || {});
+  } catch (error) {
+    console.error("Error fetching seller details:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch seller details" },
+      { status: 500 }
+    );
+  }
+}
 
 export async function POST(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     await connectDB();
     const body = await req.json();
-    const { userId, contact } = body;
-
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
+    const { contact } = body;
 
     if (!contact) {
-      return NextResponse.json({ error: "Contact number is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Contact number is required" },
+        { status: 400 }
+      );
     }
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+    // Always use auth.userId — never trust userId from body
+    const userObjectId = new mongoose.Types.ObjectId(auth.userId);
 
     const existing = await SellerDetails.findOne({ userId: userObjectId });
+
     if (existing) {
       const updated = await SellerDetails.findOneAndUpdate(
         { userId: userObjectId },
@@ -33,36 +56,17 @@ export async function POST(req: Request) {
       );
       return NextResponse.json(updated);
     } else {
-      const created = await SellerDetails.create({ ...body, userId: userObjectId });
+      const created = await SellerDetails.create({
+        ...body,
+        userId: userObjectId,
+      });
       return NextResponse.json(created, { status: 201 });
     }
   } catch (error) {
     console.error("Error saving seller details:", error);
-    return NextResponse.json({ error: "Failed to save seller details" }, { status: 500 });
-  }
-}
-
-export async function GET(req: Request) {
-  try {
-    await connectDB();
-    const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-
-    if (!userId) {
-      return NextResponse.json({ error: "UserId required" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
-
-    const details = await SellerDetails.findOne({
-      userId: new mongoose.Types.ObjectId(userId),
-    });
-
-    return NextResponse.json(details || {});
-  } catch (error) {
-    console.error("Error fetching seller details:", error);
-    return NextResponse.json({ error: "Failed to fetch seller details" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to save seller details" },
+      { status: 500 }
+    );
   }
 }

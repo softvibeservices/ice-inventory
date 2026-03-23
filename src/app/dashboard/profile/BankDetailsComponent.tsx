@@ -53,9 +53,13 @@ export default function BankDetailsComponent({ sellerId }: Props) {
     setFetchError(null);
 
     try {
-      const res = await fetch(
-        `/api/bank-details?sellerId=${encodeURIComponent(sellerId)}`
-      );
+      const token = localStorage.getItem("token");
+const res = await fetch(
+  `/api/bank-details?sellerId=${encodeURIComponent(sellerId)}`,
+  {
+    headers: { "Authorization": `Bearer ${token}` },
+  }
+);
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -140,18 +144,22 @@ export default function BankDetailsComponent({ sellerId }: Props) {
 
     setBankLoading(true);
     try {
-      const res = await fetch("/api/bank-details", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sellerId,
-          bankName: bank.bankName,
-          ifscCode: bank.ifscCode,
-          branchName: bank.branchName,
-          bankingName: bank.bankingName,
-          accountNumber: bank.accountNumber,
-        }),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch("/api/bank-details", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    sellerId,
+    bankName: bank.bankName,
+    ifscCode: bank.ifscCode,
+    branchName: bank.branchName,
+    bankingName: bank.bankingName,
+    accountNumber: bank.accountNumber,
+  }),
+});
 
       const data = await res.json();
       setBankLoading(false);

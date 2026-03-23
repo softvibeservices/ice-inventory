@@ -1,3 +1,5 @@
+// src/app/dashboard/profile/SerialNumberComponent.tsx
+
 "use client";
 import { useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
@@ -25,7 +27,10 @@ export default function SerialNumberComponent({ userId }: SerialNumberComponentP
   const fetchCurrentSerial = async () => {
     setLoadingSerial(true);
     try {
-      const res = await fetch(`/api/bills/next-serial?userId=${encodeURIComponent(userId)}`);
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/bills/next-serial?userId=${encodeURIComponent(userId)}`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       const data = await res.json();
       if (res.ok && data.nextSerial?.length === 8) {
         setCurrentSerial(data.nextSerial);
@@ -96,11 +101,15 @@ export default function SerialNumberComponent({ userId }: SerialNumberComponentP
     if (seqValue < 1 || seqValue > 9999) { toast.error("Sequence must be between 0001 and 9999"); return; }
     setSaving(true);
     try {
-      const res = await fetch("/api/profile/update-serial", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, serialNumber: fullSerial }),
-      });
+    const token = localStorage.getItem("token");
+const res = await fetch("/api/profile/update-serial", {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ serialNumber: fullSerial }),  // userId removed
+});
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update");
       toast.success("Serial number updated successfully ✅");

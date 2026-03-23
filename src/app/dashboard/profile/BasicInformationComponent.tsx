@@ -33,18 +33,21 @@ export default function BasicInformationComponent({ user, onUpdate }: Props) {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/profile/update", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: localUser._id,
-          name: localUser.name,
-          email: localUser.email,
-          contact: localUser.contact,
-          shopName: localUser.shopName,
-          shopAddress: localUser.shopAddress,
-        }),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch("/api/profile/update", {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    name: localUser.name,       // userId removed — server uses token
+    email: localUser.email,
+    contact: localUser.contact,
+    shopName: localUser.shopName,
+    shopAddress: localUser.shopAddress,
+  }),
+});
 
       const data = await res.json();
       setLoading(false);

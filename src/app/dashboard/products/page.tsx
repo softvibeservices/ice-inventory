@@ -77,9 +77,10 @@ export default function ProductsPage(): JSX.Element {
 
     try {
       setLoading(true);
-      const res = await fetch(
-        `/api/products?userId=${encodeURIComponent(userId)}`
-      );
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/products`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       if (!res.ok) throw new Error("Failed to fetch products");
       const data = await res.json();
       setProducts(Array.isArray(data) ? data : []);
@@ -170,11 +171,15 @@ export default function ProductsPage(): JSX.Element {
         body = { ...payload, userId };
       }
 
-      const res = await fetch("/api/products", {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+     const token = localStorage.getItem("token");
+const res = await fetch("/api/products", {
+  method,
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify(body),  // userId still in body for PUT (id field), but server ignores it for auth
+});
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -246,11 +251,15 @@ export default function ProductsPage(): JSX.Element {
     if (!confirmDeleteId || !userId) return;
     try {
       setIsDeleting(true);
-      const res = await fetch("/api/products", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: confirmDeleteId, userId }),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch("/api/products", {
+  method: "DELETE",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ id: confirmDeleteId }),  // userId removed
+});
 
       if (res.ok) {
         setProducts((prev) => prev.filter((p) => p._id !== confirmDeleteId));

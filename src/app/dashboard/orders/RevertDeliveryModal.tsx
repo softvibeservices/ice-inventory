@@ -49,11 +49,15 @@ export default function RevertDeliveryModal({
 
     setLoading(true);
     try {
-      const res = await fetch("/api/orders/revert-delivery", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId, userId, revertTo, reason: reason.trim() || undefined }),
-      });
+     const token = localStorage.getItem("token");
+const res = await fetch("/api/orders/revert-delivery", {
+  method: "PATCH",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ orderId, revertTo, reason: reason.trim() || undefined }),  // userId removed
+});
 
       const data = await res.json();
 

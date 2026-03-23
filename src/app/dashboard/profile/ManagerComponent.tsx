@@ -30,7 +30,10 @@ export default function ManagerComponent({ adminId }: any) {
 
   const load = async () => {
     try {
-      const res = await fetch(`/api/manager?adminId=${adminId}`);
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/manager`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       const data = await res.json();
       if (res.ok) setList(data);
     } catch (error) {
@@ -117,15 +120,19 @@ export default function ManagerComponent({ adminId }: any) {
     const loadingToast = toast.loading("Sending OTP to manager's email...");
 
     try {
-      const res = await fetch("/api/manager/send-verification-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          email: form.email,
-          name: form.name,
-          adminId 
-        }),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch("/api/manager/send-verification-otp", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ 
+    email: form.email,
+    name: form.name,
+    // adminId removed — server uses token
+  }),
+});
 
       const data = await res.json();
       toast.dismiss(loadingToast);
@@ -167,15 +174,19 @@ export default function ManagerComponent({ adminId }: any) {
     const loadingToast = toast.loading("Verifying OTP and saving manager...");
 
     try {
-      const res = await fetch("/api/manager", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          adminId, 
-          ...pendingManagerData,
-          otp: otpForNewManager.trim()
-        }),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch("/api/manager", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ 
+    // adminId removed — server uses token
+    ...pendingManagerData,
+    otp: otpForNewManager.trim()
+  }),
+});
 
       const data = await res.json();
       toast.dismiss(loadingToast);
@@ -226,11 +237,15 @@ export default function ManagerComponent({ adminId }: any) {
     const loadingToast = toast.loading("Deleting...");
 
     try {
-      await fetch("/api/manager", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: deleteId, adminId }),
-      });
+      const token = localStorage.getItem("token");
+await fetch("/api/manager", {
+  method: "DELETE",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ id: deleteId }),  // adminId removed — server uses token
+});
 
       toast.dismiss(loadingToast);
       toast.success("Manager deleted! 🗑️");

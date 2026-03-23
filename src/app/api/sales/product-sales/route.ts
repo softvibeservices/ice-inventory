@@ -1,25 +1,25 @@
 // src/app/api/sales/product-sales/route.ts
+
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import ProductSalesLog from "@/models/ProductSalesLog";
+import { verifyUserRequest } from "@/lib/userAuth";
 
 export async function GET(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
-    const from = searchParams.get("from");     // "YYYY-MM-DD"
-    const to = searchParams.get("to");         // "YYYY-MM-DD"
-    const groupBy = searchParams.get("groupBy") || "product"; // "product" | "date" | "month"
-    const productId = searchParams.get("productId") || null;   // optional filter
-
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Valid userId required" }, { status: 400 });
-    }
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
+    const groupBy = searchParams.get("groupBy") || "product";
+    const productId = searchParams.get("productId") || null;
 
     await connectDB();
 
-    const userObjId = new mongoose.Types.ObjectId(userId);
+    const userObjId = new mongoose.Types.ObjectId(auth.userId);
     const matchStage: any = { userId: userObjId };
 
     if (from || to) {
@@ -32,12 +32,9 @@ export async function GET(req: Request) {
       matchStage["items.productId"] = new mongoose.Types.ObjectId(productId);
     }
 
-    // ✅ FIX: Count unique orders properly
-    // Strategy: Group by product+date, then use $addToSet to collect unique orderIds
     const pipeline: any[] = [
       { $match: matchStage },
       { $unwind: "$items" },
-      // re-match productId filter on unwound items
       ...(productId ? [{ $match: { "items.productId": new mongoose.Types.ObjectId(productId) } }] : []),
       {
         $group: {
@@ -51,7 +48,6 @@ export async function GET(req: Request) {
               : { $dateToString: { format: "%Y-%m-%d", date: "$soldDate" } },
           },
           totalQuantity: { $sum: "$items.quantity" },
-          // ✅ FIXED: Collect unique orderIds and count them
           uniqueOrders: { $addToSet: "$orderId" },
           totalRevenue: { $sum: "$orderTotal" },
         },
@@ -65,7 +61,6 @@ export async function GET(req: Request) {
           unit: "$_id.unit",
           date: "$_id.date",
           totalQuantity: 1,
-          // ✅ FIXED: Count the size of unique orders array
           orderCount: { $size: "$uniqueOrders" },
           totalRevenue: 1,
         },
@@ -75,7 +70,6 @@ export async function GET(req: Request) {
 
     const rows = await ProductSalesLog.aggregate(pipeline);
 
-    // Also return a product-level summary (total sold per product across the date range)
     const summaryPipeline: any[] = [
       { $match: matchStage },
       { $unwind: "$items" },
@@ -89,7 +83,6 @@ export async function GET(req: Request) {
             unit: "$items.unit",
           },
           totalQuantity: { $sum: "$items.quantity" },
-          // ✅ FIXED: Collect unique orderIds for summary too
           uniqueOrders: { $addToSet: "$orderId" },
         },
       },
@@ -101,7 +94,6 @@ export async function GET(req: Request) {
           category: "$_id.category",
           unit: "$_id.unit",
           totalQuantity: 1,
-          // ✅ FIXED: Count unique orders
           orderCount: { $size: "$uniqueOrders" },
         },
       },

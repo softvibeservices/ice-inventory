@@ -58,7 +58,10 @@ export default function CustomersPage() {
     if (!userId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/customers?userId=${encodeURIComponent(userId)}`);
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/customers`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       if (!res.ok) throw new Error("Failed to fetch customers");
       const data = await res.json();
       setCustomers(Array.isArray(data) ? data : []);
@@ -122,7 +125,6 @@ export default function CustomersPage() {
         longitude: form.longitude ? Number(form.longitude) : undefined,
       },
       remarks: form.remarks?.trim() || "",
-      userId,
       credit: toNumberSafe(form.credit),
       debit: toNumberSafe(form.debit),
       totalSales: toNumberSafe(form.totalSales),
@@ -131,11 +133,15 @@ export default function CustomersPage() {
     try {
       setSaving(true);
       if (editingId) {
-        const res = await fetch("/api/customers", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editingId, userId, ...body }),
-        });
+       const token = localStorage.getItem("token");
+const res = await fetch("/api/customers", {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ id: editingId, ...body }),  // userId removed
+});
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err?.error || "Update failed");
@@ -145,11 +151,15 @@ export default function CustomersPage() {
         toast.success("Customer updated");
         setEditingId(null);
       } else {
-        const res = await fetch("/api/customers", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
+       const token = localStorage.getItem("token");
+const res = await fetch("/api/customers", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify(body),  // userId already in body, server ignores it for auth but uses it for creation — actually remove it:
+});
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err?.error || "Creation failed");
@@ -215,11 +225,15 @@ export default function CustomersPage() {
     }
     try {
       setDeleting(true);
-      const res = await fetch("/api/customers", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: deleteId, userId }),
-      });
+     const token = localStorage.getItem("token");
+const res = await fetch("/api/customers", {
+  method: "DELETE",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ id: deleteId }),  // userId removed
+});
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.error || "Delete failed");
@@ -270,7 +284,6 @@ export default function CustomersPage() {
       setSettling(true);
       const body: any = {
         id: c._id,
-        userId,
         name: c.name,
         contacts: c.contacts,
         shopName: c.shopName,
@@ -282,11 +295,15 @@ export default function CustomersPage() {
         debit: newDebit,
         totalSales: c.totalSales ?? 0,
       };
-      const res = await fetch("/api/customers", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+     const token = localStorage.getItem("token");
+const res = await fetch("/api/customers", {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify(body),
+});
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err?.error || "Settlement update failed");

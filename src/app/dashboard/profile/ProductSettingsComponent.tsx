@@ -46,7 +46,10 @@ export default function ProductSettingsComponent({ userId }: ProductSettingsComp
   const fetchSettings = async () => {
     try {
       setFetching(true);
-      const res = await fetch(`/api/user-settings?userId=${encodeURIComponent(userId)}`);
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/user-settings`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       const data = await res.json();
       
       if (res.ok) {
@@ -73,12 +76,16 @@ export default function ProductSettingsComponent({ userId }: ProductSettingsComp
     isSavingRef.current = true;
 
     try {
-      await fetch("/api/user-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, categories, units }),
-        keepalive: true, // Important for requests during page unload
-      });
+      const token = localStorage.getItem("token");
+await fetch("/api/user-settings", {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ categories, units }),  // userId removed
+  keepalive: true,
+});
     } catch (error) {
       console.error("Quick save failed:", error);
     } finally {
@@ -101,15 +108,15 @@ export default function ProductSettingsComponent({ userId }: ProductSettingsComp
     try {
       isSavingRef.current = true;
       setLoading(true);
-      const res = await fetch("/api/user-settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          categories,
-          units,
-        }),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch("/api/user-settings", {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ categories, units }),  // userId removed
+});
 
       const data = await res.json();
 

@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import LocationHistory from "@/models/LocationHistory";
+import { verifyUserRequest } from "@/lib/userAuth";
 
 interface LeanPartnerLocation {
   _id: string;
@@ -19,23 +20,17 @@ interface LeanPartnerLocation {
 }
 
 export async function GET(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(req.url);
     const partnerId = searchParams.get("partnerId");
-    const userId = searchParams.get("userId");
     const includeTrail = searchParams.get("includeTrail") === "true";
     const trailMinutes = parseInt(searchParams.get("trailMinutes") || "60");
 
     if (!partnerId) {
       return NextResponse.json({ error: "partnerId required" }, { status: 400 });
-    }
-
-    if (!userId) {
-      return NextResponse.json({ error: "userId required for authorization" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
 
     await connectDB();
@@ -48,12 +43,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Partner not found" }, { status: 404 });
     }
 
-    // ✅ SECURITY: createdByUser is now ObjectId — compare via toString()
+    // Ownership check using auth.userId from token
     const createdByUserStr = partner.createdByUser
       ? partner.createdByUser.toString()
       : null;
 
-    if (createdByUserStr !== userId) {
+    if (createdByUserStr !== auth.userId) {
       return NextResponse.json(
         { error: "Access denied: You do not have permission to view this partner's location" },
         { status: 403 }

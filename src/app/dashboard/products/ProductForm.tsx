@@ -51,7 +51,10 @@ export default function ProductForm({
         const settingsUrl = `/api/user-settings?userId=${encodeURIComponent(userId)}`;
         console.log("📡 Fetching settings from:", settingsUrl);
         
-        const settingsRes = await fetch(settingsUrl);
+      const token = localStorage.getItem("token");
+const settingsRes = await fetch(settingsUrl, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
         const settingsData = await settingsRes.json();
         
         console.log("📥 Settings response status:", settingsRes.status);
@@ -76,10 +79,13 @@ export default function ProductForm({
         }
 
         // ✅ NEW: Fetch existing products for duplicate detection
-        const productsUrl = `/api/products?userId=${encodeURIComponent(userId)}`;
+      const productsUrl = `/api/products`;  // userId no longer needed in URL
        
         
-        const productsRes = await fetch(productsUrl);
+       // token already retrieved above in this same function
+const productsRes = await fetch(`/api/products`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
         const productsData = await productsRes.json();
         
         if (productsRes.ok) {

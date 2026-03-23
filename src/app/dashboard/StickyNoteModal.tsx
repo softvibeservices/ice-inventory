@@ -302,11 +302,15 @@ export default function StickyNoteModal({
         id: mode === "edit" ? payload._id : undefined,
       };
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch(url, {
+  method,
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify(body),
+});
 
       const data = await res.json();
       if (!res.ok) {

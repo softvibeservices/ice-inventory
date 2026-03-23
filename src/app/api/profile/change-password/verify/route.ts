@@ -4,21 +4,27 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
+import { verifyUserRequest } from "@/lib/userAuth";
 
 export async function PUT(req: Request) {
-  try {
-    const { userId, newPassword, otp } = await req.json();
+  // 1. Verify JWT
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
 
-    if (!userId || !newPassword || !otp) {
+  try {
+    const { newPassword, otp } = await req.json();
+
+    if (!newPassword || !otp) {
       return NextResponse.json(
-        { error: "userId, newPassword and otp are required" },
+        { error: "newPassword and otp are required" },
         { status: 400 }
       );
     }
 
     await connectDB();
 
-    const user = await User.findById(userId);
+    // 2. Use auth.userId
+    const user = await User.findById(auth.userId);
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -30,8 +36,7 @@ export async function PUT(req: Request) {
       );
     }
 
-    const now = new Date();
-    if (user.otpExpires < now) {
+    if (user.otpExpires < new Date()) {
       user.otp = null;
       user.otpExpires = null;
       await user.save();
@@ -48,16 +53,14 @@ export async function PUT(req: Request) {
       );
     }
 
-    // OTP is valid → change password
-    const hashed = await bcrypt.hash(newPassword, 10);
-    user.password = hashed;
+    // 3. OTP valid — change password
+    user.password = await bcrypt.hash(newPassword, 10);
     user.otp = null;
     user.otpExpires = null;
     await user.save();
 
-    return NextResponse.json({
-      message: "Password updated successfully",
-    });
+    return NextResponse.json({ message: "Password updated successfully" });
+
   } catch (error) {
     console.error("Error in verify:", error);
     return NextResponse.json(

@@ -1,28 +1,37 @@
 // src/app/api/manager/send-verification-otp/route.ts
+
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { transporter } from "@/lib/nodemailer";
+import { verifyUserRequest } from "@/lib/userAuth";
 
 export async function POST(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
+  if (auth.role !== "admin") {
+    return NextResponse.json(
+      { error: "Only admins can invite managers" },
+      { status: 403 }
+    );
+  }
+
   try {
     await connectDB();
 
-    const { email, name, adminId } = await req.json();
+    const { email, name } = await req.json();
 
-    if (!email || !name || !adminId) {
+    if (!email || !name) {
       return NextResponse.json(
-        { error: "Email, name, and adminId are required" },
+        { error: "Email and name are required" },
         { status: 400 }
       );
     }
 
-    if (!mongoose.Types.ObjectId.isValid(adminId)) {
-      return NextResponse.json({ error: "Invalid adminId" }, { status: 400 });
-    }
-
-    const adminObjId = new mongoose.Types.ObjectId(adminId);
+    // adminId comes from verified token
+    const adminObjId = new mongoose.Types.ObjectId(auth.userId);
 
     const existingVerifiedManager = await User.findOne({
       adminId: adminObjId,
@@ -89,9 +98,15 @@ export async function POST(req: Request) {
       `,
     });
 
-    return NextResponse.json({ success: true, message: "OTP sent to manager's email" });
+    return NextResponse.json({
+      success: true,
+      message: "OTP sent to manager's email",
+    });
   } catch (e: any) {
     console.error("Error sending verification OTP:", e);
-    return NextResponse.json({ error: e.message || "Failed to send OTP" }, { status: 500 });
+    return NextResponse.json(
+      { error: e.message || "Failed to send OTP" },
+      { status: 500 }
+    );
   }
 }

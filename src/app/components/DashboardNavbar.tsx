@@ -68,7 +68,10 @@ export default function DashboardNavbar() {
 
     const fetchNotifications = async () => {
       try {
-        const res = await fetch(`/api/delivery/notifications?userId=${userId}`);
+        const token = localStorage.getItem("token");
+    const res = await fetch(`/api/delivery/notifications`, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
         const data = await res.json();
         
         if (typeof data?.pendingPartners === "number") {
@@ -81,21 +84,22 @@ export default function DashboardNavbar() {
 
     fetchNotifications();
 
-    // Poll for updates every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000);
+    // Poll for updates every 15 MINUTES
+    const interval = setInterval(fetchNotifications, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [userId, role]);
 
-  const requestsHref = userId
-    ? `/dashboard/delivery-requests?userId=${encodeURIComponent(userId)}`
-    : "/dashboard/delivery-requests";
+ const requestsHref = "/dashboard/delivery-requests";
 
   /* ================= LOGOUT ================= */
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("rememberMe");
-    router.push("/login");
-  };
+ // REPLACE handleLogout with this:
+
+const handleLogout = () => {
+  localStorage.removeItem("user");
+  localStorage.removeItem("token");       // ← NEW
+  localStorage.removeItem("rememberMe");
+  router.push("/login");
+};
 
   return (
     <>

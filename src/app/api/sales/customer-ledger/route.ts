@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import Customer, { ICustomer } from "@/models/Customer";
-import User from "@/models/User";
+import { verifyUserRequest } from "@/lib/userAuth";
 
 type LedgerType = "Sale" | "Payment" | "Adjustment";
 
@@ -41,19 +41,28 @@ function isWithinRange(date: Date, from?: Date | null, to?: Date | null) {
 }
 
 export async function GET(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
+  // Managers cannot access customer ledger
+  if (auth.role === "manager") {
+    return NextResponse.json(
+      { error: "Access denied: Managers are not allowed" },
+      { status: 403 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
     const customerId = searchParams.get("customerId");
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
 
-    if (!userId || !customerId) {
-      return NextResponse.json({ error: "userId and customerId are required" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
+    if (!customerId) {
+      return NextResponse.json(
+        { error: "customerId is required" },
+        { status: 400 }
+      );
     }
 
     if (!mongoose.Types.ObjectId.isValid(customerId)) {
@@ -62,20 +71,13 @@ export async function GET(req: Request) {
 
     await connectDB();
 
-    const user = await User.findById(userId).select("role");
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-    if (user.role === "manager") {
-      return NextResponse.json({ error: "Access denied: Managers are not allowed" }, { status: 403 });
-    }
-
     const from = parseDateParam(fromParam);
     const to = parseDateParam(toParam);
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const userObjectId = new mongoose.Types.ObjectId(auth.userId);
     const customerObjectId = new mongoose.Types.ObjectId(customerId);
 
+    // Ownership check — customer must belong to this user
     const customerDoc = (await Customer.findOne({
       _id: customerObjectId,
       userId: userObjectId,
@@ -153,7 +155,6 @@ export async function GET(req: Request) {
         }
 
         if (entry.action === "Discarded") {
-          const total = Number(order.total || 0) || 0;
           ledger.push({
             id: `${order._id}-discard-${index}`,
             type: "Adjustment",
@@ -162,7 +163,7 @@ export async function GET(req: Request) {
             serialNumber: order.serialNumber,
             note: `Bill discarded (Order #${order.orderId})`,
             debit: 0,
-            credit: total,
+            credit: Number(order.total || 0) || 0,
           });
         }
       }

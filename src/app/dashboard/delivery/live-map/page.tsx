@@ -43,7 +43,10 @@ export default function LiveMapHome() {
     setError("");
     
     try {
-      const res = await fetch(`/api/delivery/list?userId=${userId}&status=approved`);
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/delivery/list?status=approved`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       
       if (!res.ok) {
         throw new Error("Failed to load partners");
