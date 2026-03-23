@@ -1,51 +1,45 @@
 // src/app/api/delivery/list/route.ts
-// ✅ FIXED VERSION - Admin email comes from logged-in user, NOT from .env
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
-import User from "@/models/User";
+import { verifyUserRequest } from "@/lib/userAuth";
 
 function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export async function GET(req: Request) {
+  const auth = await verifyUserRequest(req);
+  if (auth instanceof NextResponse) return auth;
+
+  if (auth.role === "manager") {
+    return NextResponse.json(
+      { error: "Access denied: Managers not allowed" },
+      { status: 403 }
+    );
+  }
+
   try {
     const { searchParams } = new URL(req.url);
-    const userId = searchParams.get("userId");
     const status = searchParams.get("status") ?? undefined;
-
-    if (!userId) {
-      return NextResponse.json({ error: "userId is required" }, { status: 400 });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
-    }
 
     await connectDB();
 
-    const user = await User.findById(userId).select("email role");
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    const userObjectId = new mongoose.Types.ObjectId(auth.userId);
 
-    if (user.role === "manager") {
-      return NextResponse.json({ error: "Access denied: Managers not allowed" }, { status: 403 });
-    }
+    // We still need adminEmail for backwards compat with legacy records
+    // Import User only for email lookup — role is already in token
+    const { default: User } = await import("@/models/User");
+    const user = await User.findById(auth.userId).select("email");
+    const adminEmail = user?.email ? String(user.email).toLowerCase() : null;
 
-    const adminEmail = user.email ? String(user.email).toLowerCase() : null;
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-
-    // ✅ BUILD FILTER: createdByUser is now ObjectId
     const ors: any[] = [
       { createdByUser: userObjectId },
-      { createdByUser: userId }, // fallback string match for legacy data
+      { createdByUser: auth.userId }, // legacy string fallback
     ];
 
-    // Also support adminEmail for backwards compatibility
     if (adminEmail) {
       const safe = escapeRegex(adminEmail);
       ors.push({ adminEmail: { $regex: new RegExp(`^${safe}$`, "i") } });
@@ -57,9 +51,7 @@ export async function GET(req: Request) {
       filter.status = { $regex: new RegExp(`^${String(status)}$`, "i") };
     }
 
-    const raw = await DeliveryPartner.find(filter)
-      .sort({ createdAt: -1 })
-      .lean();
+    const raw = await DeliveryPartner.find(filter).sort({ createdAt: -1 }).lean();
 
     const normalized = (Array.isArray(raw) ? raw : []).map((doc: any) => {
       const email = doc.email
@@ -80,11 +72,10 @@ export async function GET(req: Request) {
       }
 
       const s = doc.status ? String(doc.status).toLowerCase() : "pending";
-      const statusNorm =
-        s === "approved" ? "approved" : s === "rejected" ? "rejected" : "pending";
+      const statusNorm = s === "approved" ? "approved" : s === "rejected" ? "rejected" : "pending";
 
       return {
-        _id: doc._id ? String(doc._id) : doc.id ? String(doc.id) : null,
+        _id: doc._id ? String(doc._id) : null,
         name: doc.name ?? doc.fullName ?? "Unknown",
         email,
         phone: doc.phone ?? doc.contact ?? null,

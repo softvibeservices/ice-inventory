@@ -68,7 +68,10 @@ export default function DashboardNavbar() {
 
     const fetchNotifications = async () => {
       try {
-        const res = await fetch(`/api/delivery/notifications?userId=${userId}`);
+        const token = localStorage.getItem("token");
+    const res = await fetch(`/api/delivery/notifications`, {
+      headers: { "Authorization": `Bearer ${token}` },
+    });
         const data = await res.json();
         
         if (typeof data?.pendingPartners === "number") {
@@ -86,9 +89,7 @@ export default function DashboardNavbar() {
     return () => clearInterval(interval);
   }, [userId, role]);
 
-  const requestsHref = userId
-    ? `/dashboard/delivery-requests?userId=${encodeURIComponent(userId)}`
-    : "/dashboard/delivery-requests";
+ const requestsHref = "/dashboard/delivery-requests";
 
   /* ================= LOGOUT ================= */
  // REPLACE handleLogout with this:

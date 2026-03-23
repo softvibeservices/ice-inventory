@@ -72,7 +72,10 @@ export default function DeliveryRequestsPage() {
     setLoading(true);
     
     try {
-      const res = await fetch(`/api/delivery/list?userId=${userId}&status=pending`);
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/delivery/list?status=pending`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
       const data = await res.json().catch(() => null);
       
       if (!res.ok) {
@@ -118,13 +121,15 @@ export default function DeliveryRequestsPage() {
     setWorkingId(partnerId);
 
     try {
-      const body = { partnerId, userId };
-
-      const res = await fetch(`/api/delivery/${action}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch(`/api/delivery/${action}`, {
+  method: "PATCH",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify({ partnerId }),  // userId removed
+});
 
       const data = await res.json().catch(() => null);
 

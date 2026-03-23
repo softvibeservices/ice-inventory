@@ -290,11 +290,14 @@ export default function LiveMapPage() {
     }
 
     try {
-      const res = await fetch(
-        `/api/delivery/live-location?partnerId=${partnerId}&userId=${userId}&includeTrail=true&trailMinutes=180`,
-        { cache: "no-store" }
-      );
-
+      const token = localStorage.getItem("token");
+const res = await fetch(
+  `/api/delivery/live-location?partnerId=${partnerId}&includeTrail=true&trailMinutes=180`,
+  {
+    cache: "no-store",
+    headers: { "Authorization": `Bearer ${token}` },
+  }
+);
       const data = await res.json();
 
       if (res.status === 403) {

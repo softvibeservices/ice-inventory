@@ -152,9 +152,10 @@ export default function BillingPage() {
   // The real serial is assigned only when POST /api/bills is called.
   const fetchNextSerialPreview = async (uid: string) => {
     try {
-      const res = await fetch(
-        `/api/bills/next-serial?userId=${encodeURIComponent(uid)}`
-      );
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/bills/next-serial`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.nextSerial) {
@@ -184,8 +185,8 @@ export default function BillingPage() {
         // Find customer by ID or match by name
         const matchedCustomer = customers.find(
           c => c._id === data.customerId ||
-          (c.name.toLowerCase() === data.customerName.toLowerCase() &&
-           (c as any).shopName?.toLowerCase() === data.shopName.toLowerCase())
+            (c.name.toLowerCase() === data.customerName.toLowerCase() &&
+              (c as any).shopName?.toLowerCase() === data.shopName.toLowerCase())
         );
 
         if (matchedCustomer) {
@@ -263,7 +264,10 @@ export default function BillingPage() {
         const { orderId, _id } = JSON.parse(editingData);
 
         // Fetch the bill data
-        const res = await fetch(`/api/bills?userId=${userId}&orderId=${orderId}`);
+        const token = localStorage.getItem("token");
+const res = await fetch(`/api/bills?orderId=${orderId}`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
         const billData = await res.json();
 
         if (!res.ok || billData.error) {
@@ -345,7 +349,10 @@ export default function BillingPage() {
     setUserId(uid);
 
     // --- Fetch Seller ---
-    fetch(`/api/seller-details?userId=${encodeURIComponent(uid)}`)
+    const token = localStorage.getItem("token");
+    fetch(`/api/seller-details`, {
+      headers: { "Authorization": `Bearer ${token}` },
+    })
       .then((r) => safeJson(r))
       .then((s) => {
         if (s && !s.error) {
@@ -355,7 +362,9 @@ export default function BillingPage() {
       .catch(() => { });
 
     // --- Fetch Customers ---
-    fetch(`/api/customers?userId=${encodeURIComponent(uid)}`)
+    fetch(`/api/customers`, {
+      headers: { "Authorization": `Bearer ${token}` },
+    })
       .then((r) => safeJson(r))
       .then((data) => {
         if (!data) return;
@@ -384,7 +393,9 @@ export default function BillingPage() {
       .catch(() => { });
 
     // --- Fetch Products ---
-    fetch(`/api/products?userId=${encodeURIComponent(uid)}`)
+    fetch(`/api/products`, {
+  headers: { "Authorization": `Bearer ${token}` },
+})
       .then((r) => safeJson(r))
       .then((data) => {
         if (!data) return;
@@ -443,7 +454,10 @@ export default function BillingPage() {
       return;
     }
 
-    fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`)
+    const token = localStorage.getItem("token");
+fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
+  headers: { "Authorization": `Bearer ${token}` },
+})
       .then((r) => safeJson(r))
       .then((b) => {
         if (b && !b.error && Object.keys(b).length) {
@@ -893,18 +907,17 @@ export default function BillingPage() {
       const shippingCustomerData = sameAsBilling
         ? billingCustomerData
         : {
-            customerId: shippingCustomer?._id,
-            name: shippingCustomer?.name || "",
-            shopName: shippingCustomer?.shopName || shippingCustomer?.name || "",
-            address: shippingCustomer?.address || shippingCustomer?.shopAddress || "",
-            contact: shippingCustomer?.contact || "",
-          };
+          customerId: shippingCustomer?._id,
+          name: shippingCustomer?.name || "",
+          shopName: shippingCustomer?.shopName || shippingCustomer?.name || "",
+          address: shippingCustomer?.address || shippingCustomer?.shopAddress || "",
+          contact: shippingCustomer?.contact || "",
+        };
 
       // ✅ serialNumber is intentionally NOT sent in POST payload —
       //    the server generates it atomically from the Counter collection.
       // For PUT (edits), the existing serial is sent to preserve it.
       const payload: any = {
-        userId,
         orderId,
         billDate: date,
         billingCustomer: billingCustomerData,
@@ -925,11 +938,15 @@ export default function BillingPage() {
       const method = isEditMode ? "PUT" : "POST";
       const url = "/api/bills";
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const token = localStorage.getItem("token");
+const res = await fetch(url, {
+  method,
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`,
+  },
+  body: JSON.stringify(payload),
+});
 
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -1152,11 +1169,10 @@ export default function BillingPage() {
                               }
                             }, 0);
                           }}
-                          className={`px-3 py-2 cursor-pointer text-sm ${
-                            customerSuggestionIndex === i
+                          className={`px-3 py-2 cursor-pointer text-sm ${customerSuggestionIndex === i
                               ? "bg-blue-600 text-white"
                               : "hover:bg-blue-50"
-                          }`}
+                            }`}
                         >
                           {label}
                         </div>
@@ -1273,11 +1289,10 @@ export default function BillingPage() {
 
                                 setTimeout(() => focusProduct(0), 0);
                               }}
-                              className={`px-3 py-2 cursor-pointer text-sm ${
-                                shippingSuggestionIndex === i
+                              className={`px-3 py-2 cursor-pointer text-sm ${shippingSuggestionIndex === i
                                   ? "bg-blue-600 text-white"
                                   : "hover:bg-blue-50"
-                              }`}
+                                }`}
                             >
                               {label}
                             </div>
@@ -1312,11 +1327,11 @@ export default function BillingPage() {
                   <strong>Address:</strong>{" "}
                   {sameAsBilling
                     ? billingCustomer?.address ||
-                      billingCustomer?.shopAddress ||
-                      "-"
+                    billingCustomer?.shopAddress ||
+                    "-"
                     : shippingCustomer?.address ||
-                      shippingCustomer?.shopAddress ||
-                      "-"}
+                    shippingCustomer?.shopAddress ||
+                    "-"}
                 </div>
               </div>
             </div>
@@ -1472,8 +1487,8 @@ export default function BillingPage() {
                                     setTimeout(() => focusQuantity(idx), 0);
                                   }}
                                   className={`px-2 py-1 sm:px-3 sm:py-2 cursor-pointer text-xs sm:text-sm flex justify-between ${(productSuggestionIndex[idx] || 0) === i
-                                      ? "bg-blue-600 text-white"
-                                      : "hover:bg-blue-50"
+                                    ? "bg-blue-600 text-white"
+                                    : "hover:bg-blue-50"
                                     }`}
                                 >
                                   <span>{p.name}</span>

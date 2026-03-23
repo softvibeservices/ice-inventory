@@ -505,12 +505,15 @@ export default function SalesPage() {
       setSummaryLoading(true);
       setSummaryError(null);
 
-      const params = new URLSearchParams({ userId });
-      if (from) params.append("from", from);
-      if (to) params.append("to", to);
+     const token = localStorage.getItem("token");
+const params = new URLSearchParams();
+if (from) params.append("from", from);
+if (to) params.append("to", to);
 
       try {
-        const res = await fetch(`/api/sales/summary?${params.toString()}`);
+       const res = await fetch(`/api/sales/summary?${params.toString()}`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
         if (!res.ok) {
           const errData = await res.json();
           throw new Error(errData.error || "Failed to fetch summary");
@@ -537,7 +540,10 @@ export default function SalesPage() {
       setCustomersLoading(true);
 
       try {
-        const res = await fetch(`/api/customers?userId=${userId}`);
+        const token = localStorage.getItem("token");
+const res = await fetch(`/api/customers`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
         if (!res.ok) {
           console.error("Failed to fetch customers");
           return;
@@ -564,15 +570,15 @@ export default function SalesPage() {
 
     const fetchLedger = async () => {
       setLedgerLoading(true);
-      const params = new URLSearchParams({
-        userId,
-        customerId: selectedCustomerId,
-      });
-      if (from) params.append("from", from);
-      if (to) params.append("to", to);
+      const token = localStorage.getItem("token");
+const params = new URLSearchParams({ customerId: selectedCustomerId });
+if (from) params.append("from", from);
+if (to) params.append("to", to);
 
       try {
-        const res = await fetch(`/api/sales/customer-ledger?${params.toString()}`);
+        const res = await fetch(`/api/sales/customer-ledger?${params.toString()}`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
         if (!res.ok) {
           console.error("Failed to fetch ledger");
           return;
@@ -596,15 +602,16 @@ export default function SalesPage() {
 
     const fetchProductSales = async () => {
       setProductSalesLoading(true);
-      const params = new URLSearchParams({
-        userId,
-        groupBy: productGroupBy,
-      });
-      if (from) params.append("from", from);
-      if (to) params.append("to", to);
+     const token = localStorage.getItem("token");
+const params = new URLSearchParams({ groupBy: productGroupBy });
+if (from) params.append("from", from);
+if (to) params.append("to", to);
 
       try {
-        const res = await fetch(`/api/sales/product-sales?${params.toString()}`);
+        const res = await fetch(`/api/sales/product-sales?${params.toString()}`, {
+  headers: { "Authorization": `Bearer ${token}` },
+});
+
         if (!res.ok) {
           console.error("Failed to fetch product sales");
           return;
