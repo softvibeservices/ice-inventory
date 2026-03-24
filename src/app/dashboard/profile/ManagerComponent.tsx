@@ -361,7 +361,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
       const res = await fetch("/api/manager/send-verification-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ email: form.email }),
+        body: JSON.stringify({ email: form.email, name: form.name }),
       });
       const data = await res.json();
       if (!res.ok) {

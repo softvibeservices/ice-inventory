@@ -144,41 +144,50 @@ export async function verifyUserRequest(
         deviceId: decoded.deviceId,
       }).select("status blockedUntil revokedAt lastSeen");
 
-      if (device) {
-        // 6a. Device banned — reject regardless of JWT age
-        if (device.status === "banned") {
+      // ✅ FIX: If the device doc was hard-deleted (i.e. "Remove Session" was used),
+      //    reject the request immediately. Previously this was allowed through, which
+      //    meant "Remove Session" had no real effect — the manager/admin could keep
+      //    making API calls with their existing JWT even after their device was removed.
+      if (!device) {
+        return NextResponse.json(
+          {
+            error: "This session has been terminated. Please login again.",
+            code: "DEVICE_REMOVED",
+          },
+          { status: 401 }
+        );
+      }
+
+      // 6a. Device banned — reject regardless of JWT age
+      if (device.status === "banned") {
+        return NextResponse.json(
+          { error: "This device has been banned. Please contact support.", code: "DEVICE_BANNED" },
+          { status: 403 }
+        );
+      }
+
+      // 6b. ✅ Per-device revocation check:
+      //     If the device was banned/removed after this token was issued,
+      //     reject it. This allows only THIS device's session to be terminated
+      //     without affecting other devices.
+      if (device.revokedAt) {
+        const tokenIssuedAt = new Date(decoded.iat * 1000);
+        if (tokenIssuedAt < device.revokedAt) {
           return NextResponse.json(
-            { error: "This device has been banned. Please contact support.", code: "DEVICE_BANNED" },
-            { status: 403 }
+            { error: "This session has been terminated. Please login again.", code: "DEVICE_REVOKED" },
+            { status: 401 }
           );
         }
-
-        // 6b. ✅ Per-device revocation check:
-        //     If the device was banned/removed after this token was issued,
-        //     reject it. This allows only THIS device's session to be terminated
-        //     without affecting other devices.
-        if (device.revokedAt) {
-          const tokenIssuedAt = new Date(decoded.iat * 1000);
-          if (tokenIssuedAt < device.revokedAt) {
-            return NextResponse.json(
-              { error: "This session has been terminated. Please login again.", code: "DEVICE_REVOKED" },
-              { status: 401 }
-            );
-          }
-        }
-
-        // 6c. Update lastSeen on every verified request (debounced — only if older than 5 min)
-        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
-        if (!device.lastSeen || device.lastSeen < fiveMinAgo) {
-          Device.findOneAndUpdate(
-            { userId: actualUserId, deviceId: decoded.deviceId },
-            { lastSeen: new Date() }
-          ).exec(); // fire-and-forget, do not await
-        }
       }
-      // Note: if device doc doesn't exist (e.g. was hard-deleted and user still
-      // has a valid JWT), we allow the request through — the next login will
-      // recreate the device entry. This prevents an edge-case lockout.
+
+      // 6c. Update lastSeen on every verified request (debounced — only if older than 5 min)
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      if (!device.lastSeen || device.lastSeen < fiveMinAgo) {
+        Device.findOneAndUpdate(
+          { userId: actualUserId, deviceId: decoded.deviceId },
+          { lastSeen: new Date() }
+        ).exec(); // fire-and-forget, do not await
+      }
     }
 
     // 7. For managers: verify the admin they belong to still exists and is not blocked
