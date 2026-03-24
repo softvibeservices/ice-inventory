@@ -1,12 +1,12 @@
-// ice-inventory\src\app\dashboard\profile\page.tsx
-
 "use client";
+// src/app/dashboard/profile/page.tsx
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
-import { User, Lock, LogOut, Menu, X } from "lucide-react";
+import { User, Lock, LogOut, Menu, X, Shield, Hash } from "lucide-react";
 import DeliveryPartnersTable from "@/app/dashboard/profile/delivery-partners/page";
 import ManagerComponent from "@/app/dashboard/profile/ManagerComponent";
 import BasicInformationComponent from "./BasicInformationComponent";
@@ -14,6 +14,7 @@ import BillingDetailsComponent from "./BillingDetailsComponent";
 import BankDetailsComponent from "./BankDetailsComponent";
 import ProductSettingsComponent from "./ProductSettingsComponent";
 import SerialNumberComponent from "./SerialNumberComponent";
+import ActiveSessionsComponent from "./ActiveSessionsComponent";
 import type {
   ActiveTab,
   UserProfile,
@@ -23,7 +24,6 @@ import type {
 export default function ProfilePage() {
   const router = useRouter();
 
-  // State Declarations
   const [user, setUser] = useState<UserProfile | null>(null);
   const [originalUser, setOriginalUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -49,15 +49,14 @@ export default function ProfilePage() {
       parsed = JSON.parse(stored);
     } catch {
       localStorage.removeItem("user");
-      localStorage.removeItem("token"); 
+      localStorage.removeItem("token");
       localStorage.removeItem("rememberMe");
-      
       router.push("/login");
       return;
     }
     if (!parsed?._id) {
       localStorage.removeItem("user");
-      localStorage.removeItem("token"); 
+      localStorage.removeItem("token");
       localStorage.removeItem("rememberMe");
       router.push("/login");
       return;
@@ -69,17 +68,15 @@ export default function ProfilePage() {
 
     const loadProfile = async () => {
       try {
-       const token = localStorage.getItem("token");
-const res = await fetch(`/api/profile`, {
-  headers: {
-    "Authorization": `Bearer ${token}`,
-  },
-});
+        const token = localStorage.getItem("token");
+        const res = await fetch(`/api/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const data = await res.json().catch(() => null);
         if (!res.ok || !data || data.error) {
           toast.error(data?.error || "Failed to load profile ❌");
           localStorage.removeItem("user");
-          localStorage.removeItem("token"); 
+          localStorage.removeItem("token");
           localStorage.removeItem("rememberMe");
           router.push("/login");
           return;
@@ -89,7 +86,7 @@ const res = await fetch(`/api/profile`, {
       } catch {
         toast.error("Failed to load profile ❌");
         localStorage.removeItem("user");
-        localStorage.removeItem("token"); 
+        localStorage.removeItem("token");
         localStorage.removeItem("rememberMe");
         router.push("/login");
       }
@@ -97,67 +94,54 @@ const res = await fetch(`/api/profile`, {
     loadProfile();
   }, [router]);
 
-  // ✅ FIX: Robust sellerId extraction — handles ObjectId objects, strings, nested $oid
+  // Fetch sellerId for bank tab
   useEffect(() => {
     if (!user?._id) return;
     (async () => {
       try {
-      const token = localStorage.getItem("token");
-const res = await fetch(`/api/seller-details`, {
-  headers: {
-    "Authorization": `Bearer ${token}`,
-  },
-});
+        const token = localStorage.getItem("token");
+        const res = await fetch(`/api/seller-details`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) return;
         const data = await res.json();
 
-        // Safely extract _id as a plain string regardless of how MongoDB returns it
         let rawId = data?._id;
         if (!rawId) return;
 
-        // If it's an object (e.g. { $oid: "..." }), extract the string
         if (typeof rawId === "object" && rawId !== null) {
           rawId = rawId.$oid ?? rawId.toString?.() ?? String(rawId);
         } else {
           rawId = String(rawId);
         }
 
-        // Validate it looks like a MongoDB ObjectId (24 hex chars)
-        if (/^[a-f\d]{24}$/i.test(rawId)) {
+        if (rawId && rawId !== "[object Object]") {
           setSellerId(rawId);
-        } else {
-          console.warn("sellerId from API is not a valid ObjectId:", rawId);
         }
-      } catch (err) {
-        console.error("Failed to fetch seller details:", err);
+      } catch {
+        // seller details not yet set up
       }
     })();
   }, [user?._id]);
 
-  // Change password with OTP
-  const changePassword = async () => {
-    if (!user) {
-      toast.error("User not loaded");
-      return;
-    }
+  // Change password
+  const handlePasswordChange = async () => {
     if (!passwordForm.oldPassword || !passwordForm.newPassword) {
-      toast.error("Please fill old and new password");
+      toast.error("Please fill all password fields");
       return;
     }
     if (!otpSent) {
       setLoading(true);
       try {
         const token = localStorage.getItem("token");
-const res = await fetch("/api/profile/change-password/request-otp", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
-  },
-  body: JSON.stringify({
-    oldPassword: passwordForm.oldPassword,   // userId removed — server uses token
-  }),
-});
+        const res = await fetch("/api/profile/change-password/request-otp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ oldPassword: passwordForm.oldPassword }),
+        });
         const data = await res.json();
         setLoading(false);
         if (!res.ok) {
@@ -168,7 +152,7 @@ const res = await fetch("/api/profile/change-password/request-otp", {
         toast.success(
           "OTP sent to your registered email. Please check your inbox 📧"
         );
-      } catch (error) {
+      } catch {
         setLoading(false);
         toast.error("Something went wrong while sending OTP ❌");
       }
@@ -181,17 +165,17 @@ const res = await fetch("/api/profile/change-password/request-otp", {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-const res = await fetch("/api/profile/change-password/verify", {
-  method: "PUT",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
-  },
-  body: JSON.stringify({
-    newPassword: passwordForm.newPassword,   // userId removed
-    otp: passwordForm.otp,
-  }),
-});
+      const res = await fetch("/api/profile/change-password/verify", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          newPassword: passwordForm.newPassword,
+          otp: passwordForm.otp,
+        }),
+      });
       const data = await res.json();
       setLoading(false);
       if (!res.ok) {
@@ -201,39 +185,135 @@ const res = await fetch("/api/profile/change-password/verify", {
       toast.success("Password changed successfully 🔑");
       setPasswordForm({ oldPassword: "", newPassword: "", otp: "" });
       setOtpSent(false);
-    } catch (error) {
+    } catch {
       setLoading(false);
       toast.error("Something went wrong ❌");
     }
   };
 
-  // Logout
   const logout = () => {
     localStorage.removeItem("user");
-  localStorage.removeItem("token");      // ← ADD THIS LINE
-  localStorage.removeItem("rememberMe");
-  toast.success("Logged out 👋");
-  router.push("/login");
+    localStorage.removeItem("token");
+    localStorage.removeItem("rememberMe");
+    toast.success("Logged out 👋");
+    router.push("/login");
   };
 
-  // Handle tab change and close mobile sidebar
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
     setIsMobileSidebarOpen(false);
   };
 
-  // UI
   if (!user) {
     return (
       <div className="flex flex-col min-h-screen bg-gray-100">
         <DashboardNavbar />
         <main className="flex-grow flex items-center justify-center px-4">
-          <p className="text-gray-600 text-base sm:text-lg">Loading profile...</p>
+          <p className="text-gray-600 text-base sm:text-lg">
+            Loading profile...
+          </p>
         </main>
         <Footer />
       </div>
     );
   }
+
+  // ─────────────────────────────────────────────
+  //  Sidebar nav items (shared between desktop + mobile)
+  //  Order: basic → billing → bank → product-settings → delivery → managers → sessions → password → serial → logout
+  // ─────────────────────────────────────────────
+  const navItems: {
+    tab: ActiveTab;
+    label: string;
+    icon: React.ReactNode;
+    color: string;
+  }[] = [
+    {
+      tab: "basic",
+      label: "Basic Information",
+      icon: <User size={18} />,
+      color: "bg-blue-600",
+    },
+    {
+      tab: "billing",
+      label: "Bill Details",
+      icon: "📄",
+      color: "bg-purple-600",
+    },
+    {
+      tab: "bank",
+      label: "Bank Details",
+      icon: "🏦",
+      color: "bg-indigo-600",
+    },
+    {
+      tab: "product-settings",
+      label: "Product Settings",
+      icon: "⚙️",
+      color: "bg-teal-600",
+    },
+    {
+      tab: "delivery",
+      label: "Delivery Partners",
+      icon: "🚚",
+      color: "bg-yellow-600",
+    },
+    {
+      tab: "managers",
+      label: "Managers",
+      icon: "👤",
+      color: "bg-orange-600",
+    },
+    {
+      tab: "sessions",
+      label: "Active Sessions",
+      icon: <Shield size={18} />,
+      color: "bg-blue-700",
+    },
+    {
+      tab: "password",
+      label: "Change Password",
+      icon: <Lock size={18} />,
+      color: "bg-green-600",
+    },
+    // ✅ Serial Bill Number placed just above Logout
+    {
+      tab: "serial",
+      label: "Serial Bill Number",
+      icon: <Hash size={18} />,
+      color: "bg-gray-600",
+    },
+    // ✅ Logout always last
+    {
+      tab: "logout",
+      label: "Logout",
+      icon: <LogOut size={18} />,
+      color: "bg-red-600",
+    },
+  ];
+
+  const SidebarButton = ({
+    tab,
+    label,
+    icon,
+    color,
+    onClick,
+  }: {
+    tab: ActiveTab;
+    label: string;
+    icon: React.ReactNode;
+    color: string;
+    onClick: () => void;
+  }) => (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
+        activeTab === tab ? `${color} text-white` : "hover:bg-gray-100 text-gray-700"
+      }`}
+    >
+      {icon} {label}
+    </button>
+  );
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100">
@@ -251,95 +331,23 @@ const res = await fetch("/api/profile/change-password/verify", {
       </div>
 
       <main className="flex-grow container mx-auto px-4 py-4 sm:py-6 lg:py-8 flex flex-col lg:flex-row gap-4 sm:gap-6 lg:gap-8 overflow-hidden">
-        {/* Sidebar - Desktop with independent scroll */}
+        {/* Desktop Sidebar */}
         <aside className="hidden lg:block w-64 bg-white rounded-xl shadow-md h-[calc(100vh-12rem)] sticky top-4 overflow-y-auto">
           <div className="p-4 space-y-2">
-            <button
-              onClick={() => setActiveTab("basic")}
-              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                activeTab === "basic"
-                  ? "bg-blue-600 text-white"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              <User size={18} /> Basic Information
-            </button>
-            <button
-              onClick={() => setActiveTab("billing")}
-              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                activeTab === "billing"
-                  ? "bg-purple-600 text-white"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              📄 Bill Details
-            </button>
-            <button
-              onClick={() => setActiveTab("bank")}
-              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                activeTab === "bank"
-                  ? "bg-indigo-600 text-white"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              🏦 Bank Details
-            </button>
-            <button
-              onClick={() => setActiveTab("product-settings")}
-              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                activeTab === "product-settings"
-                  ? "bg-teal-600 text-white"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              ⚙️ Product Settings
-            </button>
-            <button
-              onClick={() => setActiveTab("delivery")}
-              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                activeTab === "delivery"
-                  ? "bg-yellow-600 text-white"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              🚚 Delivery Partners
-            </button>
-            <button
-              onClick={() => setActiveTab("managers")}
-              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                activeTab === "managers"
-                  ? "bg-orange-600 text-white"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              👤 Managers
-            </button>
-            <button
-              onClick={() => setActiveTab("password")}
-              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                activeTab === "password"
-                  ? "bg-green-600 text-white"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              <Lock size={18} /> Change Password
-            </button>
-            {/* ✅ NEW: Replace reset serial button */}
-            <SerialNumberComponent userId={user._id} />
-            <button
-              onClick={() => setActiveTab("logout")}
-              className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                activeTab === "logout"
-                  ? "bg-red-600 text-white"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              <LogOut size={18} /> Logout
-            </button>
+            {navItems.map((item) => (
+              <SidebarButton
+                key={item.tab}
+                tab={item.tab}
+                label={item.label}
+                icon={item.icon}
+                color={item.color}
+                onClick={() => setActiveTab(item.tab)}
+              />
+            ))}
           </div>
         </aside>
 
-        {/* Sidebar - Mobile (Dropdown) */}
+        {/* Mobile Sidebar (Overlay) */}
         {isMobileSidebarOpen && (
           <div
             className="lg:hidden fixed inset-0 z-40 bg-black/50"
@@ -355,97 +363,24 @@ const res = await fetch("/api/profile/change-password/verify", {
                   <X size={20} className="text-gray-600" />
                 </button>
               </div>
-
-              <button
-                onClick={() => handleTabChange("basic")}
-                className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                  activeTab === "basic"
-                    ? "bg-blue-600 text-white"
-                    : "hover:bg-gray-100 text-gray-700"
-                }`}
-              >
-                <User size={18} /> Basic Information
-              </button>
-              <button
-                onClick={() => handleTabChange("billing")}
-                className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                  activeTab === "billing"
-                    ? "bg-purple-600 text-white"
-                    : "hover:bg-gray-100 text-gray-700"
-                }`}
-              >
-                📄 Bill Details
-              </button>
-              <button
-                onClick={() => handleTabChange("bank")}
-                className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                  activeTab === "bank"
-                    ? "bg-indigo-600 text-white"
-                    : "hover:bg-gray-100 text-gray-700"
-                }`}
-              >
-                🏦 Bank Details
-              </button>
-              <button
-                onClick={() => handleTabChange("product-settings")}
-                className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                  activeTab === "product-settings"
-                    ? "bg-teal-600 text-white"
-                    : "hover:bg-gray-100 text-gray-700"
-                }`}
-              >
-                ⚙️ Product Settings
-              </button>
-              <button
-                onClick={() => handleTabChange("delivery")}
-                className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                  activeTab === "delivery"
-                    ? "bg-yellow-600 text-white"
-                    : "hover:bg-gray-100 text-gray-700"
-                }`}
-              >
-                🚚 Delivery Partners
-              </button>
-              <button
-                onClick={() => handleTabChange("managers")}
-                className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                  activeTab === "managers"
-                    ? "bg-orange-600 text-white"
-                    : "hover:bg-gray-100 text-gray-700"
-                }`}
-              >
-                👤 Managers
-              </button>
-              <button
-                onClick={() => handleTabChange("password")}
-                className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                  activeTab === "password"
-                    ? "bg-green-600 text-white"
-                    : "hover:bg-gray-100 text-gray-700"
-                }`}
-              >
-                <Lock size={18} /> Change Password
-              </button>
-              {/* ✅ NEW: Replace reset serial button */}
-              <SerialNumberComponent userId={user._id} />
-              <button
-                onClick={() => handleTabChange("logout")}
-                className={`w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium transition-colors ${
-                  activeTab === "logout"
-                    ? "bg-red-600 text-white"
-                    : "hover:bg-gray-100 text-gray-700"
-                }`}
-              >
-                <LogOut size={18} /> Logout
-              </button>
+              {navItems.map((item) => (
+                <SidebarButton
+                  key={item.tab}
+                  tab={item.tab}
+                  label={item.label}
+                  icon={item.icon}
+                  color={item.color}
+                  onClick={() => handleTabChange(item.tab)}
+                />
+              ))}
             </aside>
           </div>
         )}
 
-        {/* Content - Right side with independent scroll */}
+        {/* Content Panel */}
         <section className="flex-1 bg-white rounded-xl shadow-md h-[calc(100vh-12rem)] overflow-y-auto">
           <div className="p-4 sm:p-6">
-            {/* BASIC */}
+
             {activeTab === "basic" && user && (
               <BasicInformationComponent
                 user={user}
@@ -456,20 +391,20 @@ const res = await fetch("/api/profile/change-password/verify", {
               />
             )}
 
-            {/* BILLING */}
             {activeTab === "billing" && user && (
               <BillingDetailsComponent userId={user._id} />
             )}
 
-            {/* ✅ FIX: Show helpful message if seller details not set up yet,
-                otherwise pass guaranteed-valid sellerId string to component */}
             {activeTab === "bank" && (
               sellerId === null ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
-                  <p className="text-gray-500 text-sm">Loading bank details...</p>
+                  <p className="text-gray-500 text-sm">
+                    Loading bank details...
+                  </p>
                   <p className="text-gray-400 text-xs max-w-sm">
-                    Bank details are linked to your seller profile. If this keeps loading,
-                    please go to <strong>Bill Details</strong> tab and save your seller
+                    Bank details are linked to your seller profile. If this
+                    keeps loading, please go to{" "}
+                    <strong>Bill Details</strong> tab and save your seller
                     information first.
                   </p>
                 </div>
@@ -478,12 +413,10 @@ const res = await fetch("/api/profile/change-password/verify", {
               )
             )}
 
-            {/* PRODUCT SETTINGS */}
             {activeTab === "product-settings" && (
               <ProductSettingsComponent userId={user._id} />
             )}
 
-            {/* DELIVERY PARTNERS */}
             {activeTab === "delivery" && (
               <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -502,12 +435,14 @@ const res = await fetch("/api/profile/change-password/verify", {
               </div>
             )}
 
-            {/* MANAGERS */}
             {activeTab === "managers" && (
               <ManagerComponent adminId={user._id} />
             )}
 
-            {/* PASSWORD */}
+            {activeTab === "sessions" && (
+              <ActiveSessionsComponent />
+            )}
+
             {activeTab === "password" && (
               <div className="space-y-4 sm:space-y-6">
                 <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-gray-800">
@@ -562,39 +497,50 @@ const res = await fetch("/api/profile/change-password/verify", {
                     </label>
                   )}
                 </div>
-                <div className="space-y-2">
-                  <button
-                    onClick={changePassword}
-                    disabled={loading}
-                    className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg shadow disabled:opacity-50 transition-colors font-medium"
-                  >
-                    {loading
-                      ? otpSent
-                        ? "Verifying OTP..."
-                        : "Sending OTP..."
-                      : otpSent
-                      ? "✅ Verify OTP & Change Password"
-                      : "🔑 Send OTP to Change Password"}
-                  </button>
-                  <p className="text-xs text-gray-500">
-                    First click will send an OTP to your registered email. After
-                    entering OTP, click again to change your password.
-                  </p>
-                </div>
+                <button
+                  onClick={handlePasswordChange}
+                  disabled={loading}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {loading ? (
+                    <>
+                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      {otpSent ? "Changing Password..." : "Sending OTP..."}
+                    </>
+                  ) : otpSent ? (
+                    "Change Password"
+                  ) : (
+                    "Send OTP"
+                  )}
+                </button>
               </div>
             )}
 
-            {/* LOGOUT */}
-            {activeTab === "logout" && (
-              <div className="flex flex-col items-center justify-center gap-4 py-8 sm:py-12">
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-800 text-center">
-                  Ready to leave?
+            {/* ✅ Serial Bill Number tab — above Logout */}
+            {activeTab === "serial" && (
+              <div className="space-y-4 sm:space-y-6">
+                <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-gray-800">
+                  <Hash className="w-5 h-5" /> Serial Bill Number
                 </h2>
+                <SerialNumberComponent userId={user._id} />
+              </div>
+            )}
+
+            {activeTab === "logout" && (
+              <div className="space-y-4 sm:space-y-6">
+                <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-gray-800">
+                  <LogOut className="w-5 h-5" /> Logout
+                </h2>
+                <p className="text-gray-600">
+                  You are currently logged in as{" "}
+                  <strong>{user.name}</strong> ({user.email}).
+                </p>
                 <button
                   onClick={logout}
-                  className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-lg shadow transition-colors font-medium"
+                  className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
                 >
-                  🚪 Logout
+                  <LogOut size={18} />
+                  Confirm Logout
                 </button>
               </div>
             )}

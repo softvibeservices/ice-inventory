@@ -18,6 +18,8 @@ export interface IUser extends Document {
   adminId?: mongoose.Types.ObjectId;
   status: "pending" | "approved" | "rejected" | "blocked";
   isPending?: boolean;
+  // ✅ NEW: Increment this to force-logout all sessions for this user
+  tokenVersion: number;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -48,6 +50,8 @@ const UserSchema = new Schema<IUser>(
       default: "approved",
     },
     isPending: { type: Boolean, default: false },
+    // ✅ NEW: Token version for force-logout. Increment = invalidate all existing JWTs.
+    tokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

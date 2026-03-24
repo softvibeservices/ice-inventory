@@ -1,6 +1,16 @@
 // src/types/profile.types.ts
 
-export type ActiveTab = "basic" | "password" | "billing" | "bank" | "logout" | "delivery" | "managers" | "product-settings";
+export type ActiveTab =
+  | "basic"
+  | "billing"
+  | "bank"
+  | "product-settings"
+  | "delivery"
+  | "managers"
+  | "sessions"
+  | "password"
+  | "serial"
+  | "logout";
 
 export type UserProfile = {
   _id: string;
@@ -26,7 +36,7 @@ export interface SellerDetails {
   signatureUrl: string;
   signaturePublicId?: string;
   slogan: string;
-  compositionLine?: string; // ✅ NEW: User-configurable composition line
+  compositionLine?: string;
 }
 
 export type BankDetails = {
@@ -56,4 +66,36 @@ export type UserSettings = {
   userId: string;
   categories: string[];
   units: string[];
+};
+
+// ✅ Device-level security types
+
+// Only two statuses: active or banned (no more "blocked" with date pickers)
+export type DeviceStatus = "active" | "banned";
+
+export type Device = {
+  _id: string;
+  deviceId: string;
+  label: string;         // e.g. "Chrome on Windows"
+  browser: string;
+  platform: string;
+  ip: string;
+  status: DeviceStatus;
+  blockedUntil: string | null;   // kept for backward compat, not used in UI
+  lastSeen: string;
+  createdAt: string;
+  isCurrent?: boolean;   // true if this is the currently active session
+};
+
+export type ManagerDevice = Omit<Device, "isCurrent">;
+
+export type ManagerWithDevices = {
+  _id: string;
+  name: string;
+  email: string;
+  contact: string;
+  status: "pending" | "approved" | "rejected" | "blocked";
+  tokenVersion?: number;
+  devices?: ManagerDevice[];
+  devicesLoaded?: boolean;
 };

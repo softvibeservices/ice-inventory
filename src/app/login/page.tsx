@@ -1,7 +1,4 @@
-// icecream-inventory/src/app/login/page.tsx
-
-
-
+// src/app/login/page.tsx
 
 "use client";
 
@@ -24,7 +21,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  /* ===== AUTO LOGIN (UNCHANGED LOGIC) ===== */
+  /* ===== AUTO LOGIN ===== */
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     const remember = localStorage.getItem("rememberMe");
@@ -37,53 +34,53 @@ export default function LoginPage() {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  /* ===== SUBMIT (LOGIC SAME, UI STATE ADDED) ===== */
-// REPLACE the entire handleSubmit function with this:
+  /* ===== SUBMIT ===== */
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loading) return;
 
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (loading) return;
+    try {
+      setLoading(true);
 
-  try {
-    setLoading(true);
+      const res = await fetch("/api/login", {
+        method: "POST",
+        body: JSON.stringify({ ...form, rememberMe }), // ✅ pass rememberMe to API
+        headers: { "Content-Type": "application/json" },
+      });
 
-    const res = await fetch("/api/login", {
-      method: "POST",
-      body: JSON.stringify(form),
-      headers: { "Content-Type": "application/json" },
-    });
+      const data = await res.json();
 
-    const data = await res.json();
+      if (res.ok) {
+        // Store user object
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            _id: data.user._id,
+            managerId: data.user.managerId || null,
+            email: data.user.email,
+            name: data.user.name,
+            role: data.user.role,
+          })
+        );
 
-    if (res.ok) {
-      // Store user object (unchanged shape)
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
-          _id: data.user._id,
-          managerId: data.user.managerId || null,
-          email: data.user.email,
-          name: data.user.name,
-          role: data.user.role,
-        })
-      );
+        // Store JWT for all subsequent API calls
+        localStorage.setItem("token", data.token);
 
-      // ← NEW: store JWT for all subsequent API calls
-      localStorage.setItem("token", data.token);
+        // ✅ Remember Me: if checked, stays logged in for 90 days (JWT lasts 90d)
+        //    If unchecked, JWT expires in 7 days.
+        localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
 
-      localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
-
-      toast.success("Login successful! Redirecting...");
-      setTimeout(() => router.push("/dashboard"), 1800);
-    } else {
-      toast.error(data.error || "Invalid credentials!");
+        toast.success("Login successful! Redirecting...");
+        setTimeout(() => router.push("/dashboard"), 1800);
+      } else {
+        toast.error(data.error || "Invalid credentials!");
+        setLoading(false);
+      }
+    } catch {
+      toast.error("Something went wrong. Please try again.");
       setLoading(false);
     }
-  } catch {
-    toast.error("Something went wrong. Please try again.");
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#020617] via-[#020b2c] to-[#031136] text-white">
@@ -91,14 +88,14 @@ const handleSubmit = async (e: React.FormEvent) => {
 
       <main className="flex flex-1 items-center justify-center px-4 py-10">
         <div className="w-full max-w-5xl rounded-2xl overflow-hidden shadow-2xl bg-white/5 backdrop-blur-xl border border-white/10 flex flex-col md:flex-row">
-          
+
           {/* LEFT PANEL */}
           <div className="hidden md:flex md:w-1/2 flex-col justify-center px-10 bg-gradient-to-br from-cyan-600/20 to-blue-700/20 border-r border-white/10">
             <h2 className="text-3xl font-extrabold mb-4 text-cyan-400">
               Welcome Back
             </h2>
             <p className="text-slate-300 leading-relaxed">
-              Manage inventory, billing, delivery partners and analytics —  
+              Manage inventory, billing, delivery partners and analytics —
               all from one powerful dashboard.
             </p>
 
@@ -147,7 +144,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                 />
               </div>
 
-              {/* REMEMBER ME */}
+              {/* REMEMBER ME — now clearly explains 90 days */}
               <div className="flex items-center gap-2 text-sm text-slate-300">
                 <input
                   type="checkbox"
@@ -156,7 +153,10 @@ const handleSubmit = async (e: React.FormEvent) => {
                   id="rememberMe"
                   className="accent-cyan-500"
                 />
-                <label htmlFor="rememberMe">Remember Me</label>
+                <label htmlFor="rememberMe">
+                  Remember Me{" "}
+                  <span className="text-slate-400 text-xs">(stay logged in for 90 days)</span>
+                </label>
               </div>
 
               {/* BUTTON */}
@@ -183,17 +183,12 @@ const handleSubmit = async (e: React.FormEvent) => {
 
             {/* LINKS */}
             <div className="mt-6 text-center text-sm text-slate-300">
-              <button
-                onClick={() => router.push("/forgot-password")}
-                className="text-cyan-400 hover:underline mr-3"
-                type="button"
-              >
-                Forgot password?
-              </button>
-              <br />
-              Don’t have an account?{" "}
-              <Link href="/register" className="text-cyan-400 font-semibold hover:underline">
-                Register
+              <Link href="/forgot-password" className="text-cyan-400 hover:underline">
+                Forgot Password?
+              </Link>
+              <span className="mx-2 text-slate-500">·</span>
+              <Link href="/register" className="text-cyan-400 hover:underline">
+                Create Account
               </Link>
             </div>
           </div>
@@ -201,7 +196,7 @@ const handleSubmit = async (e: React.FormEvent) => {
       </main>
 
       <Footer />
-      <ToastContainer position="top-right" theme="dark" />
+      <ToastContainer position="top-center" autoClose={3000} theme="dark" />
     </div>
   );
 }
