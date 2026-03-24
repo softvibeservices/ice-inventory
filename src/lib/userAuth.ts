@@ -15,7 +15,7 @@ export interface AuthPayload {
   role: "admin" | "manager" | "superAdmin";
   managerId?: string;   // Only present for managers — their actual User._id
   adminId?: string;     // Only present for managers — same as userId, kept for clarity
-  deviceId?: string;    // ✅ NEW: fingerprint of the device
+  deviceId?: string;    // fingerprint of the device (keyed on actual user._id)
 }
 
 interface JwtDecoded {
@@ -23,8 +23,8 @@ interface JwtDecoded {
   role: "admin" | "manager" | "superAdmin";
   managerId?: string;
   adminId?: string;
-  deviceId?: string;    // ✅ NEW
-  tokenVersion?: number; // ✅ NEW
+  deviceId?: string;
+  tokenVersion?: number;
   iat: number;
   exp: number;
 }
@@ -124,9 +124,9 @@ export async function verifyUserRequest(
       );
     }
 
-    // ✅ NEW — 5. Token version check (force-logout on block/delete/ban)
-    //    If the stored tokenVersion is higher than what's in the JWT,
-    //    the token has been explicitly invalidated.
+    // 5. Global token version check (force-logout ALL sessions at once).
+    //    This is only triggered when the admin explicitly wants to log out
+    //    everyone (e.g. password change). Per-device logout is handled below.
     const dbTokenVersion = actualUser.tokenVersion ?? 0;
     const jwtTokenVersion = decoded.tokenVersion ?? 0;
 
@@ -137,14 +137,15 @@ export async function verifyUserRequest(
       );
     }
 
-    // ✅ NEW — 6. Device-level security check
+    // 6. ✅ Per-device security check (uses revokedAt, NOT tokenVersion bump)
     if (decoded.deviceId) {
       const device = await Device.findOne({
         userId: actualUserId,
         deviceId: decoded.deviceId,
-      }).select("status blockedUntil");
+      }).select("status blockedUntil revokedAt lastSeen");
 
       if (device) {
+        // 6a. Device banned — reject regardless of JWT age
         if (device.status === "banned") {
           return NextResponse.json(
             { error: "This device has been banned. Please contact support.", code: "DEVICE_BANNED" },
@@ -152,24 +153,21 @@ export async function verifyUserRequest(
           );
         }
 
-        if (device.status === "blocked") {
-          if (device.blockedUntil && device.blockedUntil > new Date()) {
+        // 6b. ✅ Per-device revocation check:
+        //     If the device was banned/removed after this token was issued,
+        //     reject it. This allows only THIS device's session to be terminated
+        //     without affecting other devices.
+        if (device.revokedAt) {
+          const tokenIssuedAt = new Date(decoded.iat * 1000);
+          if (tokenIssuedAt < device.revokedAt) {
             return NextResponse.json(
-              {
-                error: `This device is blocked until ${device.blockedUntil.toLocaleDateString()}.`,
-                code: "DEVICE_BLOCKED",
-              },
-              { status: 403 }
+              { error: "This session has been terminated. Please login again.", code: "DEVICE_REVOKED" },
+              { status: 401 }
             );
           }
-          // Block period expired — auto-restore to active
-          await Device.findOneAndUpdate(
-            { userId: actualUserId, deviceId: decoded.deviceId },
-            { status: "active", blockedUntil: null }
-          );
         }
 
-        // Update lastSeen on every verified request (debounced — only if older than 5 min)
+        // 6c. Update lastSeen on every verified request (debounced — only if older than 5 min)
         const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
         if (!device.lastSeen || device.lastSeen < fiveMinAgo) {
           Device.findOneAndUpdate(
@@ -178,6 +176,9 @@ export async function verifyUserRequest(
           ).exec(); // fire-and-forget, do not await
         }
       }
+      // Note: if device doc doesn't exist (e.g. was hard-deleted and user still
+      // has a valid JWT), we allow the request through — the next login will
+      // recreate the device entry. This prevents an edge-case lockout.
     }
 
     // 7. For managers: verify the admin they belong to still exists and is not blocked
@@ -203,7 +204,7 @@ export async function verifyUserRequest(
     // 8. Build and return the verified auth payload
     const payload: AuthPayload = {
       userId: decoded.userId,
-      role: decoded.role,           // ✅ use role from JWT (not from admin doc)
+      role: decoded.role,
       deviceId: decoded.deviceId,
       ...(isManagerToken && {
         managerId: decoded.managerId,

@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   ShieldOff,
+  ShieldCheck,
   Shield,
   Clock,
   MapPin,
@@ -59,10 +60,10 @@ function getDeviceStatusStyle(status: DeviceStatus) {
   switch (status) {
     case "active":
       return "bg-green-100 text-green-700 border-green-200";
-    case "blocked":
-      return "bg-yellow-100 text-yellow-700 border-yellow-200";
     case "banned":
       return "bg-red-100 text-red-700 border-red-200";
+    default:
+      return "bg-gray-100 text-gray-700 border-gray-200";
   }
 }
 
@@ -70,10 +71,10 @@ function getDeviceStatusIcon(status: DeviceStatus) {
   switch (status) {
     case "active":
       return <CheckCircle2 size={11} />;
-    case "blocked":
-      return <Clock size={11} />;
     case "banned":
       return <XCircle size={11} />;
+    default:
+      return <Clock size={11} />;
   }
 }
 
@@ -87,65 +88,47 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-function formatDate(dateStr: string | null | undefined) {
-  if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 // ─────────────────────────────────────────────
-//  Block Until Modal (for manager devices)
+//  Confirm modal for device actions
 // ─────────────────────────────────────────────
-function BlockUntilModal({
+function DeviceConfirmModal({
+  deviceLabel,
+  action,
   onConfirm,
   onClose,
-  label,
 }: {
-  onConfirm: (date: string) => void;
+  deviceLabel: string;
+  action: "ban" | "remove";
+  onConfirm: () => void;
   onClose: () => void;
-  label: string;
 }) {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const [date, setDate] = useState(tomorrow.toISOString().split("T")[0]);
-
+  const isBan = action === "ban";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-            <Clock className="w-5 h-5 text-yellow-600" />
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isBan ? "bg-red-100" : "bg-gray-100"}`}>
+            {isBan ? <ShieldOff className="w-5 h-5 text-red-600" /> : <Trash2 className="w-5 h-5 text-gray-600" />}
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Block Until Date</h3>
-            <p className="text-xs text-gray-500">{label}</p>
+            <h3 className="font-semibold text-gray-900">{isBan ? "Ban Device" : "Remove Session"}</h3>
+            <p className="text-xs text-gray-500 truncate max-w-[200px]">{deviceLabel}</p>
           </div>
         </div>
-        <label className="text-sm text-gray-700 font-medium block mb-1">
-          Block Until
-        </label>
-        <input
-          type="date"
-          className="w-full border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-          value={date}
-          min={tomorrow.toISOString().split("T")[0]}
-          onChange={(e) => setDate(e.target.value)}
-        />
-        <div className="flex gap-3 mt-5">
-          <button
-            onClick={onClose}
-            className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
-          >
+        <p className="text-sm text-gray-600 mb-5">
+          {isBan
+            ? "This device will be banned. The manager's session on this device will be terminated immediately. You can unban it later."
+            : "This device will be logged out and removed from the list. The manager will need to log in again on that device."}
+        </p>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors">
             Cancel
           </button>
           <button
-            onClick={() => onConfirm(date)}
-            className="flex-1 px-4 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors"
+            onClick={onConfirm}
+            className={`flex-1 px-4 py-2.5 text-white rounded-lg font-medium transition-colors ${isBan ? "bg-red-600 hover:bg-red-700" : "bg-gray-700 hover:bg-gray-800"}`}
           >
-            Block
+            {isBan ? "Ban Device" : "Remove"}
           </button>
         </div>
       </div>
@@ -169,13 +152,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
     contact: string;
     password: string;
   } | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    contact: "",
-    password: "",
-    confirm: "",
-  });
+  const [form, setForm] = useState({ name: "", email: "", contact: "", password: "", confirm: "" });
   const [otpForNewManager, setOtpForNewManager] = useState("");
   const [isOtpSending, setIsOtpSending] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -192,9 +169,10 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
   // Device management
   const [expandedManagerId, setExpandedManagerId] = useState<string | null>(null);
   const [deviceActionLoading, setDeviceActionLoading] = useState<string | null>(null);
-  const [blockDeviceModal, setBlockDeviceModal] = useState<{
+  const [deviceConfirmModal, setDeviceConfirmModal] = useState<{
     managerId: string;
     device: ManagerDevice;
+    action: "ban" | "remove";
   } | null>(null);
 
   // ─── Fetch managers ───
@@ -230,13 +208,10 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
     }
     setExpandedManagerId(managerId);
     const mgr = list.find((m) => m._id === managerId);
-    if (mgr?.devicesLoaded) return; // already loaded
+    if (mgr?.devicesLoaded) return;
 
-    // Fetch devices
     setList((prev) =>
-      prev.map((m) =>
-        m._id === managerId ? { ...m, devicesLoading: true } : m
-      )
+      prev.map((m) => m._id === managerId ? { ...m, devicesLoading: true } : m)
     );
     try {
       const token = localStorage.getItem("token");
@@ -247,9 +222,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
       if (!res.ok) {
         toast.error(data.error || "Failed to load devices");
         setList((prev) =>
-          prev.map((m) =>
-            m._id === managerId ? { ...m, devicesLoading: false } : m
-          )
+          prev.map((m) => m._id === managerId ? { ...m, devicesLoading: false } : m)
         );
         return;
       }
@@ -263,19 +236,15 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
     } catch {
       toast.error("Failed to load devices");
       setList((prev) =>
-        prev.map((m) =>
-          m._id === managerId ? { ...m, devicesLoading: false } : m
-        )
+        prev.map((m) => m._id === managerId ? { ...m, devicesLoading: false } : m)
       );
     }
   };
 
-  // Refresh devices for a manager
+  // ─── Refresh devices for a manager ───
   const refreshDevices = async (managerId: string) => {
     setList((prev) =>
-      prev.map((m) =>
-        m._id === managerId ? { ...m, devicesLoading: true } : m
-      )
+      prev.map((m) => m._id === managerId ? { ...m, devicesLoading: true } : m)
     );
     try {
       const token = localStorage.getItem("token");
@@ -294,19 +263,16 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
       }
     } catch {
       setList((prev) =>
-        prev.map((m) =>
-          m._id === managerId ? { ...m, devicesLoading: false } : m
-        )
+        prev.map((m) => m._id === managerId ? { ...m, devicesLoading: false } : m)
       );
     }
   };
 
-  // ─── Device action (ban/block/unblock/delete) ───
+  // ─── Device action: ban / unban / remove ───
   const handleDeviceAction = async (
     managerId: string,
     deviceId: string,
-    action: "ban" | "block" | "unblock" | "delete",
-    blockedUntil?: string
+    action: "ban" | "unban" | "remove"
   ) => {
     const key = managerId + deviceId + action;
     setDeviceActionLoading(key);
@@ -318,7 +284,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ managerId, deviceId, action, blockedUntil }),
+        body: JSON.stringify({ managerId, deviceId, action }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -326,7 +292,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
         return;
       }
       toast.success(data.message || "Done ✓");
-      setBlockDeviceModal(null);
+      setDeviceConfirmModal(null);
       await refreshDevices(managerId);
     } catch {
       toast.error("Something went wrong");
@@ -347,10 +313,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
       );
       const res = await fetch("/api/manager", {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ id: managerId, action }),
       });
       const data = await res.json();
@@ -397,10 +360,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
       const token = localStorage.getItem("token");
       const res = await fetch("/api/manager/send-verification-otp", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ email: form.email }),
       });
       const data = await res.json();
@@ -409,12 +369,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
         return;
       }
       toast.success("OTP sent to manager's email 📧");
-      setPendingManagerData({
-        name: form.name,
-        email: form.email,
-        contact: form.contact,
-        password: form.password,
-      });
+      setPendingManagerData({ name: form.name, email: form.email, contact: form.contact, password: form.password });
       setShowAddForm(false);
       setShowOtpVerification(true);
     } catch {
@@ -438,10 +393,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
       const token = localStorage.getItem("token");
       const res = await fetch("/api/manager", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ ...pendingManagerData, otp: otpForNewManager }),
       });
       const data = await res.json();
@@ -476,10 +428,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
       const token = localStorage.getItem("token");
       const res = await fetch("/api/manager", {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ id: deleteId }),
       });
       const data = await res.json();
@@ -532,10 +481,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
               Add New Manager
             </h3>
             <button
-              onClick={() => {
-                setShowAddForm(false);
-                setForm({ name: "", email: "", contact: "", password: "", confirm: "" });
-              }}
+              onClick={() => { setShowAddForm(false); setForm({ name: "", email: "", contact: "", password: "", confirm: "" }); }}
               className="text-gray-500 hover:text-gray-700 transition-colors"
             >
               <X size={20} />
@@ -579,23 +525,14 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
             />
           </div>
           {form.password && form.confirm && (
-            <div
-              className={`mt-3 p-2 rounded-lg text-sm ${
-                form.password === form.confirm
-                  ? "bg-green-50 text-green-700 border border-green-200"
-                  : "bg-red-50 text-red-700 border border-red-200"
-              }`}
-            >
-              {form.password === form.confirm
-                ? "✓ Passwords match"
-                : "✗ Passwords do not match"}
+            <div className={`mt-3 p-2 rounded-lg text-sm ${form.password === form.confirm ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+              {form.password === form.confirm ? "✓ Passwords match" : "✗ Passwords do not match"}
             </div>
           )}
           <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-800 flex items-center gap-2">
               <Mail size={14} />
-              An OTP will be sent to the manager's email for verification before
-              account creation.
+              An OTP will be sent to the manager's email for verification before account creation.
             </p>
           </div>
           <button
@@ -604,15 +541,9 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
             className="mt-4 w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {isOtpSending ? (
-              <>
-                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Sending OTP...
-              </>
+              <><span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Sending OTP...</>
             ) : (
-              <>
-                <Mail size={18} />
-                Send Verification OTP
-              </>
+              <><Mail size={18} />Send Verification OTP</>
             )}
           </button>
         </div>
@@ -626,10 +557,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
               <Mail size={20} className="text-blue-600" />
               Email Verification
             </h3>
-            <button
-              onClick={cancelOtpVerification}
-              className="text-gray-500 hover:text-gray-700 transition-colors"
-            >
+            <button onClick={cancelOtpVerification} className="text-gray-500 hover:text-gray-700 transition-colors">
               <X size={20} />
             </button>
           </div>
@@ -638,23 +566,15 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
               <p className="text-sm text-gray-700 mb-2">
                 <strong>Manager Email:</strong> {pendingManagerData?.email}
               </p>
-              <p className="text-xs text-gray-600">
-                A 6-digit OTP has been sent to this email. Please enter it below.
-              </p>
+              <p className="text-xs text-gray-600">A 6-digit OTP has been sent to this email. Please enter it below.</p>
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-700 block mb-1">
-                Enter OTP *
-              </label>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Enter OTP *</label>
               <input
                 className="w-full border border-gray-300 p-3 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-center text-lg tracking-widest"
                 placeholder="000000"
                 value={otpForNewManager}
-                onChange={(e) =>
-                  setOtpForNewManager(
-                    e.target.value.replace(/\D/g, "").slice(0, 6)
-                  )
-                }
+                onChange={(e) => setOtpForNewManager(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 maxLength={6}
                 type="tel"
               />
@@ -665,34 +585,18 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
                 disabled={isVerifyingOtp || otpForNewManager.length !== 6}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {isVerifyingOtp ? (
-                  <>
-                    <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  <>
-                    <UserPlus size={18} />
-                    Verify & Add Manager
-                  </>
-                )}
+                {isVerifyingOtp
+                  ? <><span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Verifying...</>
+                  : <><UserPlus size={18} />Verify & Add Manager</>}
               </button>
               <button
                 onClick={sendOtpToManagerEmail}
                 disabled={isOtpSending}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {isOtpSending ? (
-                  <>
-                    <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Resending...
-                  </>
-                ) : (
-                  <>
-                    <Mail size={18} />
-                    Resend OTP
-                  </>
-                )}
+                {isOtpSending
+                  ? <><span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Resending...</>
+                  : <><Mail size={18} />Resend OTP</>}
               </button>
             </div>
           </div>
@@ -714,9 +618,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
           <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
             <Users size={48} className="mx-auto text-gray-300 mb-3" />
             <p className="text-gray-500">No managers added yet</p>
-            <p className="text-sm text-gray-400 mt-1">
-              Add your first manager using the button above
-            </p>
+            <p className="text-sm text-gray-400 mt-1">Add your first manager using the button above</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -726,82 +628,57 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
               return (
                 <div
                   key={m._id}
-                  className={`border rounded-xl transition-all ${
-                    m.status === "blocked"
-                      ? "border-red-200 bg-red-50/30"
-                      : "border-gray-200 bg-white"
-                  }`}
+                  className={`border rounded-xl transition-all ${m.status === "blocked" ? "border-red-200 bg-red-50/30" : "border-gray-200 bg-white"}`}
                 >
                   {/* Manager Info Row */}
                   <div className="p-4 flex items-center gap-3 flex-wrap">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-gray-800">
-                          {m.name}
-                        </span>
+                        <span className="font-semibold text-gray-800">{m.name}</span>
                         {m.status === "blocked" && (
                           <span className="text-xs bg-red-100 text-red-700 border border-red-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Ban size={11} />
-                            Blocked
+                            <Ban size={11} />Blocked
                           </span>
                         )}
                         {m.status === "approved" && (
                           <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <CheckCircle2 size={11} />
-                            Active
+                            <CheckCircle2 size={11} />Active
                           </span>
                         )}
                       </div>
-                      <div className="text-sm text-gray-500 mt-0.5">
-                        {m.email} · {m.contact}
-                      </div>
+                      <div className="text-sm text-gray-500 mt-0.5">{m.email} · {m.contact}</div>
                     </div>
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 flex-wrap">
-                      {/* Block / Unblock toggle */}
                       {m.status === "blocked" ? (
                         <button
                           onClick={() => handleManagerStatusAction(m._id, "unblock")}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-colors"
                         >
-                          <Shield size={13} />
-                          Unblock
+                          <Shield size={13} />Unblock
                         </button>
                       ) : (
                         <button
-                          onClick={() => {
-                            setBlockingManager(m);
-                            setShowBlockConfirm(true);
-                          }}
+                          onClick={() => { setBlockingManager(m); setShowBlockConfirm(true); }}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg text-xs font-medium transition-colors"
                         >
-                          <ShieldOff size={13} />
-                          Block
+                          <ShieldOff size={13} />Block
                         </button>
                       )}
-
-                      {/* Delete */}
                       <button
                         onClick={() => confirmDelete(m._id, m.name)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition-colors"
                       >
-                        <Trash2 size={13} />
-                        Delete
+                        <Trash2 size={13} />Delete
                       </button>
-
-                      {/* Toggle Devices */}
                       <button
                         onClick={() => toggleManagerDevices(m._id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium transition-colors"
                       >
                         <Monitor size={13} />
                         Devices
-                        {isExpanded ? (
-                          <ChevronUp size={13} />
-                        ) : (
-                          <ChevronDown size={13} />
-                        )}
+                        {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                       </button>
                     </div>
                   </div>
@@ -818,8 +695,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
                           onClick={() => refreshDevices(m._id)}
                           className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
                         >
-                          <RefreshCw size={12} />
-                          Refresh
+                          <RefreshCw size={12} />Refresh
                         </button>
                       </div>
 
@@ -830,149 +706,81 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
                         </div>
                       ) : !m.devices || m.devices.length === 0 ? (
                         <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                          <Monitor
-                            size={28}
-                            className="mx-auto text-gray-300 mb-2"
-                          />
-                          <p className="text-sm text-gray-400">
-                            No devices logged in yet
-                          </p>
+                          <Monitor size={28} className="mx-auto text-gray-300 mb-2" />
+                          <p className="text-sm text-gray-400">No devices logged in yet</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
                           <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mb-2">
                             <p className="text-xs text-blue-800 flex items-start gap-1.5">
-                              <AlertTriangle
-                                size={12}
-                                className="flex-shrink-0 mt-0.5"
-                              />
-                              Banning or blocking a device will immediately
-                              terminate the manager's session on that device.
+                              <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
+                              <span>
+                                <strong>Ban</strong> — blocks the device and terminates its session (reversible). ·{" "}
+                                <strong>Remove Session</strong> — logs out and deletes the device record permanently.
+                              </span>
                             </p>
                           </div>
+
                           {m.devices.map((device) => {
-                            const actionKey =
-                              m._id + device.deviceId;
-                            const isActioning =
-                              deviceActionLoading?.startsWith(actionKey);
+                            const actionKey = m._id + device.deviceId;
+                            const isActioning = deviceActionLoading?.startsWith(actionKey);
 
                             return (
-                              <div
-                                key={device.deviceId}
-                                className="border border-gray-200 rounded-lg p-3 bg-white"
-                              >
+                              <div key={device.deviceId} className="border border-gray-200 rounded-lg p-3 bg-white">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <div
-                                    className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                      device.status === "active"
-                                        ? "bg-green-100 text-green-700"
-                                        : device.status === "blocked"
-                                        ? "bg-yellow-100 text-yellow-700"
-                                        : "bg-red-100 text-red-700"
-                                    }`}
-                                  >
+                                  {/* Device Icon */}
+                                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${device.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
                                     {getPlatformIcon(device.platform)}
                                   </div>
 
+                                  {/* Device Info */}
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="text-sm font-medium text-gray-800">
-                                        {device.label}
-                                      </span>
-                                      <span
-                                        className={`text-xs px-2 py-0.5 rounded-full border flex items-center gap-1 ${getDeviceStatusStyle(
-                                          device.status
-                                        )}`}
-                                      >
+                                      <span className="text-sm font-medium text-gray-800">{device.label}</span>
+                                      <span className={`text-xs px-2 py-0.5 rounded-full border flex items-center gap-1 ${getDeviceStatusStyle(device.status)}`}>
                                         {getDeviceStatusIcon(device.status)}
-                                        {device.status}
+                                        {device.status === "active" ? "Active" : "Banned"}
                                       </span>
                                     </div>
                                     <div className="flex gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
-                                      <span className="flex items-center gap-1">
-                                        <Clock size={10} />
-                                        {timeAgo(device.lastSeen)}
-                                      </span>
-                                      <span className="flex items-center gap-1">
-                                        <MapPin size={10} />
-                                        {device.ip}
-                                      </span>
-                                      {device.status === "blocked" &&
-                                        device.blockedUntil && (
-                                          <span className="text-yellow-600">
-                                            Until:{" "}
-                                            {formatDate(device.blockedUntil)}
-                                          </span>
-                                        )}
+                                      <span className="flex items-center gap-1"><Clock size={10} />{timeAgo(device.lastSeen)}</span>
+                                      <span className="flex items-center gap-1"><MapPin size={10} />{device.ip}</span>
                                     </div>
                                   </div>
 
-                                  {/* Device Action Buttons */}
+                                  {/* Device Action Buttons — only 2 */}
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    {device.status === "active" && (
-                                      <>
-                                        <button
-                                          disabled={!!isActioning}
-                                          onClick={() =>
-                                            handleDeviceAction(
-                                              m._id,
-                                              device.deviceId,
-                                              "ban"
-                                            )
-                                          }
-                                          className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
-                                          title="Ban device permanently"
-                                        >
-                                          <ShieldOff size={11} />
-                                          Ban
-                                        </button>
-                                        <button
-                                          disabled={!!isActioning}
-                                          onClick={() =>
-                                            setBlockDeviceModal({
-                                              managerId: m._id,
-                                              device,
-                                            })
-                                          }
-                                          className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
-                                          title="Block until date"
-                                        >
-                                          <Clock size={11} />
-                                          Block
-                                        </button>
-                                      </>
-                                    )}
-                                    {(device.status === "blocked" ||
-                                      device.status === "banned") && (
+                                    {/* BAN / UNBAN toggle */}
+                                    {device.status === "active" ? (
                                       <button
                                         disabled={!!isActioning}
-                                        onClick={() =>
-                                          handleDeviceAction(
-                                            m._id,
-                                            device.deviceId,
-                                            "unblock"
-                                          )
-                                        }
-                                        className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                                        onClick={() => setDeviceConfirmModal({ managerId: m._id, device, action: "ban" })}
+                                        className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                                        title="Ban this device"
                                       >
-                                        <Shield size={11} />
-                                        Restore
+                                        <ShieldOff size={11} />Ban
+                                      </button>
+                                    ) : (
+                                      <button
+                                        disabled={!!isActioning}
+                                        onClick={() => handleDeviceAction(m._id, device.deviceId, "unban")}
+                                        className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                                        title="Unban this device"
+                                      >
+                                        <ShieldCheck size={11} />Unban
                                       </button>
                                     )}
+
+                                    {/* REMOVE SESSION */}
                                     <button
                                       disabled={!!isActioning}
-                                      onClick={() =>
-                                        handleDeviceAction(
-                                          m._id,
-                                          device.deviceId,
-                                          "delete"
-                                        )
-                                      }
-                                      className="px-2 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
-                                      title="Remove this session"
+                                      onClick={() => setDeviceConfirmModal({ managerId: m._id, device, action: "remove" })}
+                                      className="px-2 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded text-xs font-medium transition-colors disabled:opacity-50 flex items-center gap-1"
+                                      title="Remove session"
                                     >
-                                      <Trash2 size={11} />
+                                      <Trash2 size={11} />Remove
                                     </button>
+
                                     {isActioning && (
                                       <span className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                                     )}
@@ -1001,9 +809,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
                 <ShieldOff className="w-5 h-5 text-yellow-600" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Block Manager
-                </h3>
+                <h3 className="text-lg font-semibold text-gray-900">Block Manager</h3>
                 <p className="text-sm text-gray-600 mt-1">
                   Are you sure you want to block{" "}
                   <span className="font-semibold">{blockingManager.name}</span>?
@@ -1013,18 +819,13 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
             </div>
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-6">
               <button
-                onClick={() => {
-                  setShowBlockConfirm(false);
-                  setBlockingManager(null);
-                }}
+                onClick={() => { setShowBlockConfirm(false); setBlockingManager(null); }}
                 className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
               >
                 Cancel
               </button>
               <button
-                onClick={() =>
-                  handleManagerStatusAction(blockingManager._id, "block")
-                }
+                onClick={() => handleManagerStatusAction(blockingManager._id, "block")}
                 className="w-full sm:w-auto px-5 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition-colors font-medium"
               >
                 Block Manager
@@ -1043,24 +844,17 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
                 <Trash2 className="w-5 h-5 text-red-600" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Confirm Delete
-                </h3>
+                <h3 className="text-lg font-semibold text-gray-900">Confirm Delete</h3>
                 <p className="text-sm text-gray-600 mt-1">
                   Are you sure you want to delete{" "}
                   <span className="font-semibold">{deletingManagerName}</span>?
-                  This will also delete all their sessions. This action cannot
-                  be undone.
+                  This will also delete all their sessions. This action cannot be undone.
                 </p>
               </div>
             </div>
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-6">
               <button
-                onClick={() => {
-                  setShowDeleteConfirm(false);
-                  setDeleteId("");
-                  setDeletingManagerName("");
-                }}
+                onClick={() => { setShowDeleteConfirm(false); setDeleteId(""); setDeletingManagerName(""); }}
                 className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
               >
                 Cancel
@@ -1076,17 +870,17 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
         </div>
       )}
 
-      {/* Block Device Until Modal */}
-      {blockDeviceModal && (
-        <BlockUntilModal
-          label={blockDeviceModal.device.label}
-          onClose={() => setBlockDeviceModal(null)}
-          onConfirm={(date) =>
+      {/* Device Confirm Modal */}
+      {deviceConfirmModal && (
+        <DeviceConfirmModal
+          deviceLabel={deviceConfirmModal.device.label}
+          action={deviceConfirmModal.action}
+          onClose={() => setDeviceConfirmModal(null)}
+          onConfirm={() =>
             handleDeviceAction(
-              blockDeviceModal.managerId,
-              blockDeviceModal.device.deviceId,
-              "block",
-              date
+              deviceConfirmModal.managerId,
+              deviceConfirmModal.device.deviceId,
+              deviceConfirmModal.action
             )
           }
         />

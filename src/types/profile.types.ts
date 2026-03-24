@@ -9,7 +9,7 @@ export type ActiveTab =
   | "managers"
   | "sessions"
   | "password"
-  | "serial"   // ✅ add this
+  | "serial"
   | "logout";
 
 export type UserProfile = {
@@ -68,9 +68,10 @@ export type UserSettings = {
   units: string[];
 };
 
-// ✅ NEW: Device-level security types
+// ✅ Device-level security types
 
-export type DeviceStatus = "active" | "banned" | "blocked";
+// Only two statuses: active or banned (no more "blocked" with date pickers)
+export type DeviceStatus = "active" | "banned";
 
 export type Device = {
   _id: string;
@@ -80,7 +81,7 @@ export type Device = {
   platform: string;
   ip: string;
   status: DeviceStatus;
-  blockedUntil: string | null;
+  blockedUntil: string | null;   // kept for backward compat, not used in UI
   lastSeen: string;
   createdAt: string;
   isCurrent?: boolean;   // true if this is the currently active session

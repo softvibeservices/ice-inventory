@@ -1,7 +1,7 @@
 // src/models/Device.ts
 import mongoose, { Schema, Document, models } from "mongoose";
 
-export type DeviceStatus = "active" | "banned" | "blocked";
+export type DeviceStatus = "active" | "banned";
 
 export interface IDevice extends Document {
   userId: mongoose.Types.ObjectId;   // actual _id of the user (admin or manager's own _id)
@@ -12,7 +12,8 @@ export interface IDevice extends Document {
   browser: string;
   ip: string;
   status: DeviceStatus;
-  blockedUntil: Date | null;         // used only when status = "blocked"
+  blockedUntil: Date | null;         // reserved for future use
+  revokedAt: Date | null;            // ✅ per-device logout: JWT issued before this time is rejected
   lastSeen: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -34,10 +35,15 @@ const DeviceSchema = new Schema<IDevice>(
     ip: { type: String, default: "" },
     status: {
       type: String,
-      enum: ["active", "banned", "blocked"],
+      enum: ["active", "banned"],
       default: "active",
     },
     blockedUntil: { type: Date, default: null },
+    // ✅ NEW: Per-device session revocation timestamp.
+    // Any JWT issued (iat) BEFORE this timestamp is considered invalid for this device.
+    // This lets us log out a single device without touching User.tokenVersion
+    // (which would log out ALL devices).
+    revokedAt: { type: Date, default: null },
     lastSeen: { type: Date, default: Date.now },
   },
   { timestamps: true }

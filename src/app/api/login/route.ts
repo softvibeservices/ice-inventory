@@ -52,6 +52,7 @@ function parseUserAgent(ua: string): {
 /**
  * Generate a stable device fingerprint.
  * Same browser + same user = same deviceId across logins.
+ * NOTE: We use user._id (the actual owner), NOT adminId alias.
  */
 function generateDeviceId(userId: string, userAgent: string): string {
   return crypto
@@ -67,7 +68,8 @@ function generateDeviceId(userId: string, userAgent: string): string {
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
+    // Accept rememberMe flag from login form
+    const { email, password, rememberMe } = await req.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -129,19 +131,21 @@ export async function POST(req: Request) {
       ? user.adminId!.toString()
       : user._id.toString();
 
-    // ✅ NEW — 7. Device fingerprinting
+    // 7. Device fingerprinting
+    //    Always keyed on user._id (the real owner), never the adminId alias.
     const userAgent = req.headers.get("user-agent") || "Unknown";
     const ip =
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       req.headers.get("x-real-ip") ||
       "Unknown";
 
-    // Device is always owned by the actual user (_id), not the adminId alias
-    const deviceOwnerId = user._id.toString();
+    const deviceOwnerId = user._id.toString(); // ALWAYS the real _id
     const deviceId = generateDeviceId(deviceOwnerId, userAgent);
     const { browser, platform, label } = parseUserAgent(userAgent);
 
-    // Upsert device — create if new, update lastSeen + ip if existing
+    // Upsert device — create if new, update lastSeen + ip if existing.
+    // IMPORTANT: $setOnInsert only sets status:"active" on brand new docs,
+    // so existing banned/blocked devices retain their status.
     const existingDevice = await Device.findOneAndUpdate(
       { userId: user._id, deviceId },
       {
@@ -161,7 +165,7 @@ export async function POST(req: Request) {
       { upsert: true, new: true }
     );
 
-    // ✅ NEW — 8. Block login if device is banned or actively blocked
+    // 8. Block login if device is banned or actively blocked
     if (existingDevice) {
       if (existingDevice.status === "banned") {
         return NextResponse.json(
@@ -195,14 +199,15 @@ export async function POST(req: Request) {
       }
     }
 
-    // ✅ NEW — 9. Include tokenVersion + deviceId in JWT
+    // 9. Include tokenVersion + deviceId in JWT
+    //    rememberMe → 90 days, otherwise 7 days
     const tokenVersion = user.tokenVersion ?? 0;
 
     const jwtPayload: Record<string, unknown> = {
       userId: resolvedUserId,
       role: user.role,
-      deviceId,       // ✅ device fingerprint
-      tokenVersion,   // ✅ for force-logout detection
+      deviceId,           // device fingerprint (keyed on user._id)
+      tokenVersion,       // for force-logout detection
     };
 
     if (isManager) {
@@ -219,7 +224,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const token = jwt.sign(jwtPayload, secret, { expiresIn: "30d" });
+    // ✅ Remember Me: 90 days. Otherwise: 7 days.
+    const expiresIn = rememberMe ? "90d" : "7d";
+    const token = jwt.sign(jwtPayload, secret, { expiresIn });
 
     return NextResponse.json({
       token,

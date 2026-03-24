@@ -9,7 +9,7 @@ import {
   Laptop,
   Shield,
   ShieldOff,
-  ShieldAlert,
+  ShieldCheck,
   Trash2,
   RefreshCw,
   Clock,
@@ -41,10 +41,10 @@ function getStatusColor(status: DeviceStatus) {
   switch (status) {
     case "active":
       return "bg-green-100 text-green-700 border-green-200";
-    case "blocked":
-      return "bg-yellow-100 text-yellow-700 border-yellow-200";
     case "banned":
       return "bg-red-100 text-red-700 border-red-200";
+    default:
+      return "bg-gray-100 text-gray-700 border-gray-200";
   }
 }
 
@@ -52,10 +52,10 @@ function getStatusIcon(status: DeviceStatus) {
   switch (status) {
     case "active":
       return <CheckCircle2 size={13} />;
-    case "blocked":
-      return <Clock size={13} />;
     case "banned":
       return <XCircle size={13} />;
+    default:
+      return <Clock size={13} />;
   }
 }
 
@@ -83,48 +83,45 @@ function timeAgo(dateStr: string) {
 }
 
 // ─────────────────────────────────────────────
-//  Block-Until Modal
+//  Confirm Modal (shared for ban & remove)
 // ─────────────────────────────────────────────
-function BlockUntilModal({
+function ConfirmModal({
   device,
+  action,
   onConfirm,
   onClose,
 }: {
   device: Device;
-  onConfirm: (date: string) => void;
+  action: "ban" | "remove";
+  onConfirm: () => void;
   onClose: () => void;
 }) {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const [date, setDate] = useState(tomorrow.toISOString().split("T")[0]);
+  const isBan = action === "ban";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-            <Clock className="w-5 h-5 text-yellow-600" />
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isBan ? "bg-red-100" : "bg-gray-100"}`}>
+            {isBan
+              ? <ShieldOff className="w-5 h-5 text-red-600" />
+              : <Trash2 className="w-5 h-5 text-gray-600" />}
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Block Until Date</h3>
-            <p className="text-xs text-gray-500">{device.label}</p>
+            <h3 className="font-semibold text-gray-900">
+              {isBan ? "Ban Device" : "Remove Session"}
+            </h3>
+            <p className="text-xs text-gray-500 truncate max-w-[200px]">{device.label}</p>
           </div>
         </div>
-        <p className="text-sm text-gray-600 mb-4">
-          The device will be blocked and the session on it will be terminated
-          until the selected date.
+
+        <p className="text-sm text-gray-600 mb-5">
+          {isBan
+            ? "This device will be banned and immediately logged out. You can unban it later from this page."
+            : "This device will be logged out and removed from the list. The user will need to log in again on that device."}
         </p>
-        <label className="text-sm text-gray-700 font-medium block mb-1">
-          Block Until
-        </label>
-        <input
-          type="date"
-          className="w-full border border-gray-300 rounded-lg p-3 text-gray-900 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-          value={date}
-          min={tomorrow.toISOString().split("T")[0]}
-          onChange={(e) => setDate(e.target.value)}
-        />
-        <div className="flex gap-3 mt-5">
+
+        <div className="flex gap-3">
           <button
             onClick={onClose}
             className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
@@ -132,10 +129,14 @@ function BlockUntilModal({
             Cancel
           </button>
           <button
-            onClick={() => onConfirm(date)}
-            className="flex-1 px-4 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors"
+            onClick={onConfirm}
+            className={`flex-1 px-4 py-2.5 text-white rounded-lg font-medium transition-colors ${
+              isBan
+                ? "bg-red-600 hover:bg-red-700"
+                : "bg-gray-700 hover:bg-gray-800"
+            }`}
           >
-            Block Device
+            {isBan ? "Ban Device" : "Remove"}
           </button>
         </div>
       </div>
@@ -150,7 +151,10 @@ export default function ActiveSessionsComponent() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [blockModal, setBlockModal] = useState<Device | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    device: Device;
+    action: "ban" | "remove";
+  } | null>(null);
   const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null);
 
   const fetchDevices = async () => {
@@ -179,8 +183,7 @@ export default function ActiveSessionsComponent() {
 
   const handleAction = async (
     deviceId: string,
-    action: "ban" | "block" | "unblock" | "delete",
-    blockedUntil?: string
+    action: "ban" | "unban" | "remove"
   ) => {
     setActionLoading(deviceId + action);
     try {
@@ -191,7 +194,7 @@ export default function ActiveSessionsComponent() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ deviceId, action, blockedUntil }),
+        body: JSON.stringify({ deviceId, action }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -199,7 +202,7 @@ export default function ActiveSessionsComponent() {
         return;
       }
       toast.success(data.message || "Done ✓");
-      setBlockModal(null);
+      setConfirmModal(null);
       await fetchDevices();
     } catch {
       toast.error("Something went wrong");
@@ -210,7 +213,6 @@ export default function ActiveSessionsComponent() {
 
   const activeCount = devices.filter((d) => d.status === "active").length;
   const bannedCount = devices.filter((d) => d.status === "banned").length;
-  const blockedCount = devices.filter((d) => d.status === "blocked").length;
 
   if (loading) {
     return (
@@ -243,14 +245,10 @@ export default function ActiveSessionsComponent() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
           <p className="text-2xl font-bold text-green-700">{activeCount}</p>
           <p className="text-xs text-green-600 mt-0.5">Active</p>
-        </div>
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-yellow-700">{blockedCount}</p>
-          <p className="text-xs text-yellow-600 mt-0.5">Blocked</p>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
           <p className="text-2xl font-bold text-red-700">{bannedCount}</p>
@@ -261,11 +259,13 @@ export default function ActiveSessionsComponent() {
       {/* Info Banner */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
         <AlertTriangle size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
-        <p className="text-xs text-blue-800">
-          Each entry represents a unique browser/device that has logged into
-          your account. Banning or blocking a device will immediately terminate
-          its active session.
-        </p>
+        <div className="text-xs text-blue-800 space-y-1">
+          <p>Each entry represents a unique browser/device that has logged into your account.</p>
+          <p>
+            <strong>Ban</strong> — Blocks the device and logs it out. Can be unbanned later. ·{" "}
+            <strong>Remove Session</strong> — Logs out that device and removes it from this list permanently.
+          </p>
+        </div>
       </div>
 
       {/* Device List */}
@@ -295,8 +295,6 @@ export default function ActiveSessionsComponent() {
                     className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
                       device.status === "active"
                         ? "bg-green-100 text-green-700"
-                        : device.status === "blocked"
-                        ? "bg-yellow-100 text-yellow-700"
                         : "bg-red-100 text-red-700"
                     }`}
                   >
@@ -319,8 +317,7 @@ export default function ActiveSessionsComponent() {
                         )}`}
                       >
                         {getStatusIcon(device.status)}
-                        {device.status.charAt(0).toUpperCase() +
-                          device.status.slice(1)}
+                        {device.status === "active" ? "Active" : "Banned"}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
@@ -355,99 +352,65 @@ export default function ActiveSessionsComponent() {
                     {/* Details */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600">
                       <div>
-                        <span className="font-medium text-gray-700">
-                          Browser:
-                        </span>{" "}
+                        <span className="font-medium text-gray-700">Browser:</span>{" "}
                         {device.browser}
                       </div>
                       <div>
-                        <span className="font-medium text-gray-700">
-                          Platform:
-                        </span>{" "}
+                        <span className="font-medium text-gray-700">Platform:</span>{" "}
                         {device.platform}
                       </div>
                       <div>
-                        <span className="font-medium text-gray-700">
-                          First Seen:
-                        </span>{" "}
+                        <span className="font-medium text-gray-700">First Seen:</span>{" "}
                         {formatDate(device.createdAt)}
                       </div>
                       <div>
-                        <span className="font-medium text-gray-700">
-                          Last Active:
-                        </span>{" "}
+                        <span className="font-medium text-gray-700">Last Active:</span>{" "}
                         {formatDate(device.lastSeen)}
                       </div>
-                      {device.status === "blocked" && device.blockedUntil && (
-                        <div className="sm:col-span-2 bg-yellow-50 border border-yellow-200 rounded p-2">
-                          <span className="font-medium text-yellow-700">
-                            Blocked Until:
-                          </span>{" "}
-                          <span className="text-yellow-800">
-                            {formatDate(device.blockedUntil)}
-                          </span>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Action Buttons */}
+                    {/* Action Buttons — only 2 options */}
                     <div className="flex flex-wrap gap-2 pt-1">
-                      {device.status === "active" && !device.isCurrent && (
+
+                      {/* Current device — no actions allowed */}
+                      {device.isCurrent ? (
+                        <p className="text-xs text-blue-600 italic flex items-center gap-1">
+                          <Shield size={13} />
+                          This is your current session — cannot be modified.
+                        </p>
+                      ) : (
                         <>
+                          {/* BAN / UNBAN toggle */}
+                          {device.status === "active" ? (
+                            <button
+                              disabled={!!isActioning}
+                              onClick={() => setConfirmModal({ device, action: "ban" })}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                            >
+                              <ShieldOff size={13} />
+                              Ban
+                            </button>
+                          ) : (
+                            <button
+                              disabled={!!isActioning}
+                              onClick={() => handleAction(device.deviceId, "unban")}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                            >
+                              <ShieldCheck size={13} />
+                              Unban
+                            </button>
+                          )}
+
+                          {/* REMOVE SESSION */}
                           <button
                             disabled={!!isActioning}
-                            onClick={() =>
-                              handleAction(device.deviceId, "ban")
-                            }
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                            onClick={() => setConfirmModal({ device, action: "remove" })}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-800 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
                           >
-                            <ShieldOff size={13} />
-                            Ban Device
-                          </button>
-                          <button
-                            disabled={!!isActioning}
-                            onClick={() => setBlockModal(device)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                          >
-                            <Clock size={13} />
-                            Block Until
+                            <Trash2 size={13} />
+                            Remove Session
                           </button>
                         </>
-                      )}
-
-                      {(device.status === "blocked" ||
-                        device.status === "banned") && (
-                        <button
-                          disabled={!!isActioning}
-                          onClick={() =>
-                            handleAction(device.deviceId, "unblock")
-                          }
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                        >
-                          <Shield size={13} />
-                          Restore Access
-                        </button>
-                      )}
-
-                      {!device.isCurrent && (
-                        <button
-                          disabled={!!isActioning}
-                          onClick={() =>
-                            handleAction(device.deviceId, "delete")
-                          }
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                        >
-                          <Trash2 size={13} />
-                          Remove Session
-                        </button>
-                      )}
-
-                      {device.isCurrent && (
-                        <p className="text-xs text-blue-600 italic flex items-center gap-1">
-                          <ShieldAlert size={13} />
-                          This is your current session — you cannot ban or block
-                          it.
-                        </p>
                       )}
 
                       {isActioning && (
@@ -465,14 +428,13 @@ export default function ActiveSessionsComponent() {
         </div>
       )}
 
-      {/* Block Until Modal */}
-      {blockModal && (
-        <BlockUntilModal
-          device={blockModal}
-          onClose={() => setBlockModal(null)}
-          onConfirm={(date) =>
-            handleAction(blockModal.deviceId, "block", date)
-          }
+      {/* Confirm Modal */}
+      {confirmModal && (
+        <ConfirmModal
+          device={confirmModal.device}
+          action={confirmModal.action}
+          onClose={() => setConfirmModal(null)}
+          onConfirm={() => handleAction(confirmModal.device.deviceId, confirmModal.action)}
         />
       )}
     </div>
