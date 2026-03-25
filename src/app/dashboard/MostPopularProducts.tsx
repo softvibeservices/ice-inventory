@@ -11,9 +11,14 @@ import {
   ChevronRight,
   Crown,
   Search,
-  Eye,
+  RefreshCw,
+  BarChart2,
+  ShoppingCart,
 } from "lucide-react";
 
+/* ─────────────────────────────────────────────
+   Types
+───────────────────────────────────────────── */
 interface ProductSummary {
   productId: string;
   productName: string;
@@ -23,7 +28,12 @@ interface ProductSummary {
   orderCount: number;
 }
 
-const ITEMS_PER_PAGE = 8;
+type Timeframe = "day" | "week" | "month";
+
+/* ─────────────────────────────────────────────
+   Helpers
+───────────────────────────────────────────── */
+const ITEMS_PER_PAGE = 10;
 
 function getAuthHeaders(): HeadersInit {
   const token =
@@ -31,67 +41,99 @@ function getAuthHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function getDateRange(timeframe: "day" | "week" | "month"): {
-  from: string;
-  to: string;
-} {
+function getDateRange(timeframe: Timeframe): { from: string; to: string } {
   const now = new Date();
   const to = now.toISOString().slice(0, 10);
-
-  if (timeframe === "day") {
-    return { from: to, to };
-  } else if (timeframe === "week") {
+  if (timeframe === "day") return { from: to, to };
+  if (timeframe === "week") {
     const d = new Date(now);
     d.setDate(d.getDate() - 6);
     return { from: d.toISOString().slice(0, 10), to };
-  } else {
-    const d = new Date(now.getFullYear(), now.getMonth(), 1);
-    return { from: d.toISOString().slice(0, 10), to };
   }
+  // month
+  const d = new Date(now.getFullYear(), now.getMonth(), 1);
+  return { from: d.toISOString().slice(0, 10), to };
 }
 
+function getMedalStyle(rank: number) {
+  if (rank === 0)
+    return {
+      bg: "bg-gradient-to-br from-yellow-400 to-amber-500",
+      text: "text-white",
+      ring: "ring-2 ring-yellow-300",
+    };
+  if (rank === 1)
+    return {
+      bg: "bg-gradient-to-br from-slate-300 to-slate-400",
+      text: "text-white",
+      ring: "ring-2 ring-slate-200",
+    };
+  if (rank === 2)
+    return {
+      bg: "bg-gradient-to-br from-orange-400 to-amber-600",
+      text: "text-white",
+      ring: "ring-2 ring-orange-200",
+    };
+  return {
+    bg: "bg-gray-100",
+    text: "text-gray-500",
+    ring: "",
+  };
+}
+
+function getBarColor(rank: number) {
+  if (rank === 0) return "bg-gradient-to-r from-yellow-400 to-amber-400";
+  if (rank === 1) return "bg-gradient-to-r from-slate-300 to-slate-400";
+  if (rank === 2) return "bg-gradient-to-r from-orange-400 to-amber-500";
+  return "bg-gradient-to-r from-purple-400 to-indigo-400";
+}
+
+/* ─────────────────────────────────────────────
+   Component
+───────────────────────────────────────────── */
 export default function MostPopularProducts() {
-  const [timeframe, setTimeframe] = useState<"day" | "week" | "month">("day");
+  const [timeframe, setTimeframe] = useState<Timeframe>("week");
+  // `allProducts` holds the fully-aggregated summary — one entry per product, sorted by totalQuantity desc
   const [allProducts, setAllProducts] = useState<ProductSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [showAll, setShowAll] = useState(false);
 
-  const fetchPopularProducts = useCallback(async () => {
+  /* ── Fetch ── */
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     setCurrentPage(1);
+    setSearchTerm("");
 
     try {
       const { from, to } = getDateRange(timeframe);
-      const url = `/api/sales/product-sales?from=${from}&to=${to}`;
+      const res = await fetch(`/api/sales/product-sales?from=${from}&to=${to}`, {
+        headers: getAuthHeaders(),
+      });
 
-      const response = await fetch(url, { headers: getAuthHeaders() });
-
-      if (response.status === 401) {
+      if (res.status === 401) {
         setError("Session expired. Please log in again.");
         setAllProducts([]);
         return;
       }
-
-      if (!response.ok) {
-        setError("Failed to load product sales data.");
+      if (!res.ok) {
+        setError("Could not load product sales. Please try again.");
         setAllProducts([]);
         return;
       }
 
-      const data = await response.json();
-
-      // ✅ API returns { rows, summary } — summary is sorted by totalQuantity desc
+      const data = await res.json();
+      // `data.summary` is already grouped per-product and sorted by totalQuantity desc
+      // Each product appears exactly ONCE here — no duplicates.
       const summary: ProductSummary[] = Array.isArray(data.summary)
         ? data.summary
         : [];
 
       setAllProducts(summary);
     } catch {
-      setError("Failed to load product sales data.");
+      setError("Something went wrong. Please try again.");
       setAllProducts([]);
     } finally {
       setLoading(false);
@@ -99,16 +141,17 @@ export default function MostPopularProducts() {
   }, [timeframe]);
 
   useEffect(() => {
-    fetchPopularProducts();
-  }, [fetchPopularProducts]);
+    fetchData();
+  }, [fetchData]);
 
+  // Reset page when search changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
 
-  // ---- Filtering ----
+  /* ── Derived data ── */
   const filtered = allProducts.filter((p) => {
-    if (!searchTerm) return true;
+    if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return (
       p.productName.toLowerCase().includes(q) ||
@@ -116,368 +159,337 @@ export default function MostPopularProducts() {
     );
   });
 
-  // Top 3 for highlighting
-  const top3Ids = new Set(allProducts.slice(0, 3).map((p) => p.productId));
-
-  // ---- Pagination ----
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-  const paginated = showAll
-    ? filtered
-    : filtered.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE
-      );
+  // Paginate the FILTERED list — each product is already unique in `allProducts`
+  const paginated = filtered.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
+  const maxQty = allProducts[0]?.totalQuantity || 1;
+  const totalUnitsSold = allProducts.reduce((s, p) => s + p.totalQuantity, 0);
+  const totalOrders = allProducts.reduce((s, p) => s + p.orderCount, 0);
+
+  const timeframeLabel: Record<Timeframe, string> = {
+    day: "Today",
+    week: "Last 7 Days",
+    month: "This Month",
+  };
+
+  /* ── Page change ── */
   const handlePageChange = (page: number) => {
     if (page < 1 || page > totalPages) return;
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const timeframeLabel = {
-    day: "Today",
-    week: "This Week",
-    month: "This Month",
-  }[timeframe];
-
-  // ---- Rank badge ----
-  const getRankBadge = (productId: string) => {
-    const globalRank = allProducts.findIndex((p) => p.productId === productId);
-    if (globalRank === 0) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-700 border border-yellow-300">
-          <Crown className="w-3 h-3" /> #1
-        </span>
-      );
-    }
-    if (globalRank === 1) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-200 text-gray-700 border border-gray-300">
-          #2
-        </span>
-      );
-    }
-    if (globalRank === 2) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-300">
-          #3
-        </span>
-      );
-    }
-    return null;
-  };
-
+  /* ── Render ── */
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-      {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-purple-100 rounded-lg">
-            <TrendingUp className="w-5 h-5 text-purple-600" />
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+
+      {/* ═══ TOP HEADER BAND ═══ */}
+      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          {/* Title */}
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white/20 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white leading-tight">
+                Product Sales Ranking
+              </h2>
+              <p className="text-purple-200 text-xs mt-0.5">
+                {timeframeLabel[timeframe]} · sorted by quantity sold
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              Product Sales
-            </h2>
-            <p className="text-sm text-gray-500">
-              All products · {timeframeLabel}
-            </p>
+
+          {/* Timeframe pills */}
+          <div className="flex gap-1 bg-white/10 p-1 rounded-xl self-start sm:self-auto">
+            {(["day", "week", "month"] as Timeframe[]).map((t) => {
+              const Icon = t === "day" ? Clock : t === "week" ? TrendingUp : Calendar;
+              const label = t === "day" ? "Today" : t === "week" ? "Week" : "Month";
+              return (
+                <button
+                  key={t}
+                  onClick={() => setTimeframe(t)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    timeframe === t
+                      ? "bg-white text-purple-700 shadow"
+                      : "text-white/80 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Timeframe Toggle */}
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg self-start sm:self-auto">
-          {(["day", "week", "month"] as const).map((t) => {
-            const icons = { day: Clock, week: TrendingUp, month: Calendar };
-            const Icon = icons[t];
-            const labels = { day: "Today", week: "Week", month: "Month" };
-            return (
-              <button
-                key={t}
-                onClick={() => setTimeframe(t)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all ${
-                  timeframe === t
-                    ? "bg-white text-purple-600 shadow-sm"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
+        {/* Summary stats inside header */}
+        {!loading && !error && allProducts.length > 0 && (
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            {[
+              { label: "Products", value: allProducts.length, icon: Package },
+              { label: "Units Sold", value: totalUnitsSold.toLocaleString(), icon: BarChart2 },
+              { label: "Orders", value: totalOrders, icon: ShoppingCart },
+            ].map(({ label, value, icon: Icon }) => (
+              <div
+                key={label}
+                className="bg-white/10 rounded-xl px-3 py-2 text-center"
               >
-                <Icon className="w-3.5 h-3.5" />
-                {labels[t]}
-              </button>
-            );
-          })}
-        </div>
+                <Icon className="w-3.5 h-3.5 text-purple-200 mx-auto mb-1" />
+                <p className="text-white font-bold text-sm leading-none">{value}</p>
+                <p className="text-purple-200 text-[10px] mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* ── Search + View All ── */}
-      {!loading && allProducts.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1">
+      {/* ═══ BODY ═══ */}
+      <div className="p-4 sm:p-5">
+
+        {/* ── Search bar (only when there's data) ── */}
+        {!loading && !error && allProducts.length > 0 && (
+          <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search products or categories…"
-              className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none bg-white placeholder-gray-400"
+              placeholder="Search by product or category…"
+              className="w-full pl-10 pr-10 py-2.5 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-400 focus:border-transparent outline-none bg-gray-50 placeholder-gray-400"
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+              >
+                ✕
+              </button>
+            )}
           </div>
-          <button
-            onClick={() => {
-              setShowAll(!showAll);
-              setCurrentPage(1);
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors whitespace-nowrap"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            {showAll ? "Show Pages" : "View All"}
-          </button>
-        </div>
-      )}
+        )}
 
-      {/* ── Legend ── */}
-      {!loading && allProducts.length > 0 && (
-        <div className="flex items-center gap-3 mb-4 text-xs text-gray-500">
-          <span className="flex items-center gap-1">
-            <Crown className="w-3 h-3 text-yellow-500" />
-            Top 3 most-sold are highlighted
-          </span>
-        </div>
-      )}
-
-      {/* ── Loading ── */}
-      {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div
-              key={i}
-              className="animate-pulse flex items-center gap-4 p-4 bg-gray-50 rounded-lg"
-            >
-              <div className="w-10 h-10 bg-gray-200 rounded-lg flex-shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 bg-gray-200 rounded w-1/3" />
-                <div className="h-3 bg-gray-200 rounded w-1/4" />
+        {/* ── Loading skeleton ── */}
+        {loading && (
+          <div className="space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse flex items-center gap-3 p-3 bg-gray-50 rounded-xl"
+              >
+                <div className="w-9 h-9 bg-gray-200 rounded-lg flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 bg-gray-200 rounded w-2/5" />
+                  <div className="h-2 bg-gray-200 rounded w-full" />
+                </div>
+                <div className="w-14 h-6 bg-gray-200 rounded" />
               </div>
-              <div className="h-6 bg-gray-200 rounded w-16" />
-            </div>
-          ))}
-        </div>
-      ) : error ? (
-        /* ── Error ── */
-        <div className="text-center py-10">
-          <Package className="w-10 h-10 text-red-300 mx-auto mb-2" />
-          <p className="text-sm text-red-500">{error}</p>
-          <button
-            onClick={fetchPopularProducts}
-            className="mt-3 text-xs text-purple-600 hover:underline"
-          >
-            Retry
-          </button>
-        </div>
-      ) : filtered.length === 0 ? (
-        /* ── Empty ── */
-        <div className="text-center py-12">
-          <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">
-            {searchTerm
-              ? "No products match your search."
-              : `No sales data for ${timeframeLabel.toLowerCase()}.`}
-          </p>
-        </div>
-      ) : (
-        /* ── Products List ── */
-        <>
-          {/* Summary bar */}
-          <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
-            <span>
-              Showing{" "}
-              <span className="font-semibold text-gray-700">
-                {filtered.length}
-              </span>{" "}
-              product{filtered.length !== 1 ? "s" : ""}
-              {searchTerm && " matching your search"}
-            </span>
-            <span>
-              Total sold:{" "}
-              <span className="font-semibold text-purple-600">
-                {filtered
-                  .reduce((s, p) => s + p.totalQuantity, 0)
-                  .toLocaleString()}
-              </span>
-            </span>
+            ))}
           </div>
+        )}
 
-          <div className="space-y-2">
-            {paginated.map((product, pageIndex) => {
-              const isTop = top3Ids.has(product.productId);
-              const globalRank = allProducts.findIndex(
-                (p) => p.productId === product.productId
-              );
-              const maxQty = allProducts[0]?.totalQuantity || 1;
-              const barPct = Math.min(
-                100,
-                Math.round((product.totalQuantity / maxQty) * 100)
-              );
+        {/* ── Error state ── */}
+        {!loading && error && (
+          <div className="flex flex-col items-center justify-center py-14 text-center">
+            <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mb-3">
+              <Package className="w-7 h-7 text-red-400" />
+            </div>
+            <p className="text-sm font-medium text-gray-700 mb-1">Something went wrong</p>
+            <p className="text-xs text-gray-400 mb-4">{error}</p>
+            <button
+              onClick={fetchData}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-xs font-semibold rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Try Again
+            </button>
+          </div>
+        )}
 
-              return (
-                <div
-                  key={product.productId || pageIndex}
-                  className={`relative flex items-center gap-3 p-3 rounded-xl transition-all border ${
-                    isTop
-                      ? "bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 shadow-sm"
-                      : "bg-gray-50 hover:bg-gray-100 border-gray-100"
-                  }`}
-                >
-                  {/* Rank number */}
+        {/* ── Empty state (no sales at all) ── */}
+        {!loading && !error && allProducts.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-14 text-center">
+            <div className="w-14 h-14 bg-purple-50 rounded-full flex items-center justify-center mb-3">
+              <BarChart2 className="w-7 h-7 text-purple-300" />
+            </div>
+            <p className="text-sm font-medium text-gray-700 mb-1">No sales yet</p>
+            <p className="text-xs text-gray-400 max-w-xs">
+              No delivered & settled orders found for{" "}
+              <span className="font-medium text-gray-600">
+                {timeframeLabel[timeframe].toLowerCase()}
+              </span>
+              . Try a different time range.
+            </p>
+          </div>
+        )}
+
+        {/* ── No search results ── */}
+        {!loading && !error && allProducts.length > 0 && filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <Search className="w-10 h-10 text-gray-300 mb-3" />
+            <p className="text-sm font-medium text-gray-600">No products match</p>
+            <button
+              onClick={() => setSearchTerm("")}
+              className="mt-2 text-xs text-purple-600 hover:underline"
+            >
+              Clear search
+            </button>
+          </div>
+        )}
+
+        {/* ── Product list ── */}
+        {!loading && !error && paginated.length > 0 && (
+          <>
+            {/* Search result count */}
+            {searchTerm && (
+              <p className="text-xs text-gray-500 mb-3">
+                {filtered.length} result{filtered.length !== 1 ? "s" : ""} for "
+                <span className="font-medium text-gray-700">{searchTerm}</span>"
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {paginated.map((product) => {
+                // Rank is based on position in the full (unfiltered, un-paginated) allProducts list
+                const globalRank = allProducts.findIndex(
+                  (p) => p.productId === product.productId
+                );
+                const barPct = Math.min(
+                  100,
+                  Math.round((product.totalQuantity / maxQty) * 100)
+                );
+                const medal = getMedalStyle(globalRank);
+                const isTopThree = globalRank < 3;
+
+                return (
                   <div
-                    className={`flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-lg font-bold text-xs ${
-                      globalRank === 0
-                        ? "bg-gradient-to-br from-yellow-400 to-yellow-500 text-white shadow"
-                        : globalRank === 1
-                        ? "bg-gradient-to-br from-gray-300 to-gray-400 text-white shadow"
-                        : globalRank === 2
-                        ? "bg-gradient-to-br from-orange-400 to-orange-500 text-white shadow"
-                        : "bg-white text-gray-500 border border-gray-200"
+                    key={product.productId}
+                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                      isTopThree
+                        ? "bg-gradient-to-r from-purple-50/80 to-indigo-50/60 border-purple-100 shadow-sm"
+                        : "bg-gray-50/70 border-transparent hover:bg-gray-100/80"
                     }`}
                   >
-                    #{globalRank + 1}
-                  </div>
+                    {/* ── Rank badge ── */}
+                    <div
+                      className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs ${medal.bg} ${medal.text} ${medal.ring}`}
+                    >
+                      {globalRank === 0 ? (
+                        <Crown className="w-4 h-4" />
+                      ) : (
+                        `#${globalRank + 1}`
+                      )}
+                    </div>
 
-                  {/* Product info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3
-                        className={`font-semibold text-sm truncate ${
-                          isTop ? "text-purple-900" : "text-gray-900"
+                    {/* ── Info + bar ── */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                        <span
+                          className={`font-semibold text-sm truncate ${
+                            isTopThree ? "text-purple-900" : "text-gray-800"
+                          }`}
+                          title={product.productName}
+                        >
+                          {product.productName}
+                        </span>
+                        {product.category && (
+                          <span className="text-[10px] text-gray-500 bg-white border border-gray-200 px-1.5 py-0.5 rounded-md flex-shrink-0">
+                            {product.category}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-gray-400 mb-1.5">
+                        {product.orderCount} order{product.orderCount !== 1 ? "s" : ""}
+                      </p>
+                      {/* Progress bar — relative to #1 product */}
+                      <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ease-out ${getBarColor(globalRank)}`}
+                          style={{ width: `${barPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* ── Quantity ── */}
+                    <div className="text-right flex-shrink-0 min-w-[52px]">
+                      <p
+                        className={`font-bold text-sm leading-tight ${
+                          isTopThree ? "text-purple-700" : "text-gray-900"
                         }`}
                       >
-                        {product.productName}
-                      </h3>
-                      {getRankBadge(product.productId)}
+                        {product.totalQuantity.toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-gray-400 leading-none mt-0.5">
+                        {product.unit ?? "units"}
+                      </p>
                     </div>
+                  </div>
+                );
+              })}
+            </div>
 
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      {product.category && (
-                        <span className="text-[10px] text-gray-500 bg-white px-1.5 py-0.5 rounded border border-gray-200">
-                          {product.category}
-                        </span>
-                      )}
-                      <span className="text-[10px] text-gray-400">
-                        {product.orderCount} order
-                        {product.orderCount !== 1 ? "s" : ""}
-                      </span>
-                    </div>
+            {/* ── Pagination ── */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-5 pt-4 border-t border-gray-100">
+                <p className="text-xs text-gray-400">
+                  {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
+                  {Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} of{" "}
+                  {filtered.length}
+                </p>
 
-                    {/* Progress bar */}
-                    <div className="mt-1.5 w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          globalRank === 0
-                            ? "bg-yellow-400"
-                            : globalRank === 1
-                            ? "bg-gray-400"
-                            : globalRank === 2
-                            ? "bg-orange-400"
-                            : "bg-purple-300"
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  {/* Page numbers — always contiguous window of up to 5 */}
+                  {(() => {
+                    const window = 5;
+                    const half = Math.floor(window / 2);
+                    let start = Math.max(1, currentPage - half);
+                    const end = Math.min(totalPages, start + window - 1);
+                    if (end - start + 1 < window) {
+                      start = Math.max(1, end - window + 1);
+                    }
+                    return Array.from(
+                      { length: end - start + 1 },
+                      (_, i) => start + i
+                    ).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => handlePageChange(page)}
+                        className={`w-8 h-8 rounded-lg text-xs font-semibold transition-colors ${
+                          currentPage === page
+                            ? "bg-purple-600 text-white shadow"
+                            : "border border-gray-200 text-gray-600 hover:bg-gray-50"
                         }`}
-                        style={{ width: `${barPct}%` }}
-                      />
-                    </div>
-                  </div>
+                      >
+                        {page}
+                      </button>
+                    ));
+                  })()}
 
-                  {/* Quantity */}
-                  <div className="text-right flex-shrink-0">
-                    <div
-                      className={`font-bold text-sm ${
-                        isTop ? "text-purple-700" : "text-gray-900"
-                      }`}
-                    >
-                      {product.totalQuantity.toLocaleString()}
-                    </div>
-                    <div className="text-[10px] text-gray-400">
-                      {product.unit ?? "units"}
-                    </div>
-                  </div>
+                  <button
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-
-          {/* ── Pagination ── */}
-          {!showAll && totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-5 pt-4 border-t border-gray-200">
-              <p className="text-xs text-gray-500">
-                Page {currentPage} of {totalPages} &nbsp;·&nbsp;{" "}
-                {filtered.length} products
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let page: number;
-                  if (totalPages <= 5) page = i + 1;
-                  else if (currentPage <= 3) page = i + 1;
-                  else if (currentPage >= totalPages - 2)
-                    page = totalPages - 4 + i;
-                  else page = currentPage - 2 + i;
-
-                  return (
-                    <button
-                      key={page}
-                      onClick={() => handlePageChange(page)}
-                      className={`w-9 h-9 rounded-lg text-xs font-medium transition-colors ${
-                        currentPage === page
-                          ? "bg-purple-600 text-white shadow-md"
-                          : "border border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
               </div>
-            </div>
-          )}
-
-          {/* ── Footer summary ── */}
-          {!loading && allProducts.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="text-center">
-                <p className="text-xs text-gray-500">Total Products</p>
-                <p className="font-bold text-gray-900">{allProducts.length}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-gray-500">Units Sold</p>
-                <p className="font-bold text-purple-600">
-                  {allProducts
-                    .reduce((s, p) => s + p.totalQuantity, 0)
-                    .toLocaleString()}
-                </p>
-              </div>
-              <div className="text-center col-span-2 sm:col-span-1">
-                <p className="text-xs text-gray-500">Total Orders</p>
-                <p className="font-bold text-gray-900">
-                  {allProducts.reduce((s, p) => s + p.orderCount, 0)}
-                </p>
-              </div>
-            </div>
-          )}
-        </>
-      )}
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
