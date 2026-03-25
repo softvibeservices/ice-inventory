@@ -4,7 +4,7 @@
 import React, { JSX, useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, Plus } from "lucide-react";
+import { Upload, FileText, Plus, Package } from "lucide-react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import ProductList from "./ProductList";
@@ -28,9 +28,6 @@ export default function ProductsPage(): JSX.Element {
   const [sortMode, setSortMode] = useState<SortMode>("default");
   const [showCSVFormat, setShowCSVFormat] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
-  // ❌ REMOVED - No longer needed (fetched automatically in BulkUploadModal)
-  // const [categories, setCategories] = useState<string[]>([]);
-  // const [units, setUnits] = useState<string[]>([]);
 
   const initialForm: FormState = {
     name: "",
@@ -48,39 +45,24 @@ export default function ProductsPage(): JSX.Element {
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
- 
-
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        console.log("📦 Parsed user:", parsed);
-
-        if (parsed && parsed._id) {
-          setUserId(String(parsed._id));
-        
-        } else {
-          console.error("❌ No _id found in parsed user");
-        }
+        if (parsed?._id) setUserId(String(parsed._id));
       } catch (error) {
-        console.error("❌ Error parsing user from localStorage:", error);
+        console.error("Error parsing user:", error);
       }
-    } else {
-      console.error("❌ No user found in localStorage");
     }
   }, []);
 
   const fetchProducts = async () => {
-    if (!userId) {
-      console.log("⏸️ Skipping fetchProducts - no userId yet");
-      return;
-    }
-
+    if (!userId) return;
     try {
       setLoading(true);
       const token = localStorage.getItem("token");
-const res = await fetch(`/api/products`, {
-  headers: { "Authorization": `Bearer ${token}` },
-});
+      const res = await fetch(`/api/products`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!res.ok) throw new Error("Failed to fetch products");
       const data = await res.json();
       setProducts(Array.isArray(data) ? data : []);
@@ -94,10 +76,7 @@ const res = await fetch(`/api/products`, {
   };
 
   useEffect(() => {
-    if (userId) {
-      console.log("🔄 Fetching products for userId:", userId);
-      fetchProducts();
-    }
+    if (userId) fetchProducts();
   }, [userId]);
 
   const validateAndBuildPayload = (): {
@@ -112,12 +91,10 @@ const res = await fetch(`/api/products`, {
     const minStock =
       formData.minStock !== "" ? Number(formData.minStock) : undefined;
     const packQuantity =
-      formData.packQuantity !== ""
-        ? Number(formData.packQuantity)
-        : undefined;
+      formData.packQuantity !== "" ? Number(formData.packQuantity) : undefined;
 
     if (!formData.name.trim()) return { error: "Name is required" };
-    if (!formData.category?.trim()) return { error: "Category is required" }; // ✅ ADDED: Category validation
+    if (!formData.category?.trim()) return { error: "Category is required" };
     if (!formData.unit) return { error: "Unit is required" };
     if (!Number.isFinite(sellingPrice))
       return { error: "Valid selling price is required" };
@@ -126,7 +103,7 @@ const res = await fetch(`/api/products`, {
 
     const payload: Partial<Product> = {
       name: formData.name.trim(),
-      category: formData.category?.trim(), // ✅ CHANGED: No longer optional
+      category: formData.category?.trim(),
       unit: formData.unit,
       packQuantity,
       packUnit: formData.packUnit?.trim() || undefined,
@@ -171,15 +148,15 @@ const res = await fetch(`/api/products`, {
         body = { ...payload, userId };
       }
 
-     const token = localStorage.getItem("token");
-const res = await fetch("/api/products", {
-  method,
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
-  },
-  body: JSON.stringify(body),  // userId still in body for PUT (id field), but server ignores it for auth
-});
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/products", {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -189,10 +166,8 @@ const res = await fetch("/api/products", {
       const result = await res.json().catch(() => null);
 
       if (editingId) {
-        if (result && result._id) {
-          setProducts((prev) =>
-            prev.map((p) => (p._id === editingId ? result : p))
-          );
+        if (result?._id) {
+          setProducts((prev) => prev.map((p) => (p._id === editingId ? result : p)));
         } else {
           setProducts((prev) =>
             prev.map((p) =>
@@ -204,7 +179,7 @@ const res = await fetch("/api/products", {
         }
         toast.success("Product updated!");
       } else {
-        if (result && result._id) {
+        if (result?._id) {
           setProducts((prev) => [result, ...prev]);
         } else {
           await fetchProducts();
@@ -252,14 +227,14 @@ const res = await fetch("/api/products", {
     try {
       setIsDeleting(true);
       const token = localStorage.getItem("token");
-const res = await fetch("/api/products", {
-  method: "DELETE",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
-  },
-  body: JSON.stringify({ id: confirmDeleteId }),  // userId removed
-});
+      const res = await fetch("/api/products", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id: confirmDeleteId }),
+      });
 
       if (res.ok) {
         setProducts((prev) => prev.filter((p) => p._id !== confirmDeleteId));
@@ -278,12 +253,10 @@ const res = await fetch("/api/products", {
 
   if (!userId) {
     return (
-      <div className="p-8 bg-gray-50 min-h-screen">
-        <div className="max-w-2xl mx-auto bg-white rounded-lg shadow p-6 text-center">
-          <h2 className="text-lg font-semibold text-gray-800">Loading...</h2>
-          <p className="text-sm text-gray-600 mt-2">
-            Please wait while we load your account.
-          </p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center space-y-2">
+          <div className="w-10 h-10 rounded-full border-2 border-blue-100 border-t-blue-600 animate-spin mx-auto" />
+          <p className="text-sm text-gray-500">Loading your account…</p>
         </div>
       </div>
     );
@@ -294,105 +267,113 @@ const res = await fetch("/api/products", {
       <DashboardNavbar />
 
       <main className="flex-grow w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                Products
-              </h1>
-              <p className="text-sm text-gray-500">
-                Manage your shop&apos;s products
-              </p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+
+          {/* ── Page header ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+                <Package size={18} className="text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900 leading-tight">Products</h1>
+                <p className="text-sm text-gray-500">Manage your shop's product catalogue</p>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* CSV Format — tertiary */}
+              <button
+                onClick={() => setShowCSVFormat(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium
+                           border border-gray-200 rounded-lg text-gray-600 bg-white
+                           hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <FileText size={15} />
+                CSV Format
+              </button>
+
+              {/* Bulk Upload — secondary */}
+              <button
+                onClick={() => setShowBulkUpload(true)}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold
+                           border border-blue-200 rounded-lg text-blue-700 bg-blue-50
+                           hover:bg-blue-100 transition-colors shadow-sm"
+              >
+                <Upload size={15} />
+                Bulk Upload
+              </button>
+
+              {/* Add Product — primary */}
               <button
                 onClick={() => {
-                  setShowForm((s) => !s);
                   if (!showForm) {
                     setEditingId(null);
                     setFormData(initialForm);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }
+                  setShowForm((s) => !s);
                 }}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2"
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg
+                            shadow-sm transition-all ${
+                  showForm
+                    ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }`}
               >
-                <Plus size={18} />
-                Add Product
-              </button>
-
-              <button
-                onClick={() => setShowBulkUpload(true)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2"
-              >
-                <Upload size={18} />
-                Bulk Upload
-              </button>
-
-              <button
-                onClick={() => setShowCSVFormat(true)}
-                className="px-4 py-2 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg flex items-center gap-2"
-              >
-                <FileText size={18} />
-                CSV Format
+                <Plus size={15} />
+                {showForm ? "Hide Form" : "Add Product"}
               </button>
             </div>
           </div>
 
+          {/* ── Product Form (collapsible) ── */}
           {showForm && (
-            <div className="mb-8">
-              <ProductForm
-                formData={formData}
-                setFormData={setFormData}
-                handleSubmit={handleSubmit}
-                cancelEdit={cancelEdit}
-                isSubmitting={isSubmitting}
-                editingId={editingId}
-                userId={userId}
-              />
-            </div>
+            <ProductForm
+              formData={formData}
+              setFormData={setFormData}
+              handleSubmit={handleSubmit}
+              cancelEdit={cancelEdit}
+              isSubmitting={isSubmitting}
+              editingId={editingId}
+              userId={userId}
+            />
           )}
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-            <ProductList
-              products={products}
-              loading={loading}
-              search={search}
-              sortMode={sortMode}
-              setSearch={setSearch}
-              setSortMode={setSortMode}
-              handleEdit={handleEdit}
-              setConfirmDeleteId={setConfirmDeleteId}
-              fetchProducts={fetchProducts}
-            />
-          </div>
-        </div>
-
-        <DeleteConfirmationModal
-          confirmDeleteId={confirmDeleteId}
-          setConfirmDeleteId={setConfirmDeleteId}
-          handleDeleteConfirmed={handleDeleteConfirmed}
-          isDeleting={isDeleting}
-        />
-
-        {showCSVFormat && (
-          <CSVFormatModal onClose={() => setShowCSVFormat(false)} />
-        )}
-
-        {/* ✅ FIXED: Only pass userId, onClose, and onSuccess */}
-        {showBulkUpload && (
-          <BulkUploadModal
-            userId={userId}
-            onClose={() => setShowBulkUpload(false)}
-            onSuccess={() => {
-              fetchProducts();
-            }}
+          {/* ── Product List ── */}
+          <ProductList
+            products={products}
+            loading={loading}
+            search={search}
+            sortMode={sortMode}
+            setSearch={setSearch}
+            setSortMode={setSortMode}
+            handleEdit={handleEdit}
+            setConfirmDeleteId={setConfirmDeleteId}
+            fetchProducts={fetchProducts}
           />
-        )}
-
-        <Toaster position="top-right" reverseOrder={false} />
+        </div>
       </main>
 
+      {/* ── Modals ── */}
+      <DeleteConfirmationModal
+        confirmDeleteId={confirmDeleteId}
+        setConfirmDeleteId={setConfirmDeleteId}
+        handleDeleteConfirmed={handleDeleteConfirmed}
+        isDeleting={isDeleting}
+      />
+
+      {showCSVFormat && <CSVFormatModal onClose={() => setShowCSVFormat(false)} />}
+
+      {showBulkUpload && (
+        <BulkUploadModal
+          userId={userId}
+          onClose={() => setShowBulkUpload(false)}
+          onSuccess={() => fetchProducts()}
+        />
+      )}
+
+      <Toaster position="top-right" reverseOrder={false} />
       <Footer />
     </div>
   );
