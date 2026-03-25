@@ -50,16 +50,45 @@ function parseUserAgent(ua: string): {
 }
 
 /**
- * Generate a stable device fingerprint.
- * Same browser + same user = same deviceId across logins.
- * NOTE: We use user._id (the actual owner), NOT adminId alias.
+ * Server-side fallback fingerprint — used ONLY when no clientDeviceId is
+ * provided (e.g. direct API calls, old clients still in the field before
+ * they have cleared their localStorage and triggered a fresh login).
+ *
+ * NOTE: This is intentionally the same algorithm as before so that existing
+ * Device documents in MongoDB remain valid — users who are already logged in
+ * will not be forced to re-authenticate on deploy.
  */
-function generateDeviceId(userId: string, userAgent: string): string {
+function generateFallbackDeviceId(userId: string, userAgent: string): string {
   return crypto
     .createHash("sha256")
     .update(`${userId}:${userAgent}`)
     .digest("hex")
     .substring(0, 32);
+}
+
+/**
+ * Sanitize a client-supplied device fingerprint.
+ *
+ * The client sends a 16-char hex string from deviceFingerprint.ts.
+ * We prefix it with "c_" so Device documents in MongoDB are visually
+ * distinguishable from legacy server-generated IDs — useful for debugging
+ * and future migrations.
+ *
+ * Rules:
+ *   - Must be a non-empty string
+ *   - Strip anything that isn't a hex character (0-9, a-f)
+ *   - Clamp to 64 chars max (our hash output is 16, but be generous)
+ *   - If after stripping it's empty, return null → fall back to server hash
+ */
+function sanitizeClientFingerprint(raw: unknown): string | null {
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+
+  // Only keep hex characters, lowercase everything
+  const cleaned = raw.toLowerCase().replace(/[^0-9a-f]/g, "").slice(0, 64);
+
+  if (cleaned.length < 8) return null; // too short to be meaningful
+
+  return `c_${cleaned}`;
 }
 
 // ─────────────────────────────────────────────
@@ -68,8 +97,11 @@ function generateDeviceId(userId: string, userAgent: string): string {
 
 export async function POST(req: Request) {
   try {
-    // Accept rememberMe flag from login form
-    const { email, password, rememberMe } = await req.json();
+    // ✅ Accept clientDeviceId from the login form alongside the existing fields.
+    //    clientDeviceId is the output of getOrCreateDeviceFingerprint() from
+    //    src/utils/deviceFingerprint.ts — a 16-char hex string generated from
+    //    canvas rendering, CPU cores, screen resolution, timezone, and locale.
+    const { email, password, rememberMe, clientDeviceId } = await req.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -122,7 +154,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 6. Resolve userId and managerId
+    // 6. Resolve userId and managerId.
     //    For admin:   userId = user._id,    no managerId
     //    For manager: userId = user.adminId (so all data queries keep working),
     //                 managerId = user._id  (manager's own identity)
@@ -140,12 +172,27 @@ export async function POST(req: Request) {
       "Unknown";
 
     const deviceOwnerId = user._id.toString(); // ALWAYS the real _id
-    const deviceId = generateDeviceId(deviceOwnerId, userAgent);
+
+    // ✅ DEVICE ID RESOLUTION — prefer the richer client fingerprint.
+    //
+    //    Priority:
+    //      1. sanitized clientDeviceId (prefixed "c_") — from deviceFingerprint.ts
+    //         Uses canvas rendering + CPU cores + screen + timezone + locale.
+    //         Distinguishes two identical MacBooks on the same WiFi.
+    //
+    //      2. server-side UA hash (no prefix) — legacy fallback.
+    //         Used for: old sessions already in the DB, direct API calls,
+    //         browsers with localStorage blocked (strict private mode).
+    //         Two identical devices on the same network → same ID (old bug).
+    //         Kept here so existing logged-in sessions don't break on deploy.
+    const sanitized = sanitizeClientFingerprint(clientDeviceId);
+    const deviceId  = sanitized ?? generateFallbackDeviceId(deviceOwnerId, userAgent);
+
     const { browser, platform, label } = parseUserAgent(userAgent);
 
     // Upsert device — create if new, update lastSeen + ip if existing.
     // IMPORTANT: $setOnInsert only sets status:"active" on brand new docs,
-    // so existing banned/blocked devices retain their status.
+    // so existing banned devices retain their status on re-login.
     const existingDevice = await Device.findOneAndUpdate(
       { userId: user._id, deviceId },
       {
@@ -160,6 +207,7 @@ export async function POST(req: Request) {
         $setOnInsert: {
           status: "active",
           blockedUntil: null,
+          revokedAt: null,
         },
       },
       { upsert: true, new: true }
@@ -199,20 +247,20 @@ export async function POST(req: Request) {
       }
     }
 
-    // 9. Include tokenVersion + deviceId in JWT
-    //    rememberMe → 90 days, otherwise 7 days
+    // 9. Include tokenVersion + deviceId in JWT.
+    //    rememberMe → 90 days, otherwise 7 days.
     const tokenVersion = user.tokenVersion ?? 0;
 
     const jwtPayload: Record<string, unknown> = {
       userId: resolvedUserId,
       role: user.role,
-      deviceId,           // device fingerprint (keyed on user._id)
-      tokenVersion,       // for force-logout detection
+      deviceId,        // ✅ now contains the client fingerprint ("c_…") when available
+      tokenVersion,
     };
 
     if (isManager) {
       jwtPayload.managerId = user._id.toString();
-      jwtPayload.adminId = resolvedUserId;
+      jwtPayload.adminId   = resolvedUserId;
     }
 
     const secret = process.env.JWT_SECRET;
@@ -224,7 +272,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Remember Me: 90 days. Otherwise: 7 days.
     const expiresIn = rememberMe ? "90d" : "7d";
     const token = jwt.sign(jwtPayload, secret, { expiresIn });
 

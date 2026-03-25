@@ -10,6 +10,7 @@ import { Mail, Lock, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { getOrCreateDeviceFingerprint } from "@/utils/deviceFingerprint";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,9 +43,15 @@ export default function LoginPage() {
     try {
       setLoading(true);
 
+      // ✅ Collect client-side device fingerprint before making the request.
+      //    This runs synchronously in < 5ms and returns a stable 16-char hex
+      //    string that is unique per physical device even when two devices share
+      //    the same browser version, OS, and IP address.
+      const clientDeviceId = getOrCreateDeviceFingerprint();
+
       const res = await fetch("/api/login", {
         method: "POST",
-        body: JSON.stringify({ ...form, rememberMe }), // ✅ pass rememberMe to API
+        body: JSON.stringify({ ...form, rememberMe, clientDeviceId }),
         headers: { "Content-Type": "application/json" },
       });
 
@@ -144,7 +151,7 @@ export default function LoginPage() {
                 />
               </div>
 
-              {/* REMEMBER ME — now clearly explains 90 days */}
+              {/* REMEMBER ME */}
               <div className="flex items-center gap-2 text-sm text-slate-300">
                 <input
                   type="checkbox"
