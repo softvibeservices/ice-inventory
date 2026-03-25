@@ -3,19 +3,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
 
 
+/* Force light mode always — this is a business dashboard, dark mode not supported */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
-
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-} 
-
 
 body {
   background: var(--background);
@@ -33,7 +26,7 @@ body {
 }
 
 
-Remove number input spinners
+/* Remove number input spinners */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -45,7 +38,7 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-@keyframes fadeIn {
+@keyframes fadeInSlide {
   from {
     opacity: 0;
     transform: translateY(-10px);
@@ -57,5 +50,5 @@ input[type="number"] {
 }
 
 .animate-fadeIn {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeInSlide 0.3s ease-out;
 }

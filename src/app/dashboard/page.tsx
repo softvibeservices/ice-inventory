@@ -1,8 +1,7 @@
 // src/app/dashboard/page.tsx
-
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import DashboardNavbar from "../components/DashboardNavbar";
 import Footer from "../components/Footer";
 import DeliveryOverview from "./DeliveryOverview";
@@ -31,6 +30,12 @@ type TabType =
   | "sticky-notes"
   | "low-stock";
 
+function getAuthHeaders(): HeadersInit {
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export default function DashboardPage() {
   // ========= STATE =========
   const [activeTab, setActiveTab] = useState<TabType>("delivery");
@@ -55,44 +60,44 @@ export default function DashboardPage() {
   }, []);
 
   // ========= FETCH DATA =========
-  useEffect(() => {
+  const fetchMasterData = useCallback(async () => {
     if (!userId) return;
 
-    const fetchMasterData = async () => {
-      try {
-        setLoadingOrders(true);
-        setLoadingProducts(true);
+    try {
+      setLoadingOrders(true);
+      setLoadingProducts(true);
 
-        const token = localStorage.getItem("token");
-        const headers = { Authorization: `Bearer ${token}` };
-        const [prodRes, custRes, ordersRes] = await Promise.all([
-          fetch(`/api/products`, { headers }),
-          fetch(`/api/customers`, { headers }),
-          fetch(`/api/orders`, { headers }),
-        ]);
+      const headers = getAuthHeaders();
 
-        if (!prodRes.ok) throw new Error("Products fetch failed");
-        if (!custRes.ok) throw new Error("Customers fetch failed");
-        if (!ordersRes.ok) throw new Error("Orders fetch failed");
+      const [prodRes, custRes, ordersRes] = await Promise.all([
+        fetch(`/api/products`, { headers }),
+        fetch(`/api/customers`, { headers }),
+        fetch(`/api/orders`, { headers }),
+      ]);
 
-        const prodData = await prodRes.json();
-        const custData = await custRes.json();
-        const ordersData = await ordersRes.json();
+      if (!prodRes.ok) throw new Error("Products fetch failed");
+      if (!custRes.ok) throw new Error("Customers fetch failed");
+      if (!ordersRes.ok) throw new Error("Orders fetch failed");
 
-        setProducts(Array.isArray(prodData) ? prodData : []);
-        setCustomers(Array.isArray(custData) ? custData : []);
-        setOrders(Array.isArray(ordersData) ? ordersData : []);
-      } catch (err: any) {
-        console.error(err);
-        toast.error(err?.message || "Failed to load dashboard data");
-      } finally {
-        setLoadingOrders(false);
-        setLoadingProducts(false);
-      }
-    };
+      const prodData = await prodRes.json();
+      const custData = await custRes.json();
+      const ordersData = await ordersRes.json();
 
-    fetchMasterData();
+      setProducts(Array.isArray(prodData) ? prodData : []);
+      setCustomers(Array.isArray(custData) ? custData : []);
+      setOrders(Array.isArray(ordersData) ? ordersData : []);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to load dashboard data");
+    } finally {
+      setLoadingOrders(false);
+      setLoadingProducts(false);
+    }
   }, [userId]);
+
+  useEffect(() => {
+    fetchMasterData();
+  }, [fetchMasterData]);
 
   // ========= TAB CONFIGURATION =========
   const tabs = [
@@ -144,7 +149,7 @@ export default function DashboardPage() {
   const getButtonClasses = (tabId: TabType, color: string) => {
     const isActive = activeTab === tabId;
 
-    const colorClasses = {
+    const colorClasses: Record<string, string> = {
       blue: isActive
         ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
         : "bg-white text-gray-700 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300",
@@ -163,7 +168,7 @@ export default function DashboardPage() {
     };
 
     return `flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all border relative ${
-      colorClasses[color as keyof typeof colorClasses]
+      colorClasses[color] ?? colorClasses.blue
     }`;
   };
 
@@ -171,7 +176,12 @@ export default function DashboardPage() {
   const renderTabContent = () => {
     switch (activeTab) {
       case "delivery":
-        return <DeliveryOverview orders={orders} loadingOrders={loadingOrders} />;
+        return (
+          <DeliveryOverview
+            orders={orders}
+            loadingOrders={loadingOrders}
+          />
+        );
 
       case "popular-products":
         return <MostPopularProducts />;
@@ -183,7 +193,9 @@ export default function DashboardPage() {
         return <DeliveryPartnerOverview />;
 
       case "low-stock":
-        return <LowStockAlerts products={products} loading={loadingProducts} />;
+        return (
+          <LowStockAlerts products={products} loading={loadingProducts} />
+        );
 
       case "sticky-notes":
         return (
@@ -204,12 +216,13 @@ export default function DashboardPage() {
 
       <main className="flex-grow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          {/* Tab Navigation - Button Style */}
+          {/* Tab Navigation */}
           <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
             <div className="flex flex-wrap gap-2 sm:gap-3">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
-                const showBadge = tab.id === "low-stock" && lowStockCount > 0;
+                const showBadge =
+                  tab.id === "low-stock" && lowStockCount > 0;
 
                 return (
                   <button
