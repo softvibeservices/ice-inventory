@@ -8,6 +8,19 @@ import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
 import { RestockHistory, getRestockItemProduct } from "@/types/stocks.types";
 import HistoryPdfGenerator from "./HistoryPdfGenerator";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  SlidersHorizontal,
+  X,
+  PackageOpen,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+
+const ITEMS_PER_PAGE = 10;
 
 export default function HistoryPage() {
   const [history, setHistory] = useState<RestockHistory[]>([]);
@@ -15,14 +28,12 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Filters & sorting
   const [searchDate, setSearchDate] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [thisMonthOnly, setThisMonthOnly] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Pagination
-  const ITEMS_PER_PAGE = 10;
   const [currentPage, setCurrentPage] = useState(1);
   const [viewAll, setViewAll] = useState(false);
 
@@ -42,11 +53,11 @@ export default function HistoryPage() {
     if (!userId) return;
     try {
       setLoading(true);
-     const token = localStorage.getItem("token");
-const res = await fetch(`/api/restockHistory`, {
-  headers: { "Authorization": `Bearer ${token}` },
-});
-      if (!res.ok) throw new Error("Failed to fetch history");
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/restockHistory`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setHistory(Array.isArray(data) ? data : []);
     } catch {
@@ -60,39 +71,29 @@ const res = await fetch(`/api/restockHistory`, {
     if (userId) fetchHistory();
   }, [userId]);
 
-  // Format date to DD/MM/YYYY HH:mm
   const formatDateTime = (dateStr: string) => {
     const d = new Date(dateStr);
-    const day = String(d.getDate()).padStart(2, "0");
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const year = d.getFullYear();
-    const hours = String(d.getHours()).padStart(2, "0");
-    const minutes = String(d.getMinutes()).padStart(2, "0");
-    return `${day}/${month}/${year} ${hours}:${minutes}`;
+    return d.toLocaleDateString("en-IN", {
+      day: "2-digit", month: "short", year: "numeric",
+    }) + " · " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
   };
 
-  // Apply filters
   const filteredHistory = useMemo(() => {
     return history
       .filter((h) => {
-        const formattedDate = formatDateTime(h.createdAt).split(" ")[0];
-        if (searchDate && !formattedDate.includes(searchDate)) return false;
-
         const d = new Date(h.createdAt);
+        if (searchDate) {
+          const fmt = `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+          if (!fmt.includes(searchDate)) return false;
+        }
         if (monthFilter) {
           const [year, month] = monthFilter.split("-");
-          if (d.getFullYear() !== parseInt(year) || d.getMonth() + 1 !== parseInt(month)) {
-            return false;
-          }
+          if (d.getFullYear() !== +year || d.getMonth() + 1 !== +month) return false;
         }
-
         if (thisMonthOnly) {
           const now = new Date();
-          if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) {
-            return false;
-          }
+          if (d.getFullYear() !== now.getFullYear() || d.getMonth() !== now.getMonth()) return false;
         }
-
         return true;
       })
       .sort((a, b) => {
@@ -102,32 +103,19 @@ const res = await fetch(`/api/restockHistory`, {
       });
   }, [history, searchDate, monthFilter, thisMonthOnly, sortOrder]);
 
-  // Pagination logic
   const totalPages = Math.ceil(filteredHistory.length / ITEMS_PER_PAGE);
+
   const paginatedHistory = useMemo(() => {
     if (viewAll) return filteredHistory;
-
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    return filteredHistory.slice(startIndex, endIndex);
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredHistory.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredHistory, currentPage, viewAll]);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchDate, monthFilter, thisMonthOnly, sortOrder]);
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleViewAllToggle = () => {
-    setViewAll(!viewAll);
-    setCurrentPage(1);
-  };
-
-  const handleResetFilters = () => {
+  const handleReset = () => {
     setSearchDate("");
     setMonthFilter("");
     setThisMonthOnly(false);
@@ -136,315 +124,248 @@ const res = await fetch(`/api/restockHistory`, {
     setCurrentPage(1);
   };
 
-  const renderPagination = () => {
-    if (viewAll || totalPages <= 1) return null;
-
-    const maxVisiblePages = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-
-    if (endPage - startPage + 1 < maxVisiblePages) {
-      startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
-
-    return (
-      <div className="flex items-center justify-center gap-2 my-6 flex-wrap">
-        <button
-          onClick={() => handlePageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition"
-        >
-          Previous
-        </button>
-
-        {startPage > 1 && (
-          <>
-            <button
-              onClick={() => handlePageChange(1)}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 text-gray-700 transition"
-            >
-              1
-            </button>
-            {startPage > 2 && <span className="text-gray-500 font-semibold">...</span>}
-          </>
-        )}
-
-        {Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map((page) => (
-          <button
-            key={page}
-            onClick={() => handlePageChange(page)}
-            className={`px-3 py-1.5 text-sm border rounded-lg font-medium transition ${
-              currentPage === page
-                ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-            }`}
-          >
-            {page}
-          </button>
-        ))}
-
-        {endPage < totalPages && (
-          <>
-            {endPage < totalPages - 1 && <span className="text-gray-500 font-semibold">...</span>}
-            <button
-              onClick={() => handlePageChange(totalPages)}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 text-gray-700 transition"
-            >
-              {totalPages}
-            </button>
-          </>
-        )}
-
-        <button
-          onClick={() => handlePageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition"
-        >
-          Next
-        </button>
-      </div>
-    );
-  };
+  const hasActiveFilters = searchDate || monthFilter || thisMonthOnly || sortOrder === "asc";
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <DashboardNavbar />
 
-      <main className="flex-grow max-w-7xl mx-auto w-full px-4 py-6">
-        {/* ================= HEADER ================= */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Restock History
-            </h1>
-            <p className="text-sm text-gray-600 mt-1">
-              View and manage your restocking records
-            </p>
-          </div>
+      <main className="flex-grow max-w-5xl mx-auto w-full px-4 py-6">
 
-          <div className="flex flex-wrap gap-3">
-            {filteredHistory.length === 0 ? (
-              <button
-                disabled
-                className="px-4 py-2 rounded-lg bg-gray-300 text-gray-800 font-semibold cursor-not-allowed"
-              >
-                No History to Export
-              </button>
-            ) : (
-              <HistoryPdfGenerator
-                history={filteredHistory}
-                isSingle={false}
-                fileName="ALL_STOCK_RECORDS.pdf"
-              />
-            )}
-
+        {/* ── Header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => router.push("/dashboard/stocks")}
-              className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-800 text-white font-semibold transition shadow-sm"
+              className="p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 text-gray-600 transition-colors shadow-sm"
             >
-              ← Back
+              <ArrowLeft className="w-4 h-4" />
             </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+                Restock History
+              </h1>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {filteredHistory.length} record{filteredHistory.length !== 1 ? "s" : ""} found
+              </p>
+            </div>
           </div>
-        </div>
 
-        {/* ================= FILTERS ================= */}
-        <div className="bg-white border border-gray-300 rounded-xl shadow-sm p-5 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Filters & Sort</h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-            <input
-              type="text"
-              placeholder="Search date (DD/MM/YYYY)"
-              value={searchDate}
-              onChange={(e) => setSearchDate(e.target.value)}
-              className="px-3 py-2 border border-gray-400 rounded-lg text-gray-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none transition"
-            />
-
-            <input
-              type="month"
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-400 rounded-lg text-gray-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none transition"
-            />
-
-            <label className="flex items-center gap-2 text-sm font-semibold text-gray-900 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer transition">
-              <input
-                type="checkbox"
-                checked={thisMonthOnly}
-                onChange={(e) => setThisMonthOnly(e.target.checked)}
-                className="w-4 h-4 accent-blue-600"
-              />
-              This Month Only
-            </label>
-
-            <select
-              value={sortOrder}
-              onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
-              className="px-3 py-2 border border-gray-400 rounded-lg text-gray-900 text-sm focus:ring-2 focus:ring-blue-600 outline-none bg-white transition"
-            >
-              <option value="desc">Newest First</option>
-              <option value="asc">Oldest First</option>
-            </select>
-
-            <button
-              onClick={handleResetFilters}
-              className="px-4 py-2 rounded-lg bg-gray-300 hover:bg-gray-400 text-gray-900 text-sm font-semibold transition shadow-sm"
-            >
-              Reset All
-            </button>
-          </div>
-        </div>
-
-        {/* ================= PAGINATION HEADER ================= */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 bg-white p-4 rounded-xl border border-gray-300 shadow-sm">
-          <div className="text-sm text-gray-800 font-medium">
-            Showing <span className="font-semibold text-blue-600">
-              {viewAll ? filteredHistory.length : paginatedHistory.length}
-            </span> of <span className="font-semibold">{filteredHistory.length}</span> record
-            {filteredHistory.length !== 1 ? "s" : ""}
-            {!viewAll && totalPages > 1 && (
-              <span className="ml-2 text-gray-600">
-                (Page {currentPage} of {totalPages})
-              </span>
+          <div className="flex items-center gap-2">
+            {filteredHistory.length > 0 ? (
+              <HistoryPdfGenerator history={filteredHistory} isSingle={false} fileName="ALL_STOCK_RECORDS.pdf" />
+            ) : (
+              <button disabled className="px-4 py-2 rounded-lg bg-gray-200 text-gray-400 font-semibold text-sm cursor-not-allowed">
+                No Records to Export
+              </button>
             )}
           </div>
-
-          <button
-            onClick={handleViewAllToggle}
-            className="
-              bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800
-              text-white text-sm font-semibold
-              px-5 py-2 rounded-lg
-              transition-all shadow-md hover:shadow-lg
-            "
-          >
-            {viewAll ? "📄 Show Paginated" : "📋 View All History"}
-          </button>
         </div>
 
-        {/* Pagination - Top */}
-        {renderPagination()}
+        {/* ── Filter Bar ── */}
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-5 overflow-hidden">
+          {/* Toggle Row */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-4 h-4 text-gray-500" />
+              <span className="text-sm font-semibold text-gray-700">Filters & Sort</span>
+              {hasActiveFilters && (
+                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+                  Active
+                </span>
+              )}
+            </div>
+            {showFilters
+              ? <ChevronUp className="w-4 h-4 text-gray-400" />
+              : <ChevronDown className="w-4 h-4 text-gray-400" />
+            }
+          </button>
 
-        {/* ================= CONTENT ================= */}
-        {loading ? (
-          <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="text-gray-800 font-medium mt-4">Loading history...</p>
-          </div>
-        ) : filteredHistory.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-12 text-center">
-            <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <p className="text-gray-800 font-semibold text-lg mb-2">
-              No restock history found
-            </p>
-            <p className="text-gray-600 text-sm">
-              Try adjusting your filters or add new stock records
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {paginatedHistory.map((h, index) => (
-              <div
-                key={h._id}
-                className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 overflow-hidden"
-              >
-                {/* Card Header */}
-                <div className="bg-gradient-to-r from-gray-50 to-gray-100 border-b border-gray-200 p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold">
-                          {viewAll ? filteredHistory.indexOf(h) + 1 : (currentPage - 1) * ITEMS_PER_PAGE + index + 1}
-                        </span>
-                        <p className="font-semibold text-gray-900 text-lg">
-                          {formatDateTime(h.createdAt)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 ml-9">
-                        <span className="text-xs font-medium text-gray-600 bg-gray-200 px-2 py-1 rounded">
-                          {h.items.length} item{h.items.length !== 1 ? "s" : ""}
-                        </span>
-                        <p className="text-sm text-gray-700 italic">
-                          {h.items[0]?.note || "Restocking"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 sm:ml-4">
-                      <button
-                        onClick={() =>
-                          setExpanded(expanded === h._id ? null : h._id)
-                        }
-                        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition shadow-sm flex items-center gap-2"
-                      >
-                        {expanded === h._id ? (
-                          <>
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                            </svg>
-                            Hide
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                            View
-                          </>
-                        )}
-                      </button>
-
-                      <HistoryPdfGenerator history={h} isSingle />
-                    </div>
-                  </div>
+          {/* Filter Content */}
+          {showFilters && (
+            <div className="border-t border-gray-100 px-5 py-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Date search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search date (DD/MM/YYYY)"
+                    value={searchDate}
+                    onChange={(e) => setSearchDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+                  />
                 </div>
 
-                {/* ================= EXPANDED TABLE ================= */}
-                {expanded === h._id && (
-                  <div className="p-4">
-                    <div className="overflow-x-auto rounded-lg border border-gray-200">
-                      <table className="w-full border-collapse text-sm">
-                        <thead className="bg-gradient-to-r from-gray-100 to-gray-200">
-                          <tr>
-                            <th className="px-4 py-3 text-left font-semibold text-gray-900 border-b-2 border-gray-300">
-                              #
-                            </th>
-                            <th className="px-4 py-3 text-left font-semibold text-gray-900 border-b-2 border-gray-300">
-                              Product Name
-                            </th>
-                            <th className="px-4 py-3 text-left font-semibold text-gray-900 border-b-2 border-gray-300">
-                              Category
-                            </th>
-                            <th className="px-4 py-3 text-right font-semibold text-gray-900 border-b-2 border-gray-300">
-                              Quantity
-                            </th>
+                {/* Month picker */}
+                <input
+                  type="month"
+                  value={monthFilter}
+                  onChange={(e) => setMonthFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+                />
+
+                {/* Sort order */}
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+                >
+                  <option value="desc">Newest First</option>
+                  <option value="asc">Oldest First</option>
+                </select>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2">
+                  {/* This month toggle */}
+                  <label className="flex items-center gap-2 cursor-pointer flex-1">
+                    <div
+                      onClick={() => setThisMonthOnly(!thisMonthOnly)}
+                      className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+                        thisMonthOnly ? "bg-blue-600" : "bg-gray-300"
+                      }`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${thisMonthOnly ? "translate-x-4" : ""}`} />
+                    </div>
+                    <span className="text-sm text-gray-700 font-medium">This month</span>
+                  </label>
+
+                  {hasActiveFilters && (
+                    <button
+                      onClick={handleReset}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-semibold transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Reset
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Count + View All row ── */}
+        {!loading && filteredHistory.length > 0 && (
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm text-gray-500">
+              Showing{" "}
+              <span className="font-semibold text-gray-800">
+                {viewAll ? filteredHistory.length : paginatedHistory.length}
+              </span>{" "}
+              of <span className="font-semibold text-gray-800">{filteredHistory.length}</span> records
+              {!viewAll && totalPages > 1 && (
+                <span className="text-gray-400"> · Page {currentPage} of {totalPages}</span>
+              )}
+            </p>
+            {filteredHistory.length > ITEMS_PER_PAGE && (
+              <button
+                onClick={() => { setViewAll(!viewAll); setCurrentPage(1); }}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+              >
+                {viewAll ? "Show paginated" : "View all"}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ── Content ── */}
+        {loading ? (
+          <div className="space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-20 bg-white border border-gray-200 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : filteredHistory.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-200 rounded-xl text-center">
+            <PackageOpen className="w-12 h-12 text-gray-300 mb-3" />
+            <p className="text-gray-600 font-semibold">No restock history found</p>
+            <p className="text-gray-400 text-sm mt-1">Try adjusting your filters</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {paginatedHistory.map((h, index) => {
+              const isExpanded = expanded === h._id;
+              const recordNumber = viewAll
+                ? filteredHistory.indexOf(h) + 1
+                : (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
+              const reason = h.items[0]?.note || "Restocking";
+
+              return (
+                <div
+                  key={h._id}
+                  className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden transition-shadow hover:shadow-md"
+                >
+                  {/* Card Row */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4">
+                    {/* Number badge */}
+                    <span className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-50 text-blue-700 text-xs font-bold flex items-center justify-center border border-blue-200">
+                      {recordNumber}
+                    </span>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm">
+                        {formatDateTime(h.createdAt)}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5 truncate">
+                        {reason} ·{" "}
+                        <span className="font-medium text-gray-700">
+                          {h.items.length} item{h.items.length !== 1 ? "s" : ""}
+                        </span>
+                      </p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <HistoryPdfGenerator history={h} isSingle />
+                      <button
+                        onClick={() => setExpanded(isExpanded ? null : h._id)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          isExpanded
+                            ? "bg-blue-600 text-white"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
+                      >
+                        {isExpanded ? (
+                          <><ChevronUp className="w-4 h-4" /> Hide</>
+                        ) : (
+                          <><ChevronDown className="w-4 h-4" /> View</>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded Table */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 bg-gray-50 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200">
+                            <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">#</th>
+                            <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Product</th>
+                            <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
+                            <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Quantity</th>
                           </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="divide-y divide-gray-100">
                           {h.items.map((item, i) => {
                             const product = getRestockItemProduct(item);
                             return (
-                              <tr
-                                key={typeof item.productId === "object" ? item.productId._id : item.productId}
-                                className={`border-b border-gray-200 hover:bg-blue-50 transition ${
-                                  i % 2 === 0 ? "bg-white" : "bg-gray-50"
-                                }`}
-                              >
-                                <td className="px-4 py-3 text-gray-700 font-medium">
-                                  {i + 1}
-                                </td>
-                                <td className="px-4 py-3 text-gray-900 font-semibold">
-                                  {product.name}
-                                </td>
-                                <td className="px-4 py-3 text-gray-700">
-                                  <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">
+                              <tr key={i} className="hover:bg-white transition-colors">
+                                <td className="px-5 py-3 text-gray-400 text-sm">{i + 1}</td>
+                                <td className="px-5 py-3 font-medium text-gray-900">{product.name}</td>
+                                <td className="px-5 py-3">
+                                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
                                     {product.category || "Uncategorized"}
                                   </span>
                                 </td>
-                                <td className="px-4 py-3 text-right text-gray-900 font-semibold">
-                                  {item.quantity} <span className="text-gray-600 font-normal">{product.unit}</span>
+                                <td className="px-5 py-3 text-right font-semibold text-gray-900">
+                                  {item.quantity}
+                                  <span className="text-gray-400 font-normal ml-1">{product.unit}</span>
                                 </td>
                               </tr>
                             );
@@ -452,15 +373,52 @@ const res = await fetch(`/api/restockHistory`, {
                         </tbody>
                       </table>
                     </div>
-                  </div>
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* Pagination - Bottom */}
-        {renderPagination()}
+        {/* ── Pagination ── */}
+        {!viewAll && totalPages > 1 && (
+          <div className="flex items-center justify-between mt-5 bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm">
+            <span className="text-sm text-gray-500">Page {currentPage} of {totalPages}</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => { setCurrentPage(p => p - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                disabled={currentPage === 1}
+                className="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                const page = Math.max(1, Math.min(currentPage - 2, totalPages - 4)) + i;
+                if (page > totalPages) return null;
+                return (
+                  <button
+                    key={page}
+                    onClick={() => { setCurrentPage(page); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className={`min-w-[2rem] h-8 px-2 rounded-lg text-sm font-medium transition-colors ${
+                      currentPage === page
+                        ? "bg-blue-600 text-white"
+                        : "border border-gray-200 text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => { setCurrentPage(p => p + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                disabled={currentPage === totalPages}
+                className="p-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </main>
 
       <Footer />
