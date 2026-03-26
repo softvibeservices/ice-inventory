@@ -1,4 +1,5 @@
 // src/app/api/delivery/sticky-notes/route.ts
+// src/app/api/delivery/sticky-notes/route.ts
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
@@ -9,6 +10,7 @@ import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
 interface LeanDeliveryPartner {
   _id: mongoose.Types.ObjectId;
+  name?: string;
   createdByUser?: mongoose.Types.ObjectId | string;
 }
 
@@ -65,9 +67,9 @@ export async function POST(req: Request) {
 
     await connectDB();
 
-    // createdByUser is now ObjectId
+    // ✅ Fetch partner name + createdByUser
     const partner = await DeliveryPartner.findById(partnerId)
-      .select("createdByUser")
+      .select("createdByUser name")
       .lean<LeanDeliveryPartner | null>();
 
     if (!partner || !partner.createdByUser) {
@@ -121,6 +123,9 @@ export async function POST(req: Request) {
       shopName: shopName.trim(),
       items: cleanedItems,
       totalQuantity,
+      // ✅ NEW: Creator info
+      creatorName: partner.name || "",
+      creatorRole: "delivery",
     });
 
     return NextResponse.json(note, { status: 201 });

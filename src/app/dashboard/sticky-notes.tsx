@@ -1,4 +1,7 @@
 // src/app/dashboard/sticky-notes.tsx
+
+
+// src/app/dashboard/sticky-notes.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -13,6 +16,8 @@ import {
   ChevronRight,
   Eye,
   FileText,
+  User,
+  ShieldCheck,
 } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import type {
@@ -21,6 +26,121 @@ import type {
   StickyNote,
 } from "./types";
 import StickyNoteModal from "./StickyNoteModal";
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Role → visual theme mapping
+//  Each role gets its own: background gradient, border-top color, pin color,
+//  text colors, button colors, and label.
+// ─────────────────────────────────────────────────────────────────────────────
+type CreatorRole = "admin" | "manager" | "delivery" | "unknown";
+
+interface RoleTheme {
+  label: string;
+  gradient: string;
+  borderTop: string;
+  pinBg: string;
+  pinInner: string;
+  pinNeedle: string;
+  headingText: string;
+  subText: string;
+  itemText: string;
+  boxesLabel: string;
+  boxesValue: string;
+  boxesBg: string;
+  viewBtn: string;
+  badgeBg: string;
+  badgeText: string;
+  icon: React.ReactNode;
+}
+
+function getRoleTheme(role: CreatorRole): RoleTheme {
+  switch (role) {
+    case "delivery":
+      return {
+        label: "Delivery Partner",
+        gradient: "bg-gradient-to-br from-blue-100 via-blue-50 to-blue-100",
+        borderTop: "border-t-blue-400",
+        pinBg: "bg-blue-500",
+        pinInner: "bg-blue-400",
+        pinNeedle: "bg-blue-600/40",
+        headingText: "text-blue-900",
+        subText: "text-blue-700",
+        itemText: "text-blue-800",
+        boxesLabel: "text-blue-700",
+        boxesValue: "text-blue-900",
+        boxesBg: "bg-blue-50/80",
+        viewBtn: "border-blue-400 text-blue-900 bg-blue-100/80 hover:bg-blue-200",
+        badgeBg: "bg-blue-600",
+        badgeText: "text-white",
+        icon: <Truck className="w-3 h-3" />,
+      };
+    case "manager":
+      return {
+        label: "Manager",
+        gradient: "bg-gradient-to-br from-purple-100 via-violet-50 to-purple-100",
+        borderTop: "border-t-purple-400",
+        pinBg: "bg-purple-500",
+        pinInner: "bg-purple-400",
+        pinNeedle: "bg-purple-600/40",
+        headingText: "text-purple-900",
+        subText: "text-purple-700",
+        itemText: "text-purple-800",
+        boxesLabel: "text-purple-700",
+        boxesValue: "text-purple-900",
+        boxesBg: "bg-purple-50/80",
+        viewBtn: "border-purple-400 text-purple-900 bg-purple-100/80 hover:bg-purple-200",
+        badgeBg: "bg-purple-600",
+        badgeText: "text-white",
+        icon: <User className="w-3 h-3" />,
+      };
+    case "admin":
+      return {
+        label: "Admin",
+        gradient: "bg-gradient-to-br from-yellow-100 via-yellow-50 to-amber-100",
+        borderTop: "border-t-amber-400",
+        pinBg: "bg-red-500",
+        pinInner: "bg-red-400",
+        pinNeedle: "bg-red-600/40",
+        headingText: "text-gray-800",
+        subText: "text-gray-700",
+        itemText: "text-gray-700",
+        boxesLabel: "text-amber-700",
+        boxesValue: "text-amber-900",
+        boxesBg: "bg-amber-50/80",
+        viewBtn: "border-amber-400 text-amber-900 bg-amber-100/80 hover:bg-amber-200",
+        badgeBg: "bg-amber-500",
+        badgeText: "text-white",
+        icon: <ShieldCheck className="w-3 h-3" />,
+      };
+    default:
+      return {
+        label: "Unknown",
+        gradient: "bg-gradient-to-br from-gray-100 via-gray-50 to-gray-100",
+        borderTop: "border-t-gray-400",
+        pinBg: "bg-gray-500",
+        pinInner: "bg-gray-400",
+        pinNeedle: "bg-gray-600/40",
+        headingText: "text-gray-800",
+        subText: "text-gray-700",
+        itemText: "text-gray-700",
+        boxesLabel: "text-gray-700",
+        boxesValue: "text-gray-900",
+        boxesBg: "bg-gray-50/80",
+        viewBtn: "border-gray-400 text-gray-900 bg-gray-100/80 hover:bg-gray-200",
+        badgeBg: "bg-gray-500",
+        badgeText: "text-white",
+        icon: <User className="w-3 h-3" />,
+      };
+  }
+}
+
+/** Derive the role from the note — delivery notes always have deliveryPartnerId set */
+function getNoteRole(note: StickyNote): CreatorRole {
+  if (note.deliveryPartnerId) return "delivery";
+  if (note.creatorRole === "manager") return "manager";
+  // admin, superAdmin, and any legacy notes all render as admin
+  return "admin";
+}
 
 export function StickyNotesPanel() {
   // ========= STATE =========
@@ -60,12 +180,12 @@ export function StickyNotesPanel() {
     const fetchMasterData = async () => {
       try {
         const token = localStorage.getItem("token");
-const headers = { "Authorization": `Bearer ${token}` };
-const [prodRes, custRes, notesRes] = await Promise.all([
-  fetch(`/api/products`, { headers }),
-  fetch(`/api/customers`, { headers }),
-  fetch(`/api/sticky-notes`, { headers }),
-]);
+        const headers = { "Authorization": `Bearer ${token}` };
+        const [prodRes, custRes, notesRes] = await Promise.all([
+          fetch(`/api/products`, { headers }),
+          fetch(`/api/customers`, { headers }),
+          fetch(`/api/sticky-notes`, { headers }),
+        ]);
 
         if (!prodRes.ok) throw new Error("Products fetch failed");
         if (!custRes.ok) throw new Error("Customers fetch failed");
@@ -158,15 +278,15 @@ const [prodRes, custRes, notesRes] = await Promise.all([
 
     try {
       setDeleting(true);
-     const token = localStorage.getItem("token");
-const res = await fetch("/api/sticky-notes", {
-  method: "DELETE",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
-  },
-  body: JSON.stringify({ id: noteToDelete._id }),  // userId removed
-});
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/sticky-notes", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id: noteToDelete._id }),
+      });
 
       const data = await res.json();
       if (!res.ok) {
@@ -204,21 +324,15 @@ const res = await fetch("/api/sticky-notes", {
     closeModal();
   };
 
-  const isDeliveryPartnerNote = (note: StickyNote) => {
-    return !!note.deliveryPartnerId;
-  };
-
-  // ========= NEW: CREATE BILL FROM STICKY NOTE =========
+  // ========= CREATE BILL FROM STICKY NOTE =========
   const handleCreateBill = (note: StickyNote) => {
     try {
-      // Find the customer from the customers list
       const customer = customers.find(
         c => c._id === note.customerId ||
         (c.name.toLowerCase() === note.customerName.toLowerCase() &&
          c.shopName.toLowerCase() === note.shopName.toLowerCase())
       );
 
-      // Prepare billing data with safe property access
       const billData = {
         customerId: customer?._id || note.customerId,
         customerName: note.customerName,
@@ -226,7 +340,6 @@ const res = await fetch("/api/sticky-notes", {
         address: (customer as any)?.address || (customer as any)?.shopAddress || "",
         contact: (customer as any)?.contact || (customer as any)?.contacts?.[0] || "",
         items: note.items.map(item => {
-          // Find matching product to get price
           const product = products.find(
             p => p._id === item.productId ||
             p.name.toLowerCase() === item.productName.toLowerCase()
@@ -242,16 +355,11 @@ const res = await fetch("/api/sticky-notes", {
             free: false,
           };
         }),
-        stickyNoteId: note._id, // Reference to track which sticky note was used
+        stickyNoteId: note._id,
       };
 
-      // Store in sessionStorage to pass to billing page
       sessionStorage.setItem("billFromStickyNote", JSON.stringify(billData));
-
-      // Navigate to billing page
       router.push("/dashboard/billing");
-
-    
     } catch (err: any) {
       console.error(err);
       toast.error("Failed to create bill from sticky note");
@@ -291,6 +399,28 @@ const res = await fetch("/api/sticky-notes", {
               <Plus className="w-4 h-4" />
               Add New Sticky Note
             </button>
+          </div>
+
+          {/* Color Legend */}
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { role: "admin" as CreatorRole, label: "Admin" },
+                { role: "manager" as CreatorRole, label: "Manager" },
+                { role: "delivery" as CreatorRole, label: "Delivery Partner" },
+              ] as { role: CreatorRole; label: string }[]
+            ).map(({ role, label }) => {
+              const theme = getRoleTheme(role);
+              return (
+                <span
+                  key={role}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-medium ${theme.badgeBg} ${theme.badgeText}`}
+                >
+                  {theme.icon}
+                  {label}
+                </span>
+              );
+            })}
           </div>
 
           {/* Search Bar and Controls */}
@@ -349,18 +479,13 @@ const res = await fetch("/api/sticky-notes", {
               {paginatedNotes.map((note, index) => {
                 const boxTotal = computeNoteBoxTotal(note);
                 const tiltClass = index % 3 === 0 ? "hover:rotate-[-2deg]" : index % 3 === 1 ? "hover:rotate-[2deg]" : "hover:rotate-[-1deg]";
-                const isFromDelivery = isDeliveryPartnerNote(note);
+                const role = getNoteRole(note);
+                const theme = getRoleTheme(role);
 
                 return (
                   <div
                     key={note._id}
-                    className={`relative ${
-                      isFromDelivery
-                        ? "bg-gradient-to-br from-blue-100 via-blue-50 to-blue-100"
-                        : "bg-gradient-to-br from-yellow-100 via-yellow-50 to-amber-100"
-                    } rounded-sm px-4 sm:px-5 py-5 sm:py-6 pt-8 sm:pt-10 flex flex-col gap-2 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_8px_10px_-2px_rgba(0,0,0,0.05)] hover:shadow-[0_10px_20px_-5px_rgba(0,0,0,0.15),0_15px_25px_-5px_rgba(0,0,0,0.1)] transition-all duration-300 ${tiltClass} group border-t-4 ${
-                      isFromDelivery ? "border-t-blue-400" : "border-t-amber-400"
-                    }`}
+                    className={`relative ${theme.gradient} rounded-sm px-4 sm:px-5 py-5 sm:py-6 pt-8 sm:pt-10 flex flex-col gap-2 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_8px_10px_-2px_rgba(0,0,0,0.05)] hover:shadow-[0_10px_20px_-5px_rgba(0,0,0,0.15),0_15px_25px_-5px_rgba(0,0,0,0.1)] transition-all duration-300 ${tiltClass} group border-t-4 ${theme.borderTop}`}
                     style={{
                       transform: `rotate(${index % 3 === 0 ? '-1' : index % 3 === 1 ? '1' : '-0.5'}deg)`,
                     }}
@@ -368,18 +493,10 @@ const res = await fetch("/api/sticky-notes", {
                     {/* Realistic Push Pin */}
                     <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-20">
                       <div className="relative">
-                        {/* Pin Head (circular top) */}
-                        <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full ${
-                          isFromDelivery ? "bg-blue-500" : "bg-red-500"
-                        } shadow-lg flex items-center justify-center`}>
-                          <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full ${
-                            isFromDelivery ? "bg-blue-400" : "bg-red-400"
-                          }`} />
+                        <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full ${theme.pinBg} shadow-lg flex items-center justify-center`}>
+                          <div className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full ${theme.pinInner}`} />
                         </div>
-                        {/* Pin Needle (small shadow below) */}
-                        <div className={`absolute top-5 left-1/2 -translate-x-1/2 w-0.5 h-2 ${
-                          isFromDelivery ? "bg-blue-600/40" : "bg-red-600/40"
-                        } blur-[1px]`} />
+                        <div className={`absolute top-5 left-1/2 -translate-x-1/2 w-0.5 h-2 ${theme.pinNeedle} blur-[1px]`} />
                       </div>
                     </div>
 
@@ -396,55 +513,69 @@ const res = await fetch("/api/sticky-notes", {
                       }}
                     />
 
-                    {/* Delivery Partner Badge */}
-                    {isFromDelivery && (
-                      <div className="absolute top-2 right-2 bg-blue-600 text-white rounded-full p-1.5 sm:p-2 shadow-md z-10 border-2 border-white">
-                        <Truck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                      </div>
-                    )}
+                    {/* ✅ Role Badge — top-right corner */}
+                    <div className={`absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold shadow-md z-10 border-2 border-white ${theme.badgeBg} ${theme.badgeText}`}>
+                      {theme.icon}
+                      <span>{theme.label}</span>
+                    </div>
 
                     {/* Header: Shop & Customer */}
-                    <div className="flex items-start justify-between gap-2 mt-1 sm:mt-2">
+                    <div className="flex items-start justify-between gap-2 mt-2 sm:mt-3">
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm sm:text-base font-bold truncate ${
-                          isFromDelivery ? "text-blue-900" : "text-gray-800"
-                        }`} title={note.shopName}
-                          style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}>
+                        <p
+                          className={`text-sm sm:text-base font-bold truncate ${theme.headingText}`}
+                          title={note.shopName}
+                          style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}
+                        >
                           {note.shopName}
                         </p>
-                        <p className={`text-xs sm:text-sm truncate ${
-                          isFromDelivery ? "text-blue-700" : "text-gray-700"
-                        }`} title={note.customerName}
-                          style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}>
+                        <p
+                          className={`text-xs sm:text-sm truncate ${theme.subText}`}
+                          title={note.customerName}
+                          style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}
+                        >
                           {note.customerName}
                         </p>
-                        {isFromDelivery && (
-                          <p className="text-[9px] sm:text-[10px] text-blue-600 flex items-center gap-1 mt-0.5">
+
+                        {/* ✅ Created By line */}
+                        {note.creatorName && (
+                          <p
+                            className={`text-[9px] sm:text-[10px] mt-0.5 flex items-center gap-1 font-medium ${theme.subText} opacity-80`}
+                            style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}
+                          >
+                            {theme.icon}
+                            <span>Created by {note.creatorName}</span>
+                          </p>
+                        )}
+
+                        {/* Fallback for old delivery notes without creatorName */}
+                        {!note.creatorName && role === "delivery" && (
+                          <p className={`text-[9px] sm:text-[10px] ${theme.subText} flex items-center gap-1 mt-0.5`}>
                             <Truck className="w-2 h-2 sm:w-2.5 sm:h-2.5" />
                             Delivery Partner
                           </p>
                         )}
                       </div>
-                      <div className="text-right flex-shrink-0 bg-white/60 px-2 py-1 rounded-md shadow-sm">
-                        <p className={`text-[9px] sm:text-[10px] font-medium ${
-                          isFromDelivery ? "text-blue-700" : "text-amber-700"
-                        }`}>
+
+                      {/* Box Count */}
+                      <div className={`text-right flex-shrink-0 ${theme.boxesBg} px-2 py-1 rounded-md shadow-sm`}>
+                        <p className={`text-[9px] sm:text-[10px] font-medium ${theme.boxesLabel}`}>
                           Boxes
                         </p>
-                        <p className={`text-lg sm:text-xl font-bold ${
-                          isFromDelivery ? "text-blue-900" : "text-amber-900"
-                        }`}
-                          style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}>
+                        <p
+                          className={`text-lg sm:text-xl font-bold ${theme.boxesValue}`}
+                          style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}
+                        >
                           {boxTotal}
                         </p>
                       </div>
                     </div>
 
                     {/* Items Preview */}
-                    <div className={`text-[10px] sm:text-xs ${
-                      isFromDelivery ? "text-blue-800" : "text-gray-700"
-                    } mb-1 flex-1 leading-relaxed`}
-                      style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}>
+                    <div
+                      className={`text-[10px] sm:text-xs ${theme.itemText} mb-1 flex-1 leading-relaxed`}
+                      style={{ fontFamily: "'Patrick Hand', 'Comic Sans MS', cursive" }}
+                    >
                       <p className="font-medium mb-0.5">
                         {note.items.length} item{note.items.length > 1 ? "s" : ""}:
                       </p>
@@ -465,11 +596,7 @@ const res = await fetch("/api/sticky-notes", {
                       <div className="flex items-center gap-1.5 sm:gap-2">
                         <button
                           onClick={() => openEditModal(note)}
-                          className={`flex-1 text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border font-medium transition-all ${
-                            isFromDelivery
-                              ? "border-blue-400 text-blue-900 bg-blue-100/80 hover:bg-blue-200 hover:scale-105"
-                              : "border-amber-400 text-amber-900 bg-amber-100/80 hover:bg-amber-200 hover:scale-105"
-                          }`}
+                          className={`flex-1 text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border font-medium transition-all hover:scale-105 ${theme.viewBtn}`}
                         >
                           View
                         </button>
@@ -485,11 +612,7 @@ const res = await fetch("/api/sticky-notes", {
                       {/* Create Bill Button */}
                       <button
                         onClick={() => handleCreateBill(note)}
-                        className={`w-full text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border-2 font-semibold transition-all inline-flex items-center justify-center gap-1.5 ${
-                          isFromDelivery
-                            ? "border-green-500 text-green-700 bg-green-50 hover:bg-green-100 hover:border-green-600 hover:scale-105"
-                            : "border-green-500 text-green-700 bg-green-50 hover:bg-green-100 hover:border-green-600 hover:scale-105"
-                        }`}
+                        className="w-full text-[10px] sm:text-xs px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border-2 font-semibold transition-all inline-flex items-center justify-center gap-1.5 border-green-500 text-green-700 bg-green-50 hover:bg-green-100 hover:border-green-600 hover:scale-105"
                       >
                         <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         Create Bill
@@ -557,7 +680,7 @@ const res = await fetch("/api/sticky-notes", {
           <p className="text-[10px] sm:text-xs text-blue-800 leading-relaxed">
             <strong>📋 Tip:</strong> Click "Create Bill" to open the billing page with pre-filled data.
             After creating a proper bill from a sticky note, delete it to keep your workspace organized.
-            Notes with a <Truck className="w-2.5 h-2.5 sm:w-3 sm:h-3 inline mx-0.5" /> truck icon were created by delivery partners.
+            Each note's color shows who created it — check the legend above the search bar.
           </p>
         </div>
       </div>
@@ -576,51 +699,60 @@ const res = await fetch("/api/sticky-notes", {
       )}
 
       {/* Delete Confirm Modal */}
-      {noteToDelete && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-4 sm:p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-red-100 rounded-full">
-                <Trash2 className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+      {noteToDelete && (() => {
+        const role = getNoteRole(noteToDelete);
+        const theme = getRoleTheme(role);
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-4 sm:p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-red-100 rounded-full">
+                  <Trash2 className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
+                </div>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-900">
+                  Delete Sticky Note?
+                </h3>
               </div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900">
-                Delete Sticky Note?
-              </h3>
-            </div>
-            <p className="text-xs sm:text-sm text-gray-600 mb-1">
-              Are you sure you want to delete the sticky note for{" "}
-              <span className="font-semibold text-gray-900">{noteToDelete.shopName}</span>?
-            </p>
-            <p className="text-[10px] sm:text-xs text-gray-500 mb-4">
-              This action cannot be undone.
-            </p>
-            {isDeliveryPartnerNote(noteToDelete) && (
-              <div className="mb-4 p-2 sm:p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-[10px] sm:text-xs text-blue-800 font-medium flex items-center gap-1.5">
-                  <Truck className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  This note was created by a delivery partner
+              <p className="text-xs sm:text-sm text-gray-600 mb-1">
+                Are you sure you want to delete the sticky note for{" "}
+                <span className="font-semibold text-gray-900">{noteToDelete.shopName}</span>?
+              </p>
+              <p className="text-[10px] sm:text-xs text-gray-500 mb-4">
+                This action cannot be undone.
+              </p>
+
+              {/* Creator info in delete modal */}
+              <div className={`mb-4 p-2 sm:p-3 rounded-lg border`} style={{ background: "var(--badge-bg, #f0f9ff)", borderColor: "rgba(0,0,0,0.08)" }}>
+                <p className={`text-[10px] sm:text-xs font-medium flex items-center gap-1.5 ${theme.subText}`}>
+                  {theme.icon}
+                  Created by{" "}
+                  <span className="font-bold">
+                    {noteToDelete.creatorName || theme.label}
+                  </span>
+                  &nbsp;({theme.label})
                 </p>
               </div>
-            )}
-            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
-              <button
-                onClick={closeDeleteConfirm}
-                className="px-4 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                disabled={deleting}
-                className="px-4 py-2 sm:py-2.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-xs sm:text-sm font-medium text-white transition-colors shadow-sm"
-              >
-                {deleting ? "Deleting..." : "Yes, Delete"}
-              </button>
+
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3">
+                <button
+                  onClick={closeDeleteConfirm}
+                  className="px-4 py-2 sm:py-2.5 rounded-lg border border-gray-300 text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={deleting}
+                  className="px-4 py-2 sm:py-2.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-xs sm:text-sm font-medium text-white transition-colors shadow-sm"
+                >
+                  {deleting ? "Deleting..." : "Yes, Delete"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <Toaster position="top-right" reverseOrder={false} />
     </>
