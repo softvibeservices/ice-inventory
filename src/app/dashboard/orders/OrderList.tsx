@@ -1,4 +1,5 @@
 // src/app/dashboard/orders/OrderList.tsx
+
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
@@ -6,754 +7,569 @@ import OrderCard from "./OrderCard";
 import { Order, CustomerLite, TabFilter, SortMode } from "@/types/orders.type";
 import DownloadReportButton from "./DownloadReportButton";
 import RevertDeliveryModal from "./RevertDeliveryModal";
-import toast from "react-hot-toast";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Truck, RefreshCcw, Download } from "lucide-react";
 
 type OrderListProps = {
-    tab: TabFilter;
-    orders: Order[];
-    customers: CustomerLite[];
-    search: string;
-    sortMode: SortMode;
-    loading: boolean;
-    userId: string | null;                   // ✅ NEW — needed for revert API call
-    onRefresh: () => void;
-    onClearFilters: () => void;
-    onSetSearch: (search: string) => void;
-    onSetSortMode: (sortMode: SortMode) => void;
-    onDiscard: (order: Order) => void;
-    onOpenSettle: (order: Order) => void;
-    onOpenDebtSettle: (order: Order) => void;
-    onOpenView: (order: Order) => void;
-    onEdit: (order: Order) => void;
-    onChangeDeliveryStatus: (order: Order, newStatus: "Pending" | "On the Way" | "Delivered") => void;
-    unsettledOrders: Order[];
-    settledOrders: Order[];
-    debtOrders: Order[];
-    discardedOrders: Order[];
+  tab: TabFilter;
+  orders: Order[];
+  customers: CustomerLite[];
+  search: string;
+  sortMode: SortMode;
+  loading: boolean;
+  userId: string | null;
+  onRefresh: () => void;
+  onClearFilters: () => void;
+  onSetSearch: (search: string) => void;
+  onSetSortMode: (sortMode: SortMode) => void;
+  onDiscard: (order: Order) => void;
+  onOpenSettle: (order: Order) => void;
+  onOpenDebtSettle: (order: Order) => void;
+  onOpenView: (order: Order) => void;
+  onEdit: (order: Order) => void;
+  onChangeDeliveryStatus: (
+    order: Order,
+    newStatus: "Pending" | "On the Way" | "Delivered"
+  ) => void;
+  unsettledOrders: Order[];
+  settledOrders: Order[];
+  debtOrders: Order[];
+  discardedOrders: Order[];
 };
 
-// ─── Internal sort type ──────────────────────────────────────────────────────
-type InternalSortMode =
-    | "date-desc"
-    | "date-asc"
-    | "total-desc"
-    | "total-asc"
-    | "shop-asc"
-    | "shop-desc"
-    | "customer-asc"
-    | "customer-desc"
-    | "area-asc"
-    | "area-desc"
-    | "serial-asc"
-    | "serial-desc"
-    | "delivery-pending"
-    | "delivery-onway"
-    | "delivery-delivered"
-    | "settlement-cash"
-    | "settlement-bank"
-    | "settlement-debt"
-    | "discount-desc"
-    | "discount-asc"
-    | "updated-desc"
-    | "updated-asc";
+type DeliveryFilter =
+  | "All"
+  | "Pending"
+  | "On the Way"
+  | "Delivered"
+  | "Unassigned";
 
-type DeliveryFilter = "All" | "Pending" | "On the Way" | "Delivered" | "Unassigned";
-
-type SortButtonDef = {
-    label: string;
-    icon: string;
-    ascMode: InternalSortMode;
-    descMode: InternalSortMode;
-    tabs?: TabFilter[];
-};
-
-const SORT_BUTTONS: SortButtonDef[] = [
-    { label: "Date",       icon: "📅", ascMode: "date-asc",      descMode: "date-desc"      },
-    { label: "Amount",     icon: "💰", ascMode: "total-asc",     descMode: "total-desc"     },
-    { label: "Serial No.", icon: "🔢", ascMode: "serial-asc",    descMode: "serial-desc"    },
-    { label: "Customer",   icon: "👤", ascMode: "customer-asc",  descMode: "customer-desc"  },
-    { label: "Shop",       icon: "🏪", ascMode: "shop-asc",      descMode: "shop-desc"      },
-    { label: "Area",       icon: "📍", ascMode: "area-asc",      descMode: "area-desc"      },
-    { label: "Discount",   icon: "🏷️", ascMode: "discount-asc",  descMode: "discount-desc", tabs: ["Unsettled", "Settled", "Debt"] },
-    { label: "Updated",    icon: "🔄", ascMode: "updated-asc",   descMode: "updated-desc"   },
-];
-
-const DELIVERY_FILTERS: { label: string; value: DeliveryFilter; icon: string }[] = [
-    { label: "All",        value: "All",        icon: "🔘" },
-    { label: "Pending",    value: "Pending",    icon: "⏳" },
-    { label: "On the Way", value: "On the Way", icon: "🚚" },
-    { label: "Delivered",  value: "Delivered",  icon: "✅" },
-    { label: "Unassigned", value: "Unassigned", icon: "❌" },
+const DELIVERY_FILTERS: { label: string; value: DeliveryFilter }[] = [
+  { label: "All", value: "All" },
+  { label: "Pending", value: "Pending" },
+  { label: "On the Way", value: "On the Way" },
+  { label: "Delivered", value: "Delivered" },
+  { label: "Unassigned", value: "Unassigned" },
 ];
 
 export default function OrderList({
-    tab,
-    orders,
-    customers,
-    search,
-    sortMode,
-    loading,
-    userId,
-    onRefresh,
-    onClearFilters,
-    onSetSearch,
-    onSetSortMode,
-    onDiscard,
-    onOpenSettle,
-    onOpenDebtSettle,
-    onOpenView,
-    onEdit,
-    onChangeDeliveryStatus,
-    unsettledOrders,
-    settledOrders,
-    debtOrders,
-    discardedOrders,
+  tab,
+  orders,
+  customers,
+  search,
+  sortMode,
+  loading,
+  userId,
+  onRefresh,
+  onClearFilters,
+  onSetSearch,
+  onSetSortMode,
+  onDiscard,
+  onOpenSettle,
+  onOpenDebtSettle,
+  onOpenView,
+  onEdit,
+  onChangeDeliveryStatus,
+  unsettledOrders,
+  settledOrders,
+  debtOrders,
+  discardedOrders,
 }: OrderListProps) {
-    const ITEMS_PER_PAGE = 10;
-    const [currentPage,    setCurrentPage]    = useState(1);
-    const [viewAll,        setViewAll]        = useState(false);
-    const [internalSort,   setInternalSort]   = useState<InternalSortMode>("date-desc");
-    const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("All");
+  const ITEMS_PER_PAGE = 10;
 
-    // ✅ NEW — revert delivery modal state
-    const [revertOrder,    setRevertOrder]    = useState<Order | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [viewAll, setViewAll] = useState(false);
+  const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("All");
+  const [revertOrder, setRevertOrder] = useState<Order | null>(null);
 
-    // ─── customer lookup map ─────────────────────────────────────────────────
-    const customerById = useMemo(() => {
-        const map: Record<string, CustomerLite> = {};
-        for (const c of customers) { map[c._id] = c; }
-        return map;
-    }, [customers]);
+  const customerById = useMemo(() => {
+    const map: Record<string, CustomerLite> = {};
+    for (const c of customers) map[c._id] = c;
+    return map;
+  }, [customers]);
 
-    // ─── sort button handlers ────────────────────────────────────────────────
-    const handleSortClick = (btn: SortButtonDef) => {
-        const isActive = internalSort === btn.ascMode || internalSort === btn.descMode;
-        if (!isActive) {
-            setInternalSort(btn.ascMode);
-        } else {
-            setInternalSort(internalSort === btn.ascMode ? btn.descMode : btn.ascMode);
-        }
-        setCurrentPage(1);
-    };
+  const displayOrders = useMemo(() => {
+    const q = search.trim().toLowerCase();
 
-    const isButtonActive = (btn: SortButtonDef) =>
-        internalSort === btn.ascMode || internalSort === btn.descMode;
+    let list = orders.map((order) => {
+      const cust = order.customerId ? customerById[order.customerId] : undefined;
+      const area = (cust?.area || "").trim();
+      return { order, customer: cust, area, areaLower: area.toLowerCase() };
+    });
 
-    const getSortArrow = (btn: SortButtonDef): string => {
-        if (!isButtonActive(btn)) return "";
-        if (["Customer","Shop","Area","Serial No."].includes(btn.label))
-            return internalSort === btn.ascMode ? " A→Z" : " Z→A";
-        if (["Date","Updated"].includes(btn.label))
-            return internalSort === btn.ascMode ? " Old→New" : " New→Old";
-        return internalSort === btn.ascMode ? " ↑" : " ↓";
-    };
+    // Search comes from page.tsx only
+    if (q) {
+      list = list.filter(({ order, customer, areaLower }) => {
+        const hay: string[] = [
+          order.shopName || "",
+          order.customerName || "",
+          order.customerAddress || "",
+          order.customerContact || "",
+          order.orderId || "",
+          order.serialNumber || "",
+          order.remarks || "",
+          order.status || "",
+          order.deliveryStatus || "",
+        ];
 
-    const clearSort = () => {
-        setInternalSort("date-desc");
-        onSetSortMode("date-desc");
-        setCurrentPage(1);
-    };
+        if (order.settlementMethod) hay.push(order.settlementMethod);
+        if (customer?.name) hay.push(customer.name);
+        if (customer?.shopName) hay.push(customer.shopName);
+        if (customer?.shopAddress) hay.push(customer.shopAddress);
+        if (customer?.contacts?.length) hay.push(customer.contacts.join(" "));
+        if (areaLower) hay.push(areaLower);
 
-    const handleDeliveryFilterClick = (val: DeliveryFilter) => {
-        setDeliveryFilter(val);
-        setCurrentPage(1);
-    };
-
-    // ─── filtered + sorted display list ─────────────────────────────────────
-    const displayOrders = useMemo(() => {
-        const q = search.trim().toLowerCase();
-
-        let list = orders.map((order) => {
-            const cust = order.customerId ? customerById[order.customerId] : undefined;
-            const area = (cust?.area || "").trim();
-            return { order, customer: cust, area, areaLower: area.toLowerCase() };
-        });
-
-        if (q) {
-            list = list.filter(({ order, customer, areaLower }) => {
-                const hay: string[] = [
-                    order.shopName || "",
-                    order.customerName || "",
-                    order.customerAddress || "",
-                    order.customerContact || "",
-                    order.orderId || "",
-                    order.serialNumber || "",
-                    order.remarks || "",
-                    order.status || "",
-                    order.deliveryStatus || "",
-                ];
-                if (order.settlementMethod) hay.push(order.settlementMethod);
-                if (customer?.name)         hay.push(customer.name);
-                if (customer?.shopName)     hay.push(customer.shopName);
-                if (customer?.shopAddress)  hay.push(customer.shopAddress);
-                if (customer?.contacts?.length) hay.push(customer.contacts.join(" "));
-                if (areaLower) hay.push(areaLower);
-                if (order.items?.length)     for (const it of order.items)     if (it.productName) hay.push(it.productName);
-                if (order.freeItems?.length) for (const it of order.freeItems) if (it.productName) hay.push(it.productName);
-                return hay.some((t) => t && t.toLowerCase().includes(q));
-            });
+        if (order.items?.length) {
+          for (const it of order.items) {
+            if (it.productName) hay.push(it.productName);
+          }
         }
 
-        // delivery status filter
-        if (deliveryFilter !== "All") {
-            list = list.filter(({ order }) => {
-                if (deliveryFilter === "Unassigned") return !order.deliveryPartnerId;
-                if (deliveryFilter === "Pending")    return !order.deliveryStatus || order.deliveryStatus === "Pending";
-                return order.deliveryStatus === deliveryFilter;
-            });
+        if (order.freeItems?.length) {
+          for (const it of order.freeItems) {
+            if (it.productName) hay.push(it.productName);
+          }
         }
 
-        // sort
-        list.sort((a, b) => {
-            const oa = a.order, ob = b.order;
-            const cmpStr = (x?: string | null, y?: string | null) =>
-                (x ?? "").localeCompare(y ?? "", undefined, { sensitivity: "base" });
+        return hay.some((t) => t && t.toLowerCase().includes(q));
+      });
+    }
 
-            switch (internalSort) {
-                case "date-asc":    return new Date(oa.createdAt || 0).getTime() - new Date(ob.createdAt || 0).getTime();
-                case "date-desc":   return new Date(ob.createdAt || 0).getTime() - new Date(oa.createdAt || 0).getTime();
-                case "updated-asc": return new Date(oa.updatedAt || oa.createdAt || 0).getTime() - new Date(ob.updatedAt || ob.createdAt || 0).getTime();
-                case "updated-desc":return new Date(ob.updatedAt || ob.createdAt || 0).getTime() - new Date(oa.updatedAt || oa.createdAt || 0).getTime();
-                case "total-asc":   return (oa.total || 0) - (ob.total || 0);
-                case "total-desc":  return (ob.total || 0) - (oa.total || 0);
-                case "discount-asc":  return (oa.discountPercentage || 0) - (ob.discountPercentage || 0);
-                case "discount-desc": return (ob.discountPercentage || 0) - (oa.discountPercentage || 0);
-                case "shop-asc":      return cmpStr(oa.shopName, ob.shopName);
-                case "shop-desc":     return cmpStr(ob.shopName, oa.shopName);
-                case "customer-asc":  return cmpStr(oa.customerName, ob.customerName);
-                case "customer-desc": return cmpStr(ob.customerName, oa.customerName);
-                case "area-asc":      return a.areaLower.localeCompare(b.areaLower);
-                case "area-desc":     return b.areaLower.localeCompare(a.areaLower);
-                case "serial-asc":    return cmpStr(oa.serialNumber, ob.serialNumber);
-                case "serial-desc":   return cmpStr(ob.serialNumber, oa.serialNumber);
-                case "delivery-pending": {
-                    const r = (s?: string | null) => s === "Pending" ? 0 : s === "On the Way" ? 1 : s === "Delivered" ? 2 : 3;
-                    return r(oa.deliveryStatus) - r(ob.deliveryStatus);
-                }
-                case "delivery-onway": {
-                    const r = (s?: string | null) => s === "On the Way" ? 0 : s === "Pending" ? 1 : s === "Delivered" ? 2 : 3;
-                    return r(oa.deliveryStatus) - r(ob.deliveryStatus);
-                }
-                case "delivery-delivered": {
-                    const r = (s?: string | null) => s === "Delivered" ? 0 : s === "On the Way" ? 1 : s === "Pending" ? 2 : 3;
-                    return r(oa.deliveryStatus) - r(ob.deliveryStatus);
-                }
-                case "settlement-cash": {
-                    const r = (m?: string | null) => m === "Cash" ? 0 : m === "Bank/UPI" ? 1 : m === "Debt" ? 2 : 3;
-                    return r(oa.settlementMethod) - r(ob.settlementMethod);
-                }
-                case "settlement-bank": {
-                    const r = (m?: string | null) => m === "Bank/UPI" ? 0 : m === "Cash" ? 1 : m === "Debt" ? 2 : 3;
-                    return r(oa.settlementMethod) - r(ob.settlementMethod);
-                }
-                case "settlement-debt": {
-                    const r = (m?: string | null) => m === "Debt" ? 0 : m === "Cash" ? 1 : m === "Bank/UPI" ? 2 : 3;
-                    return r(oa.settlementMethod) - r(ob.settlementMethod);
-                }
-                default: return 0;
-            }
-        });
-
-        return list;
-    }, [orders, customerById, search, internalSort, deliveryFilter]);
-
-    // ─── pagination ──────────────────────────────────────────────────────────
-    const totalPages = Math.ceil(displayOrders.length / ITEMS_PER_PAGE);
-
-    const paginatedOrders = useMemo(() => {
-        if (viewAll) return displayOrders;
-        const start = (currentPage - 1) * ITEMS_PER_PAGE;
-        return displayOrders.slice(start, start + ITEMS_PER_PAGE);
-    }, [displayOrders, currentPage, viewAll]);
-
-    useEffect(() => { setCurrentPage(1); }, [search, sortMode, tab, internalSort, deliveryFilter]);
-    useEffect(() => { setDeliveryFilter("All"); }, [tab]);
-
-    const handlePageChange = (page: number) => {
-        setCurrentPage(page);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-    };
-
-    const handleViewAllToggle = () => {
-        setViewAll((v) => !v);
-        setCurrentPage(1);
-    };
-
-    const handleClearAll = () => {
-        onClearFilters();
-        setInternalSort("date-desc");
-        setDeliveryFilter("All");
-        setViewAll(false);
-        setCurrentPage(1);
-    };
-
-    const totalValue = useMemo(
-        () => displayOrders.reduce((s, { order }) => s + (order.total || 0), 0),
-        [displayOrders]
-    );
-
-    const formatCurrency = (value: number) =>
-        new Intl.NumberFormat("en-IN", {
-            style: "currency",
-            currency: "INR",
-            minimumFractionDigits: 2,
-        }).format(value);
-
-    // ─── delivery status count helpers ───────────────────────────────────────
-    const deliveryCounts = useMemo(() => {
-        const counts: Record<DeliveryFilter, number> = {
-            All: orders.length,
-            Pending: 0,
-            "On the Way": 0,
-            Delivered: 0,
-            Unassigned: 0,
-        };
-        for (const o of orders) {
-            if (o.deliveryStatus === "Pending")         counts.Pending++;
-            else if (o.deliveryStatus === "On the Way") counts["On the Way"]++;
-            else if (o.deliveryStatus === "Delivered")  counts.Delivered++;
-            else counts.Pending++;
-            if (!o.deliveryPartnerId) counts.Unassigned++;
+    // Delivery filter lives here only
+    if (deliveryFilter !== "All") {
+      list = list.filter(({ order }) => {
+        if (deliveryFilter === "Unassigned") return !order.deliveryPartnerId;
+        if (deliveryFilter === "Pending") {
+          return !order.deliveryStatus || order.deliveryStatus === "Pending";
         }
-        return counts;
-    }, [orders]);
+        return order.deliveryStatus === deliveryFilter;
+      });
+    }
 
-    // ✅ NEW — how many Delivered orders are visible in current list
-    const deliveredCount = useMemo(
-        () => orders.filter((o) => o.deliveryStatus === "Delivered").length,
-        [orders]
-    );
+    // Sort comes from page.tsx only
+    list.sort((a, b) => {
+      const oa = a.order;
+      const ob = b.order;
 
-    // ─── pagination renderer ─────────────────────────────────────────────────
-    const renderPagination = () => {
-        if (viewAll || totalPages <= 1) return null;
+      const cmpStr = (x?: string | null, y?: string | null) =>
+        (x ?? "").localeCompare(y ?? "", undefined, { sensitivity: "base" });
 
-        const MAX = 5;
-        let startPage = Math.max(1, currentPage - Math.floor(MAX / 2));
-        let endPage   = Math.min(totalPages, startPage + MAX - 1);
-        if (endPage - startPage + 1 < MAX) startPage = Math.max(1, endPage - MAX + 1);
+      switch (sortMode) {
+        case "date-asc":
+          return (
+            new Date(oa.createdAt || 0).getTime() -
+            new Date(ob.createdAt || 0).getTime()
+          );
+        case "date-desc":
+          return (
+            new Date(ob.createdAt || 0).getTime() -
+            new Date(oa.createdAt || 0).getTime()
+          );
+        case "total-asc":
+          return (oa.total || 0) - (ob.total || 0);
+        case "total-desc":
+          return (ob.total || 0) - (oa.total || 0);
+        case "shop-asc":
+          return cmpStr(oa.shopName, ob.shopName);
+        case "shop-desc":
+          return cmpStr(ob.shopName, oa.shopName);
+        case "customer-asc":
+          return cmpStr(oa.customerName, ob.customerName);
+        case "customer-desc":
+          return cmpStr(ob.customerName, oa.customerName);
+        case "area-asc":
+          return a.areaLower.localeCompare(b.areaLower);
+        case "area-desc":
+          return b.areaLower.localeCompare(a.areaLower);
+        case "serial-asc":
+          return cmpStr(oa.serialNumber, ob.serialNumber);
+        case "serial-desc":
+          return cmpStr(ob.serialNumber, oa.serialNumber);
+        default:
+          return 0;
+      }
+    });
 
-        return (
-            <div className="flex items-center justify-center gap-2 my-6 flex-wrap">
-                <button
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition shadow-sm"
-                >
-                    ← Previous
-                </button>
+    return list;
+  }, [orders, customerById, search, deliveryFilter, sortMode]);
 
-                {startPage > 1 && (
-                    <>
-                        <button onClick={() => handlePageChange(1)} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 transition shadow-sm">1</button>
-                        {startPage > 2 && <span className="text-gray-400 font-semibold select-none">...</span>}
-                    </>
-                )}
+  const totalPages = Math.ceil(displayOrders.length / ITEMS_PER_PAGE);
 
-                {Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map((page) => (
-                    <button
-                        key={page}
-                        onClick={() => handlePageChange(page)}
-                        className={`px-3 py-2 text-sm border rounded-lg font-medium transition shadow-sm ${
-                            currentPage === page
-                                ? "bg-blue-600 text-white border-blue-600"
-                                : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                        }`}
-                    >
-                        {page}
-                    </button>
-                ))}
+  const paginatedOrders = useMemo(() => {
+    if (viewAll) return displayOrders;
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return displayOrders.slice(start, start + ITEMS_PER_PAGE);
+  }, [displayOrders, currentPage, viewAll]);
 
-                {endPage < totalPages && (
-                    <>
-                        {endPage < totalPages - 1 && <span className="text-gray-400 font-semibold select-none">...</span>}
-                        <button onClick={() => handlePageChange(totalPages)} className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-700 transition shadow-sm">{totalPages}</button>
-                    </>
-                )}
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, sortMode, tab, deliveryFilter]);
 
-                <button
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition shadow-sm"
-                >
-                    Next →
-                </button>
-            </div>
-        );
+  useEffect(() => {
+    setDeliveryFilter("All");
+  }, [tab]);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleViewAllToggle = () => {
+    setViewAll((v) => !v);
+    setCurrentPage(1);
+  };
+
+  const handleClearAll = () => {
+    onClearFilters();
+    setDeliveryFilter("All");
+    setViewAll(false);
+    setCurrentPage(1);
+  };
+
+  const totalValue = useMemo(
+    () => displayOrders.reduce((s, { order }) => s + (order.total || 0), 0),
+    [displayOrders]
+  );
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+    }).format(value);
+
+  const deliveryCounts = useMemo(() => {
+    const counts: Record<DeliveryFilter, number> = {
+      All: orders.length,
+      Pending: 0,
+      "On the Way": 0,
+      Delivered: 0,
+      Unassigned: 0,
     };
 
-    // ════════════════════════════════════════════════════════════════
-    //  RENDER
-    // ════════════════════════════════════════════════════════════════
+    for (const o of orders) {
+      if (o.deliveryStatus === "Pending") counts.Pending++;
+      else if (o.deliveryStatus === "On the Way") counts["On the Way"]++;
+      else if (o.deliveryStatus === "Delivered") counts.Delivered++;
+      else counts.Pending++;
+
+      if (!o.deliveryPartnerId) counts.Unassigned++;
+    }
+
+    return counts;
+  }, [orders]);
+
+  const deliveredCount = useMemo(
+    () => orders.filter((o) => o.deliveryStatus === "Delivered").length,
+    [orders]
+  );
+
+  const renderPagination = () => {
+    if (viewAll || totalPages <= 1) return null;
+
+    const MAX = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(MAX / 2));
+    let endPage = Math.min(totalPages, startPage + MAX - 1);
+
+    if (endPage - startPage + 1 < MAX) {
+      startPage = Math.max(1, endPage - MAX + 1);
+    }
+
     return (
-        <div className="space-y-4">
+      <div className="flex items-center justify-center gap-2 my-6 flex-wrap">
+        <button
+          onClick={() => handlePageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition"
+        >
+          ← Previous
+        </button>
 
-            {/* ── HEADER ── */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 shadow-sm">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                    {/* Stats */}
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-blue-100">
-                            <div className="text-xs text-gray-600 font-medium">Showing</div>
-                            <div className="text-lg font-bold text-blue-600">
-                                {viewAll ? displayOrders.length : paginatedOrders.length}
-                                <span className="text-sm text-gray-600 font-normal"> of {displayOrders.length}</span>
-                            </div>
-                        </div>
+        {Array.from(
+          { length: endPage - startPage + 1 },
+          (_, i) => startPage + i
+        ).map((page) => (
+          <button
+            key={page}
+            onClick={() => handlePageChange(page)}
+            className={`px-3 py-2 text-sm border rounded-lg font-medium transition ${
+              currentPage === page
+                ? "bg-blue-600 text-white border-blue-600"
+                : "border-gray-300 text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            {page}
+          </button>
+        ))}
 
-                        {!viewAll && totalPages > 1 && (
-                            <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-indigo-100">
-                                <div className="text-xs text-gray-600 font-medium">Page</div>
-                                <div className="text-lg font-bold text-indigo-600">
-                                    {currentPage} <span className="text-sm text-gray-600 font-normal">of {totalPages}</span>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-green-100">
-                            <div className="text-xs text-gray-600 font-medium">Total Value</div>
-                            <div className="text-lg font-bold text-green-600">{formatCurrency(totalValue)}</div>
-                        </div>
-
-                        {deliveryFilter !== "All" && (
-                            <div className="bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-sm">
-                                <div className="text-xs font-medium opacity-75">Delivery Filter</div>
-                                <div className="text-sm font-bold leading-tight">{deliveryFilter}</div>
-                            </div>
-                        )}
-
-                        {/* ✅ NEW — Delivered orders revert reminder badge */}
-                        {deliveredCount > 0 && (tab === "Unsettled" || tab === "Debt") && (
-                            <div className="bg-orange-50 border border-orange-200 px-4 py-2 rounded-lg shadow-sm">
-                                <div className="text-xs text-orange-600 font-medium">Delivered Orders</div>
-                                <div className="text-sm font-bold text-orange-700 flex items-center gap-1">
-                                    <RotateCcw className="w-3.5 h-3.5" />
-                                    {deliveredCount} can be reverted
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* View All button */}
-                    <button
-                        onClick={handleViewAllToggle}
-                        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-                    >
-                        {viewAll ? (
-                            <>
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
-                                Show Paginated
-                            </>
-                        ) : (
-                            <>
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-                                View All Orders
-                            </>
-                        )}
-                    </button>
-                </div>
-            </div>
-
-            {/* ── SORT BUTTONS ── */}
-            <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-1 hidden sm:inline whitespace-nowrap">Sort:</span>
-
-                    {SORT_BUTTONS.filter((btn) => !btn.tabs || btn.tabs.includes(tab as TabFilter)).map((btn) => {
-                        const active = isButtonActive(btn);
-                        return (
-                            <button
-                                key={btn.label}
-                                onClick={() => handleSortClick(btn)}
-                                className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all shadow-sm flex items-center gap-1.5 whitespace-nowrap ${
-                                    active
-                                        ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50 hover:border-gray-400"
-                                }`}
-                            >
-                                <span>{btn.icon}</span>
-                                <span>Sort by {btn.label}</span>
-                                {active && <span className="font-bold opacity-90 text-xs">{getSortArrow(btn)}</span>}
-                            </button>
-                        );
-                    })}
-
-                    {/* Delivery sort */}
-                    {(tab === "Unsettled" || tab === "Debt") && (
-                        <>
-                            <div className="h-6 w-px bg-gray-200 hidden sm:block mx-1" />
-                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:inline whitespace-nowrap">Delivery:</span>
-                            {[
-                                { label: "Pending First",    mode: "delivery-pending"   as InternalSortMode, icon: "⏳" },
-                                { label: "On the Way First", mode: "delivery-onway"     as InternalSortMode, icon: "🚚" },
-                                { label: "Delivered First",  mode: "delivery-delivered" as InternalSortMode, icon: "✅" },
-                            ].map((btn) => (
-                                <button
-                                    key={btn.mode}
-                                    onClick={() => { setInternalSort(btn.mode); setCurrentPage(1); }}
-                                    className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all shadow-sm flex items-center gap-1.5 whitespace-nowrap ${
-                                        internalSort === btn.mode
-                                            ? "bg-purple-600 text-white border-purple-600 shadow-md"
-                                            : "bg-white text-gray-700 border-gray-300 hover:bg-purple-50 hover:border-purple-300"
-                                    }`}
-                                >
-                                    <span>{btn.icon}</span><span>{btn.label}</span>
-                                </button>
-                            ))}
-                        </>
-                    )}
-
-                    {/* Settlement sort */}
-                    {tab === "Settled" && (
-                        <>
-                            <div className="h-6 w-px bg-gray-200 hidden sm:block mx-1" />
-                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider hidden sm:inline whitespace-nowrap">Payment:</span>
-                            {[
-                                { label: "Cash First",     mode: "settlement-cash" as InternalSortMode, icon: "💵" },
-                                { label: "Bank/UPI First", mode: "settlement-bank" as InternalSortMode, icon: "🏦" },
-                            ].map((btn) => (
-                                <button
-                                    key={btn.mode}
-                                    onClick={() => { setInternalSort(btn.mode); setCurrentPage(1); }}
-                                    className={`px-3 py-2 rounded-lg text-sm font-semibold border transition-all shadow-sm flex items-center gap-1.5 whitespace-nowrap ${
-                                        internalSort === btn.mode
-                                            ? "bg-green-600 text-white border-green-600 shadow-md"
-                                            : "bg-white text-gray-700 border-gray-300 hover:bg-green-50 hover:border-green-300"
-                                    }`}
-                                >
-                                    <span>{btn.icon}</span><span>{btn.label}</span>
-                                </button>
-                            ))}
-                        </>
-                    )}
-
-                    {internalSort !== "date-desc" && (
-                        <button
-                            onClick={clearSort}
-                            className="px-3 py-2 rounded-lg text-sm font-semibold border border-red-400 bg-red-500 text-white hover:bg-red-600 transition-all shadow-sm whitespace-nowrap"
-                        >
-                            ✕ Clear Sort
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {/* ── DELIVERY FILTER PILLS ── */}
-            {(tab === "Unsettled" || tab === "Debt") && (
-                <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: "thin" }}>
-                        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap mr-1 hidden sm:inline">Delivery:</span>
-                        {DELIVERY_FILTERS.map((f) => (
-                            <button
-                                key={f.value}
-                                onClick={() => handleDeliveryFilterClick(f.value)}
-                                className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-semibold border transition-all flex items-center gap-1.5 shrink-0 ${
-                                    deliveryFilter === f.value
-                                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
-                                        : "bg-white text-gray-600 border-gray-300 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700"
-                                }`}
-                            >
-                                <span>{f.icon}</span>
-                                <span>{f.label}</span>
-                                <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                                    deliveryFilter === f.value ? "bg-white/25 text-white" : "bg-gray-100 text-gray-500"
-                                }`}>
-                                    {deliveryCounts[f.value] ?? 0}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* ── SEARCH + UTILITY ROW ── */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                <div className="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-                    <input
-                        type="search"
-                        value={search}
-                        onChange={(e) => onSetSearch(e.target.value)}
-                        placeholder="🔍 Search by area, customer, shop, serial, product, contact..."
-                        className="w-full md:flex-1 md:max-w-md border border-gray-300 rounded-lg px-4 py-2.5 text-sm bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
-                    />
-
-                    <div className="flex flex-wrap gap-2 items-center">
-                        {(tab === "Unsettled" || tab === "Debt") && (
-                            <button
-                                type="button"
-                                onClick={onRefresh}
-                                className="border border-gray-300 bg-white text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 text-sm font-medium transition shadow-sm"
-                            >
-                                🔄 Refresh
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            onClick={handleClearAll}
-                            className="border border-gray-300 bg-white text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 text-sm font-medium transition shadow-sm"
-                        >
-                            ✖ Clear All
-                        </button>
-                        <DownloadReportButton tab={tab} orders={orders} customers={customers} />
-                        <DownloadReportButton
-                            tab="All"
-                            orders={orders}
-                            customers={customers}
-                            unsettledOrders={unsettledOrders}
-                            settledOrders={settledOrders}
-                            debtOrders={debtOrders}
-                            discardedOrders={discardedOrders}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* Pagination — top */}
-            {renderPagination()}
-
-            {/* ── ORDER CARDS ── */}
-            {loading ? (
-                <div className="py-16 text-center">
-                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4" />
-                    <p className="text-gray-500 text-sm font-medium">Loading orders...</p>
-                </div>
-            ) : orders.length === 0 ? (
-                <div className="bg-white border border-gray-200 rounded-xl p-12 text-center shadow-sm">
-                    <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <p className="text-gray-500 text-lg font-semibold mb-2">No {tab.toLowerCase()} orders found</p>
-                    <p className="text-gray-400 text-sm">Orders will appear here once you create them</p>
-                </div>
-            ) : displayOrders.length === 0 ? (
-                <div className="bg-white border border-gray-200 rounded-xl p-12 text-center shadow-sm">
-                    <svg className="mx-auto h-16 w-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <p className="text-gray-500 text-lg font-semibold mb-2">No orders match your search</p>
-                    <p className="text-gray-400 text-sm">Try adjusting your filters or search terms</p>
-                    <button
-                        onClick={handleClearAll}
-                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition"
-                    >
-                        Clear Filters
-                    </button>
-                </div>
-            ) : (
-                <div className="space-y-4">
-                    {paginatedOrders.map(({ order, area }, index) => {
-                        const globalIndex = viewAll
-                            ? displayOrders.findIndex((o) => o.order._id === order._id) + 1
-                            : (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
-
-                        // ✅ Is this order delivered? — show revert button
-                        const isDelivered = order.deliveryStatus === "Delivered";
-
-                        return (
-                            <div key={order._id} className="relative">
-                                {/* Order number badge */}
-                                <div className="absolute -left-2 -top-2 z-10">
-                                    <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold shadow-md">
-                                        {globalIndex}
-                                    </div>
-                                </div>
-
-                                <OrderCard
-                                    order={order}
-                                    area={area}
-                                    tab={tab}
-                                    onDiscard={onDiscard}
-                                    onOpenSettle={onOpenSettle}
-                                    onOpenDebtSettle={onOpenDebtSettle}
-                                    onOpenView={onOpenView}
-                                    onEdit={onEdit}
-                                    onChangeDeliveryStatus={onChangeDeliveryStatus}
-                                />
-
-                                {/* ✅ NEW — Revert Delivery button appears under delivered orders */}
-                                {isDelivered && userId && (
-                                    <div className="mt-1.5 flex justify-end px-1">
-                                        <button
-                                            onClick={() => setRevertOrder(order)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 hover:border-orange-300 transition shadow-sm"
-                                        >
-                                            <RotateCcw className="w-3.5 h-3.5" />
-                                            Revert Delivery
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-
-            {/* Pagination — bottom */}
-            {renderPagination()}
-
-            {/* Summary footer */}
-            {paginatedOrders.length > 0 && (
-                <div className="bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-xl p-4 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
-                        <div className="flex items-center gap-6 flex-wrap">
-                            <div>
-                                <span className="text-gray-600 font-medium">Displayed:</span>
-                                <span className="ml-2 text-gray-900 font-bold">
-                                    {viewAll ? displayOrders.length : paginatedOrders.length} order
-                                    {(viewAll ? displayOrders.length : paginatedOrders.length) !== 1 ? "s" : ""}
-                                </span>
-                            </div>
-                            <div>
-                                <span className="text-gray-600 font-medium">Page Value:</span>
-                                <span className="ml-2 text-green-600 font-bold">
-                                    {formatCurrency(paginatedOrders.reduce((s, { order }) => s + (order.total || 0), 0))}
-                                </span>
-                            </div>
-                            {deliveryFilter !== "All" && (
-                                <div>
-                                    <span className="text-gray-600 font-medium">Delivery:</span>
-                                    <span className="ml-2 text-indigo-600 font-bold">{deliveryFilter}</span>
-                                </div>
-                            )}
-                            {internalSort !== "date-desc" && (
-                                <div>
-                                    <span className="text-gray-600 font-medium">Sorted by:</span>
-                                    <span className="ml-2 text-blue-600 font-bold">
-                                        {SORT_BUTTONS.find((b) => b.ascMode === internalSort || b.descMode === internalSort)?.label
-                                            ?? (internalSort.startsWith("delivery-")   ? "Delivery Status"
-                                            :  internalSort.startsWith("settlement-")  ? "Payment Method"
-                                            :  "Custom")}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                        {!viewAll && totalPages > 1 && (
-                            <div className="text-gray-600 font-medium">
-                                Viewing page <span className="text-blue-600 font-bold">{currentPage}</span> of{" "}
-                                <span className="text-blue-600 font-bold">{totalPages}</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* ✅ NEW — Revert Delivery Modal (rendered at root level so z-index works correctly) */}
-            {revertOrder && userId && (
-                <RevertDeliveryModal
-                    orderId={revertOrder._id}
-                    serialNumber={revertOrder.serialNumber}
-                    customerName={revertOrder.customerName}
-                    shopName={revertOrder.shopName}
-                    userId={userId}
-                    onClose={() => setRevertOrder(null)}
-                    onReverted={(_updatedOrder) => {
-                        setRevertOrder(null);
-                        // ✅ Refresh the full order list so the reverted status is reflected
-                        onRefresh();
-                    }}
-                />
-            )}
-        </div>
+        <button
+          onClick={() => handlePageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium transition"
+        >
+          Next →
+        </button>
+      </div>
     );
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* COMBINED TOP WORKFLOW BAR */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {/* Top Summary */}
+        <div className="px-4 py-4 bg-slate-50 border-b border-slate-200">
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+            {/* Summary chips */}
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2">
+                <span className="text-slate-500">Showing</span>{" "}
+                <span className="font-bold text-slate-900">
+                  {viewAll ? displayOrders.length : paginatedOrders.length}
+                </span>
+                <span className="text-slate-500"> / {displayOrders.length}</span>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-white px-3.5 py-2">
+                <span className="text-slate-500">Value</span>{" "}
+                <span className="font-bold text-green-700">
+                  {formatCurrency(totalValue)}
+                </span>
+              </div>
+
+              {(tab === "Unsettled" || tab === "Debt") && deliveredCount > 0 && (
+                <div className="rounded-xl border border-orange-200 bg-orange-50 px-3.5 py-2 text-orange-800">
+                  <span className="font-semibold">{deliveredCount}</span> delivered can
+                  be reverted
+                </div>
+              )}
+            </div>
+
+            {/* View toggle */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleViewAllToggle}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                {viewAll ? "Show Paginated" : "View All"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Secondary actions */}
+        <div className="px-4 py-4 bg-white">
+          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+            {/* Left info */}
+            <div className="text-sm text-slate-600">
+              {deliveryFilter !== "All" ? (
+                <>
+                  Delivery filter:{" "}
+                  <span className="font-semibold text-slate-900">
+                    {deliveryFilter} ({deliveryCounts[deliveryFilter] ?? 0})
+                  </span>
+                </>
+              ) : (
+                <>
+                  Showing{" "}
+                  <span className="font-semibold text-slate-900">
+                    {displayOrders.length}
+                  </span>{" "}
+                  filtered orders
+                </>
+              )}
+            </div>
+
+            {/* Right actions */}
+            <div className="flex flex-wrap items-center gap-2">
+              {(tab === "Unsettled" || tab === "Debt") && (
+                <div className="relative">
+                  <Truck className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <select
+                    value={deliveryFilter}
+                    onChange={(e) =>
+                      setDeliveryFilter(e.target.value as DeliveryFilter)
+                    }
+                    className="rounded-xl border border-slate-300 bg-white pl-9 pr-8 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {DELIVERY_FILTERS.map((f) => (
+                      <option key={f.value} value={f.value}>
+                        {f.label} ({deliveryCounts[f.value] ?? 0})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={onRefresh}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+              >
+                <RefreshCcw className="w-4 h-4" />
+                Refresh
+              </button>
+
+              {deliveryFilter !== "All" && (
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Clear Filter
+                </button>
+              )}
+
+              {/* Downloads always visible, responsive wrap */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="min-w-fit">
+                  <DownloadReportButton
+                    tab={tab}
+                    orders={orders}
+                    customers={customers}
+                  />
+                </div>
+
+                <div className="min-w-fit">
+                  <DownloadReportButton
+                    tab="All"
+                    orders={orders}
+                    customers={customers}
+                    unsettledOrders={unsettledOrders}
+                    settledOrders={settledOrders}
+                    debtOrders={debtOrders}
+                    discardedOrders={discardedOrders}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {renderPagination()}
+
+      {/* ORDER CARDS */}
+      {loading ? (
+        <div className="py-16 text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4" />
+          <p className="text-gray-500 text-sm font-medium">Loading orders...</p>
+        </div>
+      ) : orders.length === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center shadow-sm">
+          <p className="text-gray-500 text-lg font-semibold mb-2">
+            No {tab.toLowerCase()} orders found
+          </p>
+          <p className="text-gray-400 text-sm">
+            Orders will appear here once you create them
+          </p>
+        </div>
+      ) : displayOrders.length === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center shadow-sm">
+          <p className="text-gray-500 text-lg font-semibold mb-2">
+            No orders match your filters
+          </p>
+          <p className="text-gray-400 text-sm">
+            Try adjusting delivery filter or search terms
+          </p>
+          <button
+            onClick={handleClearAll}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-medium transition"
+          >
+            Clear Filters
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {paginatedOrders.map(({ order, area }, index) => {
+            const globalIndex = viewAll
+              ? displayOrders.findIndex((o) => o.order._id === order._id) + 1
+              : (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
+
+            const canBeRevertedByTab = tab === "Unsettled" || tab === "Debt";
+            const isDelivered = order.deliveryStatus === "Delivered";
+            const canRevertDelivery =
+              isDelivered && !!userId && canBeRevertedByTab;
+
+            return (
+              <div key={order._id} className="relative">
+                <div className="absolute -left-2 -top-2 z-10">
+                  <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-xs font-bold shadow-md">
+                    {globalIndex}
+                  </div>
+                </div>
+
+                <OrderCard
+                  order={order}
+                  area={area}
+                  tab={tab}
+                  onDiscard={onDiscard}
+                  onOpenSettle={onOpenSettle}
+                  onOpenDebtSettle={onOpenDebtSettle}
+                  onOpenView={onOpenView}
+                  onEdit={onEdit}
+                  onChangeDeliveryStatus={onChangeDeliveryStatus}
+                />
+
+                {canRevertDelivery && (
+                  <div className="mt-1.5 flex justify-end px-1">
+                    <button
+                      onClick={() => setRevertOrder(order)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 hover:border-orange-300 transition"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Revert Delivery
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {renderPagination()}
+
+      {/* FOOTER SUMMARY */}
+      {paginatedOrders.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              Displayed{" "}
+              <span className="font-semibold text-slate-900">
+                {viewAll ? displayOrders.length : paginatedOrders.length}
+              </span>{" "}
+              orders
+            </div>
+
+            <div>
+              Page Value{" "}
+              <span className="font-semibold text-green-700">
+                {formatCurrency(
+                  paginatedOrders.reduce(
+                    (s, { order }) => s + (order.total || 0),
+                    0
+                  )
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {revertOrder && userId && (
+        <RevertDeliveryModal
+          orderId={revertOrder._id}
+          serialNumber={revertOrder.serialNumber}
+          customerName={revertOrder.customerName}
+          shopName={revertOrder.shopName}
+          userId={userId}
+          onClose={() => setRevertOrder(null)}
+          onReverted={() => {
+            setRevertOrder(null);
+            onRefresh();
+          }}
+        />
+      )}
+    </div>
+  );
 }

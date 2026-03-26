@@ -55,6 +55,9 @@ export interface StickyNote {
   shopName: string;
   items: StickyNoteItem[];
   totalQuantity: number;
+    creatorName?: string;
+  creatorRole?: "admin" | "manager" | "delivery";
+
   createdAt?: string;
   updatedAt?: string;
 }

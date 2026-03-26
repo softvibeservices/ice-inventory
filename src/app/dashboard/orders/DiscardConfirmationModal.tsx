@@ -1,4 +1,5 @@
 // src/app/dashboard/orders/DiscardConfirmationModal.tsx
+
 "use client";
 
 import { Order } from "@/types/orders.type";
@@ -27,13 +28,13 @@ export default function DiscardConfirmationModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-scale-in">
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden animate-scale-in">
         {/* Header */}
-        <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-white/20 rounded-lg">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-red-100 shrink-0">
               <svg
-                className="w-6 h-6 text-white"
+                className="w-5 h-5 text-red-600"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -46,91 +47,85 @@ export default function DiscardConfirmationModal({
                 />
               </svg>
             </div>
+
             <div>
-              <h2 className="text-xl font-bold text-white">Discard Order?</h2>
-              <p className="text-sm text-red-100">This action cannot be undone</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="px-6 py-6">
-          <div className="space-y-4">
-            {/* Warning Message */}
-            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <svg
-                    className="h-5 w-5 text-red-500"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <div className="ml-3">
-                  <p className="text-sm text-red-700 font-medium">
-                    <strong>Warning:</strong> Discarding this order will:
-                  </p>
-                  <ul className="mt-2 text-xs text-red-600 list-disc list-inside space-y-1">
-                    <li>Revert stock quantities</li>
-                    <li>Remove from customer's debit</li>
-                    <li>Mark as permanently discarded</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* Order Details */}
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <h3 className="font-semibold text-gray-900 text-sm mb-3">
-                Order Details
-              </h3>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-gray-600 text-xs">Serial Number</p>
-                  <p className="font-semibold text-gray-900">{order.serialNumber}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600 text-xs">Amount</p>
-                  <p className="font-semibold text-gray-900">
-                    {formatCurrency(order.total)}
-                  </p>
-                </div>
-                <div className="col-span-2">
-                  <p className="text-gray-600 text-xs">Customer</p>
-                  <p className="font-semibold text-gray-900">{order.customerName}</p>
-                  <p className="text-gray-700 text-xs">{order.shopName}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Confirmation Text */}
-            <div className="text-center py-2">
-              <p className="text-sm text-gray-700">
-                Are you absolutely sure you want to discard this order?
+              <h2 className="text-lg font-bold text-gray-900">
+                Discard Order
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                This action should only be used if the order is invalid or no longer needed.
               </p>
             </div>
           </div>
+
+          <button
+            onClick={onCancel}
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="px-5 py-4 space-y-4">
+          {/* Order Summary */}
+          <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="inline-flex items-center rounded-full bg-gray-900 text-white text-[11px] font-bold px-2.5 py-1 mb-2">
+                  #{order.serialNumber || "-"}
+                </div>
+
+                <div className="text-sm font-semibold text-gray-900 truncate">
+                  {order.customerName || "-"}
+                </div>
+                <div className="text-sm text-gray-600 truncate">
+                  {order.shopName || "-"}
+                </div>
+              </div>
+
+              <div className="text-right shrink-0">
+                <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">
+                  Amount
+                </div>
+                <div className="text-lg font-bold text-gray-900">
+                  {formatCurrency(order.total)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Warning Box */}
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm font-semibold text-red-800 mb-2">
+              This will:
+            </p>
+            <ul className="text-xs text-red-700 space-y-1 list-disc list-inside">
+              <li>Revert stock quantities</li>
+              <li>Remove this order from customer debit/settlement flow</li>
+              <li>Move the order into discarded records</li>
+            </ul>
+          </div>
+
+          {/* Confirmation */}
+          <p className="text-sm text-gray-700">
+            Are you sure you want to discard this order?
+          </p>
         </div>
 
         {/* Footer */}
-        <div className="bg-gray-50 px-6 py-4 flex flex-col sm:flex-row gap-3 sm:justify-end border-t border-gray-200">
+        <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
           <button
             onClick={onCancel}
-            className="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+            className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-red-600 to-red-700 rounded-lg hover:from-red-700 hover:to-red-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-all shadow-md hover:shadow-lg"
+            className="w-full sm:w-auto px-4 py-2.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 transition"
           >
-            Yes, Discard Order
+            Discard Order
           </button>
         </div>
       </div>
@@ -139,7 +134,7 @@ export default function DiscardConfirmationModal({
         @keyframes scale-in {
           from {
             opacity: 0;
-            transform: scale(0.95);
+            transform: scale(0.97);
           }
           to {
             opacity: 1;
@@ -148,7 +143,7 @@ export default function DiscardConfirmationModal({
         }
 
         .animate-scale-in {
-          animation: scale-in 0.2s ease-out;
+          animation: scale-in 0.18s ease-out;
         }
       `}</style>
     </div>

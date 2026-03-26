@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import StickyNote from "@/models/StickyNote";
+import User from "@/models/User";
 import { verifyUserRequest } from "@/lib/userAuth";
 
 function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
@@ -20,6 +21,14 @@ export async function POST(req: Request) {
     await connectDB();
     const body = await req.json();
     const { customerId, customerName, shopName, items } = body;
+
+    // ✅ superAdmin is the software owner — they never create sticky notes
+    if (auth.role === "superAdmin") {
+      return NextResponse.json(
+        { error: "Super admins cannot create sticky notes." },
+        { status: 403 }
+      );
+    }
 
     if (!customerName || !shopName) {
       return NextResponse.json(
@@ -63,6 +72,21 @@ export async function POST(req: Request) {
       0
     );
 
+    // ✅ Fetch the creator's name from the User collection
+    // For managers: auth.managerId holds the actual manager _id
+    // For admins:   auth.userId holds their _id
+    const isManager = auth.role === "manager" && !!auth.managerId;
+    const creatorDbId = isManager ? auth.managerId! : auth.userId;
+    const creatorRole: "admin" | "manager" = isManager ? "manager" : "admin";
+
+    let creatorName = "";
+    try {
+      const creatorUser = await User.findById(creatorDbId).select("name").lean() as { name?: string } | null;
+      creatorName = creatorUser?.name || "";
+    } catch {
+      // fallback: leave blank
+    }
+
     const note = await StickyNote.create({
       userId: new mongoose.Types.ObjectId(auth.userId),
       customerId: toObjectId(customerId),
@@ -70,6 +94,8 @@ export async function POST(req: Request) {
       shopName: shopName.trim(),
       items: cleanedItems,
       totalQuantity,
+      creatorName,
+      creatorRole,
     });
 
     return NextResponse.json(note, { status: 201 });

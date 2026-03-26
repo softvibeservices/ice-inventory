@@ -1,7 +1,7 @@
-// src/app/components/CustomerViewModal.tsx
+// src/app/dashboard/customers/CustomerViewModal.tsx
 "use client";
 
-import { X, Trash2, MapPin } from "lucide-react";
+import { X, Trash2, MapPin, Phone, Building2, TrendingUp, StickyNote } from "lucide-react";
 import { useEffect } from "react";
 import { Customer } from "@/types/customer.type";
 
@@ -12,7 +12,7 @@ interface Props {
 }
 
 const formatCurrency = (v?: number) => {
-  if (typeof v !== "number" || Number.isNaN(v)) return "-";
+  if (typeof v !== "number" || Number.isNaN(v)) return "—";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
@@ -20,18 +20,15 @@ const formatCurrency = (v?: number) => {
     maximumFractionDigits: 2,
   }).format(v);
 };
-export default function CustomerViewModal({
-  customer,
-  onClose,
-  onDelete,
-}: Props) {
+
+const initials = (name: string) =>
+  name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
+export default function CustomerViewModal({ customer, onClose, onDelete }: Props) {
   if (!customer) return null;
 
-  // ✅ close modal on pressing ESC key
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
@@ -39,156 +36,145 @@ export default function CustomerViewModal({
   const openInMap = () => {
     if (customer?.location?.latitude && customer?.location?.longitude) {
       const { latitude, longitude } = customer.location;
-      window.open(
-        `https://www.google.com/maps?q=${latitude},${longitude}`,
-        "_blank"
-      );
+      window.open(`https://www.google.com/maps?q=${latitude},${longitude}`, "_blank");
     }
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-white rounded-xl shadow-xl flex flex-col max-h-[80vh]"
+        className="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animate-fadeIn overflow-hidden"
       >
-        {/* ================= HEADER ================= */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <div>
-            <h3 className="text-base font-bold text-slate-900">
-              {customer.name}
-            </h3>
-            <p className="text-sm text-slate-700">
+        {/* Header */}
+        <div className="relative flex items-start gap-4 px-5 pt-5 pb-4 border-b border-slate-100">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700 text-base font-bold">
+            {initials(customer.name)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-bold text-slate-900 leading-tight">{customer.name}</h3>
+            <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-1">
+              <Building2 size={12} className="shrink-0" />
               {customer.shopName}
             </p>
           </div>
-  
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100"
+            className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
           >
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
-  
-        {/* ================= BODY ================= */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4 text-sm">
-  
-          {/* CONTACTS */}
-          <div>
-            <div className="font-semibold text-slate-800 mb-1">
-              Contacts
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+          {/* Financial Summary */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-3 text-center">
+              <div className="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-1">Credit</div>
+              <div className="text-sm font-bold text-emerald-700">{formatCurrency(customer.credit)}</div>
             </div>
-  
-            {customer.contacts && customer.contacts.length > 0 ? (
-              <ul className="space-y-1">
+            <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-3 text-center">
+              <div className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-1">Debit</div>
+              <div className="text-sm font-bold text-red-600">{formatCurrency(customer.debit)}</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-3 text-center">
+              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Sales</div>
+              <div className="text-sm font-bold text-slate-700">{formatCurrency(customer.totalSales)}</div>
+            </div>
+          </div>
+
+          {/* Contacts */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Phone size={13} className="text-slate-400" />
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Contacts</span>
+            </div>
+            {customer.contacts?.length > 0 ? (
+              <div className="space-y-2">
                 {customer.contacts.map((contact, index) => (
-                  <li
-                    key={index}
-                    className="text-slate-900 flex items-center gap-2"
-                  >
-                    <span className="text-xs text-slate-500">
+                  <div key={index} className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2.5">
+                    <span className="text-xs font-semibold text-slate-400 w-12 shrink-0">
                       {index === 0 ? "Primary" : `Alt ${index}`}
                     </span>
-                    <span className="font-medium">{contact}</span>
-                  </li>
+                    <span className="text-sm font-medium text-slate-800">{contact}</span>
+                    <a
+                      href={`tel:${contact}`}
+                      className="ml-auto text-xs text-blue-500 hover:text-blue-700 font-medium transition"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Call
+                    </a>
+                  </div>
                 ))}
-              </ul>
+              </div>
             ) : (
-              <div className="text-slate-600">-</div>
+              <p className="text-sm text-slate-400">No contacts recorded</p>
             )}
           </div>
-  
-          {/* ADDRESS */}
-          <div className="border-t pt-3 space-y-2">
-            <div>
-              <span className="font-semibold text-slate-800">Address:</span>{" "}
-              <span className="text-slate-900">
-                {customer.shopAddress}
-              </span>
+
+          {/* Address */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <MapPin size={13} className="text-slate-400" />
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Address</span>
             </div>
-  
-            <div>
-              <span className="font-semibold text-slate-800">Area:</span>{" "}
-              <span className="text-slate-900">
-                {customer.area || "-"}
-              </span>
-            </div>
-  
-            <div>
-              <span className="font-semibold text-slate-800">Location:</span>{" "}
+            <div className="rounded-lg bg-slate-50 px-3 py-3 space-y-1.5">
+              <p className="text-sm text-slate-800">{customer.shopAddress}</p>
+              {customer.area && (
+                <span className="inline-block rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600 font-medium">
+                  {customer.area}
+                </span>
+              )}
               {customer.location?.latitude && customer.location?.longitude ? (
                 <button
                   onClick={openInMap}
-                  className="inline-flex items-center gap-1 text-blue-700 hover:underline"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition mt-1"
                 >
-                  <MapPin size={14} />
-                  View on map
+                  <MapPin size={12} />
+                  View on Google Maps
                 </button>
               ) : (
-                <span className="text-slate-600">Not provided</span>
+                <p className="text-xs text-slate-400 mt-1">No GPS coordinates</p>
               )}
             </div>
           </div>
-  
-          {/* FINANCIALS */}
-          <div className="grid grid-cols-3 gap-3 text-center border-t pt-3">
+
+          {/* Remarks */}
+          {customer.remarks && (
             <div>
-              <div className="text-xs text-slate-600">Credit</div>
-              <div className="font-bold text-green-700">
-                {formatCurrency(customer.credit)}
+              <div className="flex items-center gap-2 mb-2">
+                <StickyNote size={13} className="text-slate-400" />
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Remarks</span>
+              </div>
+              <div className="rounded-lg bg-amber-50 border border-amber-100 px-3 py-2.5">
+                <p className="text-sm text-amber-800">{customer.remarks}</p>
               </div>
             </div>
-  
-            <div>
-              <div className="text-xs text-slate-600">Debit</div>
-              <div className="font-bold text-red-700">
-                {formatCurrency(customer.debit)}
-              </div>
-            </div>
-  
-            <div>
-              <div className="text-xs text-slate-600">Sales</div>
-              <div className="font-bold text-slate-900">
-                {formatCurrency(customer.totalSales)}
-              </div>
-            </div>
-          </div>
-  
-          {/* REMARKS */}
-          <div className="border-t pt-3">
-            <div className="font-semibold text-slate-800 mb-1">
-              Remarks
-            </div>
-            <div className="text-slate-900">
-              {customer.remarks || "-"}
-            </div>
-          </div>
+          )}
         </div>
-  
-        {/* ================= FOOTER ================= */}
-        <div className="border-t px-4 py-3 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 rounded border text-slate-800 hover:bg-slate-50 text-sm"
-          >
-            Close
-          </button>
-  
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-slate-100 bg-slate-50/60">
           <button
             onClick={() => onDelete(customer._id)}
-            className="px-3 py-1.5 rounded bg-red-100 text-red-800 hover:bg-red-200 text-sm flex items-center gap-1"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-50 transition"
           >
-            <Trash2 size={14} /> Delete
+            <Trash2 size={14} />
+            Delete
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+          >
+            Close
           </button>
         </div>
       </div>
     </div>
   );
-  
-  
-  
 }

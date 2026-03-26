@@ -1,4 +1,5 @@
 // src/app/dashboard/orders/OrderModals.tsx
+
 "use client";
 
 import { Order, SettlementMethod, OrderLineItem } from "@/types/orders.type";
@@ -7,8 +8,8 @@ import DeliveryStatusBadge from "./DeliveryStatusBadge";
 type CashBankMethod = "Cash" | "Bank/UPI";
 
 type OrderModalsProps = {
-  settleOrder: Order | null;  
-  settleMethod: SettlementMethod | null;     
+  settleOrder: Order | null;
+  settleMethod: SettlementMethod | null;
   settleAmount: string;
   debtSettleOrder: Order | null;
   debtSettleMethod: CashBankMethod | null;
@@ -24,7 +25,7 @@ type OrderModalsProps = {
   onConfirmDebtSettle: () => void;
   onCloseView: () => void;
   getPackUnitForItem: (it: OrderLineItem) => string | undefined;
-  parsePackUnit: (packUnit?: string) => { value: number; unit: string } | undefined; // ✅ CHANGED: unit is string
+  parsePackUnit: (packUnit?: string) => { value: number; unit: string } | undefined;
 };
 
 export default function OrderModals({
@@ -50,7 +51,12 @@ export default function OrderModals({
   const fmt = (n: number) => {
     const num = Number(n || 0);
     if (Number.isNaN(num)) return "₹0.00";
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(num);
   };
 
   const fmtNum = (n: number) => {
@@ -59,147 +65,346 @@ export default function OrderModals({
     return String(Number(n.toFixed(2)).toString());
   };
 
+  const renderMethodButton = (
+    label: string,
+    selected: boolean,
+    onClick: () => void,
+    activeClass: string
+  ) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-2 text-sm rounded-lg border font-medium transition ${
+        selected
+          ? activeClass
+          : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  const renderCompactOrderInfo = (order: Order) => (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-1.5">
+            <span className="inline-flex items-center rounded-full bg-gray-900 text-white text-[11px] font-bold px-2.5 py-1">
+              #{order.serialNumber || "-"}
+            </span>
+            <DeliveryStatusBadge status={order.deliveryStatus} />
+          </div>
+
+          <div className="text-sm font-semibold text-gray-900 truncate">
+            {order.customerName || "-"}
+          </div>
+          <div className="text-sm text-gray-600 truncate">
+            {order.shopName || "-"}
+          </div>
+        </div>
+
+        <div className="text-right shrink-0">
+          <div className="text-[11px] uppercase tracking-wide text-gray-500 font-semibold">
+            Total
+          </div>
+          <div className="text-lg font-bold text-green-700">
+            {fmt(order.total)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <>
-      {/* SETTLEMENT MODAL for UNSETTLED */}
+      {/* SETTLE ORDER */}
       {settleOrder && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-5">
-            <h2 className="text-lg font-semibold mb-2 text-gray-900">Settle Order {settleOrder.serialNumber}</h2>
-            <p className="text-sm text-gray-700 mb-3">Bill Total: <span className="font-semibold">{fmt(settleOrder.total)}</span></p>
-            <div className="mb-4">
-              <div className="text-sm font-bold mb-1 text-gray-700">Select settlement method:</div>
-              <div className="flex flex-wrap gap-2">
-                {(["Cash", "Bank/UPI", "Debt"] as SettlementMethod[]).map((m) => (
-                  <button key={m} type="button" onClick={() => onSetSettleMethod(m)} className={`px-3 py-1.5 text-xs rounded-md border transition ${settleMethod === m ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}>{m}</button>
-                ))}
-              </div>
-            </div>
-            {(settleMethod === "Cash" || settleMethod === "Bank/UPI") && (
-              <div className="mb-4">
-                <label className="block text-sm font-bold mb-1 text-gray-700">Amount received</label>
-                <input type="number" min={0} step="any" value={settleAmount} onChange={(e) => onSetSettleAmount(e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm text-gray-900" />
-                <p className="text-xs text-gray-500 mt-1 font-bold">If amount is less than bill total, remaining amount will be kept as <strong>Debt</strong>. If amount &gt; customer debit, extra will be added to customer's credit.</p>
-              </div>
-            )}
-            {settleMethod === "Debt" && (
-              <p className="text-xs text-gray-600 mb-4">Entire bill amount will stay in customer's debit, but this order will be marked as <strong>Debt</strong> and appear in the <strong>Debt</strong> tab.</p>
-            )}
-            <div className="flex justify-end gap-2 mt-2">
-              <button type="button" onClick={onCloseSettle} className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button type="button" onClick={onConfirmSettle} disabled={!settleMethod} className="px-3 py-1.5 text-sm rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-60">Confirm</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SETTLEMENT MODAL for DEBT tab */}
-      {debtSettleOrder && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-5">
-            <h2 className="text-lg font-semibold mb-2 text-gray-900">Settle Debt Order {debtSettleOrder.serialNumber}</h2>
-            <p className="text-sm text-gray-700 mb-3">Bill Total: <span className="font-semibold">{fmt(debtSettleOrder.total)}</span></p>
-            <p className="text-xs text-gray-500 mb-2">This order is currently in <strong>Debt</strong>. Any amount you receive will reduce the remaining amount. Once the total paid is greater than or equal to bill total, this order will move to the <strong>Settled</strong> tab.</p>
-            <div className="mb-4">
-              <div className="text-sm font-bold mb-1 text-gray-600">Select settlement method:</div>
-              <div className="flex flex-wrap gap-2">
-                {(["Cash", "Bank/UPI"] as CashBankMethod[]).map((m) => (
-                  <button key={m} type="button" onClick={() => onSetDebtSettleMethod(m)} className={`px-3 py-1.5 text-xs rounded-md border transition ${debtSettleMethod === m ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}>{m}</button>
-                ))}
-              </div>
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-bold mb-1 text-gray-700">Amount received</label>
-              <input type="number" min={0} step="any" value={debtSettleAmount} onChange={(e) => onSetDebtSettleAmount(e.target.value)} className="w-full border rounded px-3 py-1.5 text-sm text-gray-900" />
-              <p className="text-xs text-gray-700 mt-1 font-bold">If the cumulative amount received for this order becomes greater than or equal to the bill total, it will move to the <strong>Settled</strong> tab. Otherwise it will remain in <strong>Debt</strong>.</p>
-            </div>
-            <div className="flex justify-end gap-2 mt-2">
-              <button type="button" onClick={onCloseDebtSettle} className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button type="button" onClick={onConfirmDebtSettle} disabled={!debtSettleMethod} className="px-3 py-1.5 text-sm rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-60">Confirm</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW ORDER MODAL (items + free items) */}
-      {viewOrder && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg max-w-lg w-full p-5 max-h-[80vh] overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-2 text-gray-900">Order Details – {viewOrder.serialNumber}</h2>
-            <p className="text-sm text-gray-700 mb-3">{viewOrder.shopName} — {viewOrder.customerName}</p>
-            <div className="space-y-3 text-sm text-gray-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <div>
-                <div className="font-semibold mb-1">Items:</div>
-                {viewOrder.items && viewOrder.items.length > 0 ? (
-                  <ul className="list-disc list-inside space-y-1">
-                    {viewOrder.items.map((it, idx) => {
-                      const packUnitStr = getPackUnitForItem(it);
-                      const parsed = parsePackUnit(packUnitStr);
-                      const isBoxItem = it.unit === "box" || parsed?.unit === "box";
-
-                      let qtyDisplay = "";
-                      if (isBoxItem) {
-                        qtyDisplay = `${it.quantity} box`;
-                      } else if (parsed && parsed.unit) {
-                        qtyDisplay = `${it.quantity} / ${fmtNum(parsed.value)} ${parsed.unit.toUpperCase()}`;
-                      } else {
-                        qtyDisplay = it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
-                      }
-
-                      return (
-                        <li key={idx}>
-                          {it.productName} —{" "}
-                          <span className="font-semibold">{qtyDisplay}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <div className="text-xs text-gray-500">No main items recorded.</div>
-                )}
+                <h2 className="text-lg font-bold text-gray-900">Settle Order</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Choose how to close this bill
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={onCloseSettle}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              {renderCompactOrderInfo(settleOrder)}
 
               <div>
-                <div className="font-semibold mb-1">Free Items:</div>
-                {viewOrder.freeItems && viewOrder.freeItems.length > 0 ? (
-                  <ul className="list-disc list-inside space-y-1">
-                    {viewOrder.freeItems.map((it, idx) => {
-                      const packUnitStr = getPackUnitForItem(it);
-                      const parsed = parsePackUnit(packUnitStr);
-                      const isBoxItem = it.unit === "box" || parsed?.unit === "box";
-
-                      let qtyDisplay = "";
-                      if (isBoxItem) {
-                        qtyDisplay = `${it.quantity} box`;
-                      } else if (parsed && parsed.unit) {
-                        qtyDisplay = `${it.quantity} / ${fmtNum(parsed.value)} ${parsed.unit.toUpperCase()}`;
-                      } else {
-                        qtyDisplay = it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
-                      }
-
-                      return (
-                        <li key={idx}>
-                          {it.productName} —{" "}
-                          <span className="font-semibold">{qtyDisplay}</span>{" "}
-                          <span className="text-xs text-green-700">(FREE)</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <div className="text-xs text-gray-500">No free items for this order.</div>
-                )}
+                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                  Settlement Method
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {(["Cash", "Bank/UPI", "Debt"] as SettlementMethod[]).map((m) =>
+                    renderMethodButton(
+                      m,
+                      settleMethod === m,
+                      () => onSetSettleMethod(m),
+                      m === "Debt"
+                        ? "bg-amber-100 text-amber-800 border-amber-300"
+                        : "bg-blue-600 text-white border-blue-600"
+                    )
+                  )}
+                </div>
               </div>
 
-              {viewOrder.deliveryStatus && (
-                <div className="mt-2">
-                  <div className="font-semibold">Delivery Status:</div>
-                  <div className="mt-1"><DeliveryStatusBadge status={viewOrder.deliveryStatus} /></div>
+              {(settleMethod === "Cash" || settleMethod === "Bank/UPI") && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-2">
+                    Amount Received
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={settleAmount}
+                    onChange={(e) => onSetSettleAmount(e.target.value)}
+                    placeholder="Enter amount"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 transition"
+                  />
+                  <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                    Remaining amount will stay in <strong>Debt</strong> if not fully paid.
+                  </p>
+                </div>
+              )}
+
+              {settleMethod === "Debt" && (
+                <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2.5">
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    This order will move to the <strong>Debt</strong> tab.
+                  </p>
                 </div>
               )}
             </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <button type="button" onClick={onCloseView} className="px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">Close</button>
+
+            <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex flex-col-reverse sm:flex-row justify-end gap-2">
+              <button
+                type="button"
+                onClick={onCloseSettle}
+                className="w-full sm:w-auto px-4 py-2.5 text-sm rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 font-medium transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmSettle}
+                disabled={!settleMethod}
+                className="w-full sm:w-auto px-4 py-2.5 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 font-semibold transition disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DEBT SETTLE */}
+      {debtSettleOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Settle Debt</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Record received payment
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onCloseDebtSettle}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              {renderCompactOrderInfo(debtSettleOrder)}
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                  Payment Method
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {(["Cash", "Bank/UPI"] as CashBankMethod[]).map((m) =>
+                    renderMethodButton(
+                      m,
+                      debtSettleMethod === m,
+                      () => onSetDebtSettleMethod(m),
+                      "bg-blue-600 text-white border-blue-600"
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-2">
+                  Amount Received
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={debtSettleAmount}
+                  onChange={(e) => onSetDebtSettleAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition"
+                />
+                <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                  If fully paid, this order will move to <strong>Settled</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex flex-col-reverse sm:flex-row justify-end gap-2">
+              <button
+                type="button"
+                onClick={onCloseDebtSettle}
+                className="w-full sm:w-auto px-4 py-2.5 text-sm rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 font-medium transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onConfirmDebtSettle}
+                disabled={!debtSettleMethod}
+                className="w-full sm:w-auto px-4 py-2.5 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 font-semibold transition disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW ORDER */}
+      {viewOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Order Details</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Quick order breakdown
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onCloseView}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-5 py-4 max-h-[calc(85vh-130px)] overflow-y-auto space-y-4">
+              {renderCompactOrderInfo(viewOrder)}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* ITEMS */}
+                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                    <h3 className="text-sm font-semibold text-gray-900">Items</h3>
+                  </div>
+
+                  <div className="p-3 space-y-2">
+                    {viewOrder.items && viewOrder.items.length > 0 ? (
+                      viewOrder.items.map((it, idx) => {
+                        const packUnitStr = getPackUnitForItem(it);
+                        const parsed = parsePackUnit(packUnitStr);
+                        const isBoxItem = it.unit === "box" || parsed?.unit === "box";
+
+                        let qtyDisplay = "";
+                        if (isBoxItem) {
+                          qtyDisplay = `${it.quantity} box`;
+                        } else if (parsed && parsed.unit) {
+                          qtyDisplay = `${it.quantity} / ${fmtNum(parsed.value)} ${parsed.unit.toUpperCase()}`;
+                        } else {
+                          qtyDisplay = it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
+                        }
+
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-start justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
+                          >
+                            <div className="text-sm text-gray-900 break-words">
+                              {it.productName}
+                            </div>
+                            <div className="text-sm font-semibold text-gray-700 shrink-0">
+                              {qtyDisplay}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-sm text-gray-500">No main items recorded.</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* FREE ITEMS */}
+                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-100 bg-green-50">
+                    <h3 className="text-sm font-semibold text-green-800">Free Items</h3>
+                  </div>
+
+                  <div className="p-3 space-y-2">
+                    {viewOrder.freeItems && viewOrder.freeItems.length > 0 ? (
+                      viewOrder.freeItems.map((it, idx) => {
+                        const packUnitStr = getPackUnitForItem(it);
+                        const parsed = parsePackUnit(packUnitStr);
+                        const isBoxItem = it.unit === "box" || parsed?.unit === "box";
+
+                        let qtyDisplay = "";
+                        if (isBoxItem) {
+                          qtyDisplay = `${it.quantity} box`;
+                        } else if (parsed && parsed.unit) {
+                          qtyDisplay = `${it.quantity} / ${fmtNum(parsed.value)} ${parsed.unit.toUpperCase()}`;
+                        } else {
+                          qtyDisplay = it.unit ? `${it.quantity} ${it.unit}` : `${it.quantity}`;
+                        }
+
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-start justify-between gap-3 rounded-lg border border-green-100 bg-green-50 px-3 py-2.5"
+                          >
+                            <div className="text-sm text-gray-900 break-words">
+                              {it.productName}
+                            </div>
+                            <div className="text-sm font-semibold text-green-700 shrink-0">
+                              {qtyDisplay}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="text-sm text-gray-500">No free items for this order.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+              <button
+                type="button"
+                onClick={onCloseView}
+                className="w-full sm:w-auto px-4 py-2.5 text-sm rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 font-medium transition"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

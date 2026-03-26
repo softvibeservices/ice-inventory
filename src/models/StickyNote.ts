@@ -1,4 +1,5 @@
 // src/models/StickyNote.ts
+// src/models/StickyNote.ts
 import mongoose, { Schema, Document, models, Model } from "mongoose";
 
 export interface IStickyNoteItem {
@@ -16,6 +17,9 @@ export interface IStickyNote extends Document {
   items: IStickyNoteItem[];
   totalQuantity: number;
   deliveryPartnerId?: mongoose.Types.ObjectId;
+  // ✅ NEW: Creator info for color-coded display
+  creatorName?: string;
+  creatorRole?: "admin" | "manager" | "delivery";
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -39,6 +43,13 @@ const StickyNoteSchema = new Schema(
     shopName: { type: String, required: true, trim: true },
     items: { type: [StickyNoteItemSchema], default: [] },
     totalQuantity: { type: Number, required: true, min: 0, default: 0 },
+    // ✅ NEW: Who created this note and in what role
+    creatorName: { type: String, trim: true, default: "" },
+    creatorRole: {
+      type: String,
+      enum: ["admin", "manager", "delivery"],
+      default: "admin",
+    },
   },
   { timestamps: true }
 );
@@ -47,7 +58,7 @@ const StickyNote: Model<IStickyNote> =
   (models.StickyNote as Model<IStickyNote>) ||
   mongoose.model<IStickyNote>("StickyNote", StickyNoteSchema);
 
-  // ✅ Compound index for StickyNote
+// ✅ Compound index for StickyNote
 StickyNoteSchema.index({ userId: 1, deliveryPartnerId: 1 });
 
 export default StickyNote;
