@@ -1,11 +1,24 @@
 // src/app/dashboard/orders/page.tsx
+
+
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
+import {
+  ClipboardList,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  AlertCircle,
+  CheckCircle2,
+  Trash2,
+  Wallet,
+} from "lucide-react";
+
 import OrderList from "./OrderList";
 import OrderModals from "./OrderModals";
 import DiscardConfirmationModal from "./DiscardConfirmationModal";
@@ -85,7 +98,6 @@ type SortMode =
   | "serial-asc"
   | "serial-desc";
 
-// ─── helper to get token ───────────────────────────────────────────────────
 function getToken(): string {
   if (typeof window === "undefined") return "";
   return localStorage.getItem("token") ?? "";
@@ -112,32 +124,27 @@ export default function OrdersPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<CustomerLite[]>([]);
 
-  // search / sort UI state
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("date-desc");
 
-  // settlement modal state (for UNSETTLED orders)
   const [settleOrder, setSettleOrder] = useState<Order | null>(null);
   const [settleMethod, setSettleMethod] = useState<SettleMethod | null>(null);
   const [settleAmount, setSettleAmount] = useState<string>("");
 
-  // settlement modal state (for DEBT tab)
   const [debtSettleOrder, setDebtSettleOrder] = useState<Order | null>(null);
-  const [debtSettleMethod, setDebtSettleMethod] = useState<CashBankMethod | null>(null);
+  const [debtSettleMethod, setDebtSettleMethod] =
+    useState<CashBankMethod | null>(null);
   const [debtSettleAmount, setDebtSettleAmount] = useState<string>("");
 
-  // view modal state
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
-
-  // discard modal state
-  const [discardOrderToConfirm, setDiscardOrderToConfirm] = useState<Order | null>(null);
+  const [discardOrderToConfirm, setDiscardOrderToConfirm] =
+    useState<Order | null>(null);
 
   const [unsettledOrders, setUnsettledOrders] = useState<Order[]>([]);
   const [settledOrders, setSettledOrders] = useState<Order[]>([]);
   const [debtOrders, setDebtOrders] = useState<Order[]>([]);
   const [discardedOrders, setDiscardedOrders] = useState<Order[]>([]);
 
-  // ─── helpers ────────────────────────────────────────────────────────────
   const handleEditOrder = async (order: Order) => {
     try {
       sessionStorage.setItem(
@@ -166,7 +173,6 @@ export default function OrdersPage() {
         body: JSON.stringify({
           action: "changeDeliveryStatus",
           orderId: order._id,
-          // userId removed — server uses token
           deliveryStatus: newStatus,
         }),
       });
@@ -197,9 +203,7 @@ export default function OrdersPage() {
     const name = it.productName?.trim().toLowerCase();
     if (!name) return undefined;
 
-    const byName = products.find(
-      (p) => p.name.trim().toLowerCase() === name
-    );
+    const byName = products.find((p) => p.name.trim().toLowerCase() === name);
     return byName?.packUnit;
   };
 
@@ -265,8 +269,9 @@ export default function OrdersPage() {
           const byName = productsList.find(
             (p) => (p.name || "").trim().toLowerCase() === pn
           );
-          if (byName?.packUnit)
+          if (byName?.packUnit) {
             packUnitVal = parsePackUnit(byName.packUnit);
+          }
         }
       }
 
@@ -290,7 +295,6 @@ export default function OrdersPage() {
     return out;
   }
 
-  // ─── load userId from localStorage ──────────────────────────────────────
   useEffect(() => {
     try {
       const stored = localStorage.getItem("user");
@@ -309,7 +313,6 @@ export default function OrdersPage() {
     }
   }, []);
 
-  // ─── fetch products for packUnit lookup ──────────────────────────────────
   useEffect(() => {
     if (!userId) return;
 
@@ -319,8 +322,9 @@ export default function OrdersPage() {
           headers: authHeaders(),
         });
         const data = await res.json();
-        if (!res.ok)
+        if (!res.ok) {
           throw new Error(data?.error || "Failed to fetch products");
+        }
 
         let arr: any[] = [];
         if (Array.isArray(data)) arr = data;
@@ -346,7 +350,6 @@ export default function OrdersPage() {
     loadProducts();
   }, [userId]);
 
-  // ─── fetch customers (for area, etc.) ────────────────────────────────────
   useEffect(() => {
     if (!userId) return;
 
@@ -356,8 +359,9 @@ export default function OrdersPage() {
           headers: authHeaders(),
         });
         const data = await res.json();
-        if (!res.ok)
+        if (!res.ok) {
           throw new Error(data?.error || "Failed to fetch customers");
+        }
 
         const arr: CustomerLite[] = Array.isArray(data)
           ? data.map((c: any) => ({
@@ -379,14 +383,12 @@ export default function OrdersPage() {
     fetchCustomers();
   }, [userId]);
 
-  // ─── fetch orders ─────────────────────────────────────────────────────────
   const fetchOrders = async () => {
     if (!userId) return;
 
     try {
       setLoading(true);
 
-      // Fetch ALL orders (no status filter) — client filters into tabs
       const res = await fetch(`/api/orders`, {
         headers: authHeaders(),
       });
@@ -444,7 +446,6 @@ export default function OrdersPage() {
     fetchOrders();
   }, [userId, tab, products]);
 
-  // recompute quantitySummary client-side when products change
   useEffect(() => {
     if (!products || products.length === 0) return;
     setOrders((prevOrders) =>
@@ -459,7 +460,6 @@ export default function OrdersPage() {
     );
   }, [products]);
 
-  // ─── refresh current tab ─────────────────────────────────────────────────
   const refreshCurrentTab = async () => {
     if (!userId) {
       toast.error("User not loaded");
@@ -516,7 +516,6 @@ export default function OrdersPage() {
     }
   };
 
-  // ─── discard ──────────────────────────────────────────────────────────────
   const handleDiscard = (order: Order) => {
     setDiscardOrderToConfirm(order);
   };
@@ -531,7 +530,6 @@ export default function OrdersPage() {
         body: JSON.stringify({
           action: "discard",
           orderId: discardOrderToConfirm._id,
-          // userId removed — server uses token
         }),
       });
 
@@ -553,7 +551,6 @@ export default function OrdersPage() {
     }
   };
 
-  // ─── settle (unsettled tab) ───────────────────────────────────────────────
   const openSettleModal = (order: Order) => {
     setSettleOrder(order);
     setSettleMethod(null);
@@ -588,7 +585,6 @@ export default function OrdersPage() {
         body: JSON.stringify({
           action: "settle",
           orderId: settleOrder._id,
-          // userId removed — server uses token
           method: settleMethod,
           amount: amountNum,
         }),
@@ -602,13 +598,13 @@ export default function OrdersPage() {
       toast.success("Order settled successfully.");
       setOrders((prev) => prev.filter((o) => o._id !== settleOrder._id));
       closeSettleModal();
+      await fetchOrders();
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Failed to settle order");
     }
   };
 
-  // ─── settle debt tab ──────────────────────────────────────────────────────
   const openDebtSettleModal = (order: Order) => {
     setDebtSettleOrder(order);
     setDebtSettleMethod(null);
@@ -640,7 +636,6 @@ export default function OrdersPage() {
         body: JSON.stringify({
           action: "settleDebt",
           orderId: debtSettleOrder._id,
-          // userId removed — server uses token
           method: debtSettleMethod,
           amount: amountNum,
         }),
@@ -664,13 +659,13 @@ export default function OrdersPage() {
       });
 
       closeDebtSettleModal();
+      await fetchOrders();
     } catch (err: any) {
       console.error(err);
       toast.error(err?.message || "Failed to settle debt order");
     }
   };
 
-  // ─── view modal ───────────────────────────────────────────────────────────
   const openViewModal = (order: Order) => setViewOrder(order);
   const closeViewModal = () => setViewOrder(null);
 
@@ -679,85 +674,236 @@ export default function OrdersPage() {
     setSortMode("date-desc");
   };
 
-  // ─── render ───────────────────────────────────────────────────────────────
+  const tabMeta = useMemo(() => {
+    return {
+      Unsettled: {
+        label: "Unsettled",
+        count: unsettledOrders.length,
+        description: "Orders waiting for settlement",
+        icon: AlertCircle,
+        activeClass: "bg-amber-50 border-amber-200 text-amber-800",
+        iconClass: "text-amber-600",
+      },
+      Settled: {
+        label: "Settled",
+        count: settledOrders.length,
+        description: "Completed paid orders",
+        icon: CheckCircle2,
+        activeClass: "bg-green-50 border-green-200 text-green-800",
+        iconClass: "text-green-600",
+      },
+      Debt: {
+        label: "Debt",
+        count: debtOrders.length,
+        description: "Pending recovery payments",
+        icon: Wallet,
+        activeClass: "bg-blue-50 border-blue-200 text-blue-800",
+        iconClass: "text-blue-600",
+      },
+      Discarded: {
+        label: "Discarded",
+        count: discardedOrders.length,
+        description: "Removed / invalid orders",
+        icon: Trash2,
+        activeClass: "bg-red-50 border-red-200 text-red-800",
+        iconClass: "text-red-600",
+      },
+    };
+  }, [
+    unsettledOrders.length,
+    settledOrders.length,
+    debtOrders.length,
+    discardedOrders.length,
+  ]);
+
+  const currentTabMeta = tabMeta[tab];
+
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-slate-50">
       <DashboardNavbar />
 
-      <main className="flex-grow container mx-auto px-4 py-6">
-        <div className="bg-white rounded-lg shadow p-4 md:p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-            <h1 className="text-xl md:text-2xl font-bold text-gray-800">
-              Order Management
-            </h1>
+      <main className="flex-grow">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            {/* Header */}
+            <div className="px-4 sm:px-5 lg:px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-11 h-11 rounded-2xl bg-slate-900 text-white flex items-center justify-center shrink-0">
+                      <ClipboardList className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
+                        Order Management
+                      </h1>
+                      <p className="text-sm text-slate-600 mt-0.5">
+                        Manage settlement, delivery and discarded order flow in
+                        one place.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-            <div className="inline-flex rounded-md shadow-sm border border-gray-200 overflow-hidden text-sm font-medium">
-              <button
-                onClick={() => setTab("Unsettled")}
-                className={`px-3 py-1.5 ${
-                  tab === "Unsettled"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                Unsettled
-              </button>
-              <button
-                onClick={() => setTab("Settled")}
-                className={`px-3 py-1.5 border-l border-gray-200 ${
-                  tab === "Settled"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                Settled
-              </button>
-              <button
-                onClick={() => setTab("Debt")}
-                className={`px-3 py-1.5 border-l border-gray-200 ${
-                  tab === "Debt"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                Debt
-              </button>
-              <button
-                onClick={() => setTab("Discarded")}
-                className={`px-3 py-1.5 border-l border-gray-200 ${
-                  tab === "Discarded"
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                Discarded
-              </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div
+                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${currentTabMeta.activeClass}`}
+                  >
+                    <currentTabMeta.icon
+                      className={`w-4 h-4 ${currentTabMeta.iconClass}`}
+                    />
+                    <span>{currentTabMeta.label}</span>
+                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-semibold">
+                      {currentTabMeta.count}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={refreshCurrentTab}
+                    disabled={loading}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
+                  >
+                    <RotateCcw
+                      className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+                    />
+                    Refresh
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="px-4 sm:px-5 lg:px-6 py-4 border-b border-slate-200 bg-white">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {(Object.keys(tabMeta) as TabFilter[]).map((key) => {
+                  const meta = tabMeta[key];
+                  const Icon = meta.icon;
+                  const isActive = tab === key;
+
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setTab(key)}
+                      className={`text-left rounded-2xl border px-4 py-3.5 transition ${
+                        isActive
+                          ? meta.activeClass + " shadow-sm"
+                          : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Icon
+                              className={`w-4 h-4 ${
+                                isActive ? meta.iconClass : "text-slate-500"
+                              }`}
+                            />
+                            <div className="text-sm font-semibold">
+                              {meta.label}
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-500 leading-relaxed">
+                            {meta.description}
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                          {meta.count}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ONLY MASTER CONTROL BAR */}
+            <div className="px-4 sm:px-5 lg:px-6 py-4 bg-slate-50/70 border-b border-slate-200">
+              <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    {currentTabMeta.label} Orders
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {currentTabMeta.description}
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto">
+                  {/* Search */}
+                  <div className="relative w-full sm:min-w-[260px]">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Search by serial, customer, shop, contact..."
+                      className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Sort */}
+                  <div className="relative w-full sm:min-w-[220px]">
+                    <SlidersHorizontal className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <select
+                      value={sortMode}
+                      onChange={(e) => setSortMode(e.target.value as SortMode)}
+                      className="w-full appearance-none rounded-xl border border-slate-300 bg-white pl-9 pr-10 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="date-desc">Newest first</option>
+                      <option value="date-asc">Oldest first</option>
+                      <option value="total-desc">Highest amount</option>
+                      <option value="total-asc">Lowest amount</option>
+                      <option value="shop-asc">Shop A → Z</option>
+                      <option value="shop-desc">Shop Z → A</option>
+                      <option value="customer-asc">Customer A → Z</option>
+                      <option value="customer-desc">Customer Z → A</option>
+                      <option value="area-asc">Area A → Z</option>
+                      <option value="area-desc">Area Z → A</option>
+                      <option value="serial-asc">Serial low → high</option>
+                      <option value="serial-desc">Serial high → low</option>
+                    </select>
+                  </div>
+
+                  {(search || sortMode !== "date-desc") && (
+                    <button
+                      onClick={handleClearFilters}
+                      className="w-full sm:w-auto rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Order List */}
+            <div className="px-3 sm:px-4 lg:px-6 py-4 sm:py-5">
+              <OrderList
+                tab={tab}
+                orders={orders}
+                customers={customers}
+                search={search}
+                sortMode={sortMode}
+                loading={loading}
+                onRefresh={refreshCurrentTab}
+                onClearFilters={handleClearFilters}
+                onSetSearch={setSearch}
+                onSetSortMode={setSortMode}
+                onDiscard={handleDiscard}
+                onOpenSettle={openSettleModal}
+                onOpenDebtSettle={openDebtSettleModal}
+                onOpenView={openViewModal}
+                onEdit={handleEditOrder}
+                onChangeDeliveryStatus={handleChangeDeliveryStatus}
+                unsettledOrders={unsettledOrders}
+                settledOrders={settledOrders}
+                debtOrders={debtOrders}
+                discardedOrders={discardedOrders}
+                userId={userId}
+              />
             </div>
           </div>
-
-          <OrderList
-            tab={tab}
-            orders={orders}
-            customers={customers}
-            search={search}
-            sortMode={sortMode}
-            loading={loading}
-            onRefresh={refreshCurrentTab}
-            onClearFilters={handleClearFilters}
-            onSetSearch={setSearch}
-            onSetSortMode={setSortMode}
-            onDiscard={handleDiscard}
-            onOpenSettle={openSettleModal}
-            onOpenDebtSettle={openDebtSettleModal}
-            onOpenView={openViewModal}
-            onEdit={handleEditOrder}
-            onChangeDeliveryStatus={handleChangeDeliveryStatus}
-            unsettledOrders={unsettledOrders}
-            settledOrders={settledOrders}
-            debtOrders={debtOrders}
-            discardedOrders={discardedOrders}
-            userId={userId}
-          />
         </div>
       </main>
 
