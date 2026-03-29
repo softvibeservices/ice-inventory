@@ -1,63 +1,57 @@
 // src/app/api/login/route.ts
-
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import Device from "@/models/Device";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { rateLimit } from "@/lib/rateLimit";
+import { EMAIL_RE, LIMITS } from "@/lib/registerValidation";
 
-// ─────────────────────────────────────────────
-//  Helpers
-// ─────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-/**
- * Parse a user-agent string into a human-readable label + components.
- */
-function parseUserAgent(ua: string): {
-  browser: string;
-  platform: string;
-  label: string;
-} {
-  let browser = "Unknown Browser";
-  let platform = "Unknown OS";
+const MAX_BODY_BYTES      = 4_096;
+/** IP-level: 20 attempts per 15 min */
+const RATE_LIMIT_LOGIN    = { limit: 20, windowSeconds: 900 };
+/** Account-level: 5 wrong passwords → blocked for 2 hours */
+const MAX_FAILED_ATTEMPTS = 5;
+const BLOCK_DURATION_MS   = 2 * 60 * 60 * 1000; // 2 hours
 
-  // Browser detection (order matters — check Edge/Opera before Chrome)
-  if (ua.includes("Edg/") || ua.includes("Edge/")) browser = "Edge";
-  else if (ua.includes("OPR/") || ua.includes("Opera")) browser = "Opera";
-  else if (ua.includes("Chrome/") && !ua.includes("Chromium")) browser = "Chrome";
-  else if (ua.includes("Firefox/")) browser = "Firefox";
-  else if (ua.includes("Safari/") && !ua.includes("Chrome")) browser = "Safari";
-  else if (ua.includes("MSIE") || ua.includes("Trident/")) browser = "Internet Explorer";
-  else if (ua.includes("CriOS")) browser = "Chrome (iOS)";
-  else if (ua.includes("FxiOS")) browser = "Firefox (iOS)";
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  // Platform/OS detection
-  if (ua.includes("Android")) platform = "Android";
-  else if (ua.includes("iPhone")) platform = "iPhone";
-  else if (ua.includes("iPad")) platform = "iPad";
-  else if (ua.includes("Windows NT")) platform = "Windows";
-  else if (ua.includes("Mac OS X")) platform = "macOS";
-  else if (ua.includes("Linux")) platform = "Linux";
-  else if (ua.includes("CrOS")) platform = "ChromeOS";
-
-  return {
-    browser,
-    platform,
-    label: `${browser} on ${platform}`,
-  };
+function getClientIp(req: NextRequest): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown"
+  );
 }
 
-/**
- * Server-side fallback fingerprint — used ONLY when no clientDeviceId is
- * provided (e.g. direct API calls, old clients still in the field before
- * they have cleared their localStorage and triggered a fresh login).
- *
- * NOTE: This is intentionally the same algorithm as before so that existing
- * Device documents in MongoDB remain valid — users who are already logged in
- * will not be forced to re-authenticate on deploy.
- */
+function parseUserAgent(ua: string): { browser: string; platform: string; label: string } {
+  let browser  = "Unknown Browser";
+  let platform = "Unknown OS";
+
+  if      (ua.includes("Edg/") || ua.includes("Edge/"))          browser = "Edge";
+  else if (ua.includes("OPR/") || ua.includes("Opera"))          browser = "Opera";
+  else if (ua.includes("Chrome/") && !ua.includes("Chromium"))   browser = "Chrome";
+  else if (ua.includes("Firefox/"))                               browser = "Firefox";
+  else if (ua.includes("Safari/") && !ua.includes("Chrome"))     browser = "Safari";
+  else if (ua.includes("MSIE") || ua.includes("Trident/"))       browser = "Internet Explorer";
+  else if (ua.includes("CriOS"))                                  browser = "Chrome (iOS)";
+  else if (ua.includes("FxiOS"))                                  browser = "Firefox (iOS)";
+
+  if      (ua.includes("Android"))    platform = "Android";
+  else if (ua.includes("iPhone"))     platform = "iPhone";
+  else if (ua.includes("iPad"))       platform = "iPad";
+  else if (ua.includes("Windows NT")) platform = "Windows";
+  else if (ua.includes("Mac OS X"))   platform = "macOS";
+  else if (ua.includes("Linux"))      platform = "Linux";
+  else if (ua.includes("CrOS"))       platform = "ChromeOS";
+
+  return { browser, platform, label: `${browser} on ${platform}` };
+}
+
 function generateFallbackDeviceId(userId: string, userAgent: string): string {
   return crypto
     .createHash("sha256")
@@ -66,195 +60,264 @@ function generateFallbackDeviceId(userId: string, userAgent: string): string {
     .substring(0, 32);
 }
 
-/**
- * Sanitize a client-supplied device fingerprint.
- *
- * The client sends a 16-char hex string from deviceFingerprint.ts.
- * We prefix it with "c_" so Device documents in MongoDB are visually
- * distinguishable from legacy server-generated IDs — useful for debugging
- * and future migrations.
- *
- * Rules:
- *   - Must be a non-empty string
- *   - Strip anything that isn't a hex character (0-9, a-f)
- *   - Clamp to 64 chars max (our hash output is 16, but be generous)
- *   - If after stripping it's empty, return null → fall back to server hash
- */
 function sanitizeClientFingerprint(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.trim() === "") return null;
-
-  // Only keep hex characters, lowercase everything
   const cleaned = raw.toLowerCase().replace(/[^0-9a-f]/g, "").slice(0, 64);
-
-  if (cleaned.length < 8) return null; // too short to be meaningful
-
+  if (cleaned.length < 8) return null;
   return `c_${cleaned}`;
 }
 
-// ─────────────────────────────────────────────
-//  POST /api/login
-// ─────────────────────────────────────────────
+function formatTimeRemaining(ms: number): string {
+  const totalMinutes = Math.ceil(ms / 60_000);
+  if (totalMinutes >= 60) {
+    const hours   = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes > 0
+      ? `${hours} hour${hours > 1 ? "s" : ""} ${minutes} minute${minutes > 1 ? "s" : ""}`
+      : `${hours} hour${hours > 1 ? "s" : ""}`;
+  }
+  return `${totalMinutes} minute${totalMinutes > 1 ? "s" : ""}`;
+}
 
-export async function POST(req: Request) {
+// ─── Route handler ────────────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest) {
   try {
-    // ✅ Accept clientDeviceId from the login form alongside the existing fields.
-    //    clientDeviceId is the output of getOrCreateDeviceFingerprint() from
-    //    src/utils/deviceFingerprint.ts — a 16-char hex string generated from
-    //    canvas rendering, CPU cores, screen resolution, timezone, and locale.
-    const { email, password, rememberMe, clientDeviceId } = await req.json();
+    // ── 1. Body size guard ──────────────────────────────────────────────────
+    const contentLength = Number(req.headers.get("content-length") ?? 0);
+    if (contentLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Request too large." }, { status: 413 });
+    }
 
-    if (!email || !password) {
+    // ── 2. IP-level rate limit ──────────────────────────────────────────────
+    const ip = getClientIp(req);
+    const rl = rateLimit(`login:${ip}`, RATE_LIMIT_LOGIN);
+    if (!rl.allowed) {
       return NextResponse.json(
-        { error: "Email and password are required" },
-        { status: 400 }
+        {
+          error: "Too many login attempts from this network. Please wait before trying again.",
+          retryAfterSeconds: rl.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After":          String(rl.retryAfterSeconds),
+            "X-RateLimit-Remaining": "0",
+          },
+        }
       );
     }
 
+    // ── 3. Parse body ───────────────────────────────────────────────────────
+    let raw: Record<string, unknown>;
+    try {
+      raw = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    }
+
+    const { email, password, rememberMe, clientDeviceId } = raw;
+
+    // ── 4. Input validation ─────────────────────────────────────────────────
+    if (!email || typeof email !== "string" || email.trim() === "") {
+      return NextResponse.json({ error: "Email is required." }, { status: 400 });
+    }
+    if (!password || typeof password !== "string" || password.trim() === "") {
+      return NextResponse.json({ error: "Password is required." }, { status: 400 });
+    }
+
+    const emailNorm    = email.trim().toLowerCase().slice(0, LIMITS.email);
+    const passwordNorm = String(password).slice(0, LIMITS.password);
+
+    if (!EMAIL_RE.test(emailNorm)) {
+      return NextResponse.json({ error: "Invalid email format." }, { status: 400 });
+    }
+
+    // ── 5. DB lookup ────────────────────────────────────────────────────────
     await connectDB();
 
-    // 1. Find user (admin or manager)
-    const user = await User.findOne({
-      email: String(email).trim().toLowerCase(),
-    });
+    const user = await User.findOne({ email: emailNorm });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
     }
 
-    // 2. Check verified
+    // ── 6. Verified & pending checks ────────────────────────────────────────
     if (!user.isVerified) {
       return NextResponse.json(
-        { error: "User not verified" },
+        { error: "Account not verified. Please verify your email first." },
         { status: 401 }
       );
     }
 
-    // 3. Check pending
     if (user.isPending) {
       return NextResponse.json(
-        { error: "Account setup incomplete" },
+        { error: "Account setup is incomplete. Please contact support." },
         { status: 401 }
       );
     }
 
-    // 4. Check account status
+    // ── 7. Account status check ─────────────────────────────────────────────
     if (user.status === "blocked") {
-      return NextResponse.json(
-        { error: "Your account has been blocked. Please contact support." },
-        { status: 403 }
-      );
-    }
+      const unblockAt: Date | null = user.blockedUntil ?? null;
 
-    // 5. Compare password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return NextResponse.json(
-        { error: "Invalid credentials" },
-        { status: 401 }
-      );
-    }
-
-    // 6. Resolve userId and managerId.
-    //    For admin:   userId = user._id,    no managerId
-    //    For manager: userId = user.adminId (so all data queries keep working),
-    //                 managerId = user._id  (manager's own identity)
-    const isManager = user.role === "manager" && user.adminId;
-    const resolvedUserId = isManager
-      ? user.adminId!.toString()
-      : user._id.toString();
-
-    // 7. Device fingerprinting
-    //    Always keyed on user._id (the real owner), never the adminId alias.
-    const userAgent = req.headers.get("user-agent") || "Unknown";
-    const ip =
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      req.headers.get("x-real-ip") ||
-      "Unknown";
-
-    const deviceOwnerId = user._id.toString(); // ALWAYS the real _id
-
-    // ✅ DEVICE ID RESOLUTION — prefer the richer client fingerprint.
-    //
-    //    Priority:
-    //      1. sanitized clientDeviceId (prefixed "c_") — from deviceFingerprint.ts
-    //         Uses canvas rendering + CPU cores + screen + timezone + locale.
-    //         Distinguishes two identical MacBooks on the same WiFi.
-    //
-    //      2. server-side UA hash (no prefix) — legacy fallback.
-    //         Used for: old sessions already in the DB, direct API calls,
-    //         browsers with localStorage blocked (strict private mode).
-    //         Two identical devices on the same network → same ID (old bug).
-    //         Kept here so existing logged-in sessions don't break on deploy.
-    const sanitized = sanitizeClientFingerprint(clientDeviceId);
-    const deviceId  = sanitized ?? generateFallbackDeviceId(deviceOwnerId, userAgent);
-
-    const { browser, platform, label } = parseUserAgent(userAgent);
-
-    // Upsert device — create if new, update lastSeen + ip if existing.
-    // IMPORTANT: $setOnInsert only sets status:"active" on brand new docs,
-    // so existing banned devices retain their status on re-login.
-    const existingDevice = await Device.findOneAndUpdate(
-      { userId: user._id, deviceId },
-      {
-        $set: {
-          userAgent,
-          browser,
-          platform,
-          label,
-          ip,
-          lastSeen: new Date(),
-        },
-        $setOnInsert: {
-          status: "active",
-          blockedUntil: null,
-          revokedAt: null,
-        },
-      },
-      { upsert: true, new: true }
-    );
-
-    // 8. Block login if device is banned or actively blocked
-    if (existingDevice) {
-      if (existingDevice.status === "banned") {
+      if (unblockAt && unblockAt > new Date()) {
+        // Still within the temporary lockout window
+        const remaining = unblockAt.getTime() - Date.now();
         return NextResponse.json(
           {
-            error:
-              "This device has been banned from accessing your account. Please contact support.",
-            code: "DEVICE_BANNED",
+            error:    `Your account is temporarily locked due to too many failed login attempts. Try again in ${formatTimeRemaining(remaining)}.`,
+            code:     "ACCOUNT_LOCKED",
+            unblockAt: unblockAt.toISOString(),
           },
           { status: 403 }
         );
       }
 
-      if (existingDevice.status === "blocked") {
-        if (
-          existingDevice.blockedUntil &&
-          existingDevice.blockedUntil > new Date()
-        ) {
-          return NextResponse.json(
-            {
-              error: `This device is blocked until ${existingDevice.blockedUntil.toLocaleDateString()}. Please try again later.`,
-              code: "DEVICE_BLOCKED",
-            },
-            { status: 403 }
-          );
-        }
-        // Block period has expired — auto-restore
-        await Device.findOneAndUpdate(
-          { userId: user._id, deviceId },
-          { status: "active", blockedUntil: null }
+      if (unblockAt && unblockAt <= new Date()) {
+        // Temporary block has expired — auto-restore
+        await User.updateOne(
+          { _id: user._id },
+          { $set: { status: "approved", failedAttempts: 0, blockedUntil: null } }
+        );
+        user.status         = "approved";
+        user.failedAttempts = 0;
+        user.blockedUntil   = null;
+      } else {
+        // Permanent admin block (blockedUntil is null)
+        return NextResponse.json(
+          { error: "Your account has been blocked. Please contact support." },
+          { status: 403 }
         );
       }
     }
 
-    // 9. Include tokenVersion + deviceId in JWT.
-    //    rememberMe → 90 days, otherwise 7 days.
-    const tokenVersion = user.tokenVersion ?? 0;
+    if (user.status === "rejected") {
+      return NextResponse.json(
+        { error: "Your account has been rejected. Please contact support." },
+        { status: 403 }
+      );
+    }
 
+    // ── 8. Password check ───────────────────────────────────────────────────
+    const isMatch = await bcrypt.compare(passwordNorm, user.password);
+
+    if (!isMatch) {
+      // ── Atomic increment ──────────────────────────────────────────────────
+      // Using findOneAndUpdate with $inc instead of read-modify-write prevents
+      // the race condition where concurrent requests all read failedAttempts=0
+      // and all save 1, making the counter perpetually stuck at 1.
+      const updated = await User.findOneAndUpdate(
+        { _id: user._id },
+        { $inc: { failedAttempts: 1 } },
+        { new: true }          // return the document AFTER the increment
+      );
+
+      const attempts = updated?.failedAttempts ?? 1;
+
+      if (attempts >= MAX_FAILED_ATTEMPTS) {
+        // Lock the account for 2 hours and reset the counter atomically
+        const blockedUntil = new Date(Date.now() + BLOCK_DURATION_MS);
+        await User.updateOne(
+          { _id: user._id },
+          {
+            $set: {
+              status:         "blocked",
+              blockedUntil,
+              failedAttempts: 0,   // reset so next attempt after unblock starts fresh
+            },
+          }
+        );
+
+        return NextResponse.json(
+          {
+            error:    "Too many failed attempts. Your account has been locked for 2 hours.",
+            code:     "ACCOUNT_LOCKED",
+            unblockAt: blockedUntil.toISOString(),
+          },
+          { status: 403 }
+        );
+      }
+
+      const attemptsLeft = MAX_FAILED_ATTEMPTS - attempts;
+      return NextResponse.json(
+        {
+          error: `Invalid credentials. ${attemptsLeft} attempt${attemptsLeft !== 1 ? "s" : ""} remaining before your account is locked.`,
+        },
+        { status: 401 }
+      );
+    }
+
+    // ── 9. Successful login — reset failed attempts ─────────────────────────
+    if ((user.failedAttempts ?? 0) > 0) {
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { failedAttempts: 0 } }
+      );
+    }
+
+    // ── 10. Resolve userId (admin vs manager) ────────────────────────────────
+    const isManager      = user.role === "manager" && user.adminId;
+    const resolvedUserId = isManager
+      ? user.adminId!.toString()
+      : user._id.toString();
+
+    // ── 11. Device fingerprinting ─────────────────────────────────────────────
+    const userAgent = req.headers.get("user-agent") || "Unknown";
+    const sanitized = sanitizeClientFingerprint(clientDeviceId);
+    const deviceId  = sanitized ?? generateFallbackDeviceId(user._id.toString(), userAgent);
+
+    const { browser, platform, label } = parseUserAgent(userAgent);
+
+    const existingDevice = await Device.findOneAndUpdate(
+      { userId: user._id, deviceId },
+      {
+        $set:       { userAgent, browser, platform, label, ip, lastSeen: new Date() },
+        $setOnInsert: { status: "active", blockedUntil: null, revokedAt: null },
+      },
+      { upsert: true, new: true }
+    );
+
+    // ── 12. Device-level block checks ────────────────────────────────────────
+    if (existingDevice?.status === "banned") {
+      return NextResponse.json(
+        {
+          error: "This device has been banned from accessing your account. Please contact support.",
+          code:  "DEVICE_BANNED",
+        },
+        { status: 403 }
+      );
+    }
+
+    if (existingDevice?.status === "blocked") {
+      if (existingDevice.blockedUntil && existingDevice.blockedUntil > new Date()) {
+        return NextResponse.json(
+          {
+            error: `This device is blocked until ${existingDevice.blockedUntil.toLocaleDateString()}.`,
+            code:  "DEVICE_BLOCKED",
+          },
+          { status: 403 }
+        );
+      }
+      // Block expired — auto-restore
+      await Device.findOneAndUpdate(
+        { userId: user._id, deviceId },
+        { status: "active", blockedUntil: null }
+      );
+    }
+
+    // ── 13. Sign JWT ──────────────────────────────────────────────────────────
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      console.error("[login] JWT_SECRET is not defined");
+      return NextResponse.json({ error: "Server configuration error." }, { status: 500 });
+    }
+
+    const tokenVersion = user.tokenVersion ?? 0;
     const jwtPayload: Record<string, unknown> = {
       userId: resolvedUserId,
-      role: user.role,
-      deviceId,        // ✅ now contains the client fingerprint ("c_…") when available
+      role:   user.role,
+      deviceId,
       tokenVersion,
     };
 
@@ -263,36 +326,25 @@ export async function POST(req: Request) {
       jwtPayload.adminId   = resolvedUserId;
     }
 
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      console.error("[login] JWT_SECRET is not defined");
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      );
-    }
-
     const expiresIn = rememberMe ? "90d" : "7d";
-    const token = jwt.sign(jwtPayload, secret, { expiresIn });
+    const token     = jwt.sign(jwtPayload, secret, { expiresIn });
 
     return NextResponse.json({
       token,
       user: {
-        _id: user._id.toString(),
-        name: user.name,
-        email: user.email,
-        contact: user.contact,
-        shopName: user.shopName,
+        _id:         user._id.toString(),
+        name:        user.name,
+        email:       user.email,
+        contact:     user.contact,
+        shopName:    user.shopName,
         shopAddress: user.shopAddress,
-        role: user.role,
-        isVerified: user.isVerified,
+        role:        user.role,
+        isVerified:  user.isVerified,
       },
     });
-  } catch (err: any) {
-    console.error("[login] error:", err);
-    return NextResponse.json(
-      { error: "Login failed. Please try again." },
-      { status: 500 }
-    );
+
+  } catch (err: unknown) {
+    console.error("[login] unhandled error:", err);
+    return NextResponse.json({ error: "Login failed. Please try again." }, { status: 500 });
   }
 }

@@ -1,5 +1,5 @@
-// icecream-inventory/src/app/components/Navbar.tsx
-
+// src/app/components/Navbar.tsx
+// Added "Verify Account" link alongside Login / Register
 
 "use client";
 
@@ -14,6 +14,7 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 w-full backdrop-blur-xl bg-[#020b2c]/70 border-b border-cyan-400/20">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+
         {/* LOGO */}
         <Link
           href="/"
@@ -25,13 +26,27 @@ export default function Navbar() {
           </span>
         </Link>
 
-        {/* DESKTOP ACTIONS */}
-        <div className="hidden md:flex items-center gap-6">
+        {/* ── DESKTOP ACTIONS ── */}
+        <div className="hidden md:flex items-center gap-4">
           <Link
             href="/login"
             className="text-sm font-medium text-slate-200 hover:text-cyan-300 transition"
           >
             Login
+          </Link>
+
+          {/*
+            "Verify Account" — shown as a subtle outlined button so it's clearly
+            secondary but still easy to find. Useful when a user registered but
+            accidentally closed the OTP page before verifying.
+          */}
+          <Link
+            href="/verify-account"
+            className="px-4 py-2 rounded-full text-sm font-semibold text-cyan-300
+                       border border-cyan-500/50 hover:border-cyan-400 hover:bg-cyan-500/10
+                       transition"
+          >
+            Verify Account
           </Link>
 
           <Link
@@ -55,7 +70,7 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* MOBILE MENU */}
+      {/* ── MOBILE MENU ── */}
       {isOpen && (
         <div className="md:hidden px-4 pb-4 pt-2 bg-[#020b2c]/95 backdrop-blur-xl border-t border-cyan-400/20">
           <div className="flex flex-col gap-3">
@@ -65,6 +80,15 @@ export default function Navbar() {
               className="w-full text-center py-2 rounded-lg text-slate-200 hover:bg-white/10 transition"
             >
               Login
+            </Link>
+
+            <Link
+              href="/verify-account"
+              onClick={() => setIsOpen(false)}
+              className="w-full text-center py-2 rounded-lg text-cyan-300
+                         border border-cyan-500/40 hover:bg-cyan-500/10 transition"
+            >
+              Verify Account
             </Link>
 
             <Link

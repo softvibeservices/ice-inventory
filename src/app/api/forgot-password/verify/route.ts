@@ -1,93 +1,152 @@
 // src/app/api/forgot-password/verify/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
-import bcrypt from "bcryptjs";
+import { rateLimit } from "@/lib/rateLimit";
+import { EMAIL_RE, LIMITS } from "@/lib/registerValidation";
 
-export async function PUT(req: Request) {
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const MAX_BODY_BYTES = 1_024;
+
+/**
+ * Rate limit: 10 attempts per IP per 15 minutes.
+ * Covers both the OTP-check step and the final password-reset step.
+ */
+const RATE_LIMIT = { limit: 10, windowSeconds: 900 };
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getClientIp(req: NextRequest): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown"
+  );
+}
+
+// ─── Route handler ────────────────────────────────────────────────────────────
+
+export async function PUT(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { email, otp, newPassword } = body || {};
+    // ── 1. Body size guard ──────────────────────────────────────────────────
+    const contentLength = Number(req.headers.get("content-length") ?? 0);
+    if (contentLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Request too large." }, { status: 413 });
+    }
 
-    if (!email || !otp) {
+    // ── 2. IP rate limit ────────────────────────────────────────────────────
+    const ip = getClientIp(req);
+    const rl = rateLimit(`forgot-verify:${ip}`, RATE_LIMIT);
+
+    if (!rl.allowed) {
       return NextResponse.json(
-        { error: "Email and OTP are required" },
-        { status: 400 }
+        {
+          error: "Too many attempts. Please wait before trying again.",
+          retryAfterSeconds: rl.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: { "Retry-After": String(rl.retryAfterSeconds) },
+        }
       );
     }
 
+    // ── 3. Parse body ───────────────────────────────────────────────────────
+    let raw: Record<string, unknown>;
+    try {
+      raw = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    }
+
+    const { email, otp, newPassword } = raw;
+
+    // ── 4. Validate email + OTP ─────────────────────────────────────────────
+    if (!email || typeof email !== "string" || email.trim() === "") {
+      return NextResponse.json({ error: "Email is required." }, { status: 400 });
+    }
+    if (!otp || typeof otp !== "string" || otp.trim() === "") {
+      return NextResponse.json({ error: "OTP is required." }, { status: 400 });
+    }
+
+    const emailNorm = email.trim().toLowerCase().slice(0, LIMITS.email);
+    // Strip non-digits, must be exactly 6
+    const otpNorm   = String(otp).replace(/\D/g, "").slice(0, 6);
+
+    if (!EMAIL_RE.test(emailNorm)) {
+      return NextResponse.json({ error: "Invalid email format." }, { status: 400 });
+    }
+    if (otpNorm.length !== 6) {
+      return NextResponse.json({ error: "OTP must be exactly 6 digits." }, { status: 400 });
+    }
+
+    // ── 5. DB lookup ────────────────────────────────────────────────────────
     await connectDB();
-    const user: any = await User.findOne({ email });
+
+    const user = await User.findOne({ email: emailNorm });
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      // Generic — don't reveal account existence on a verify/reset endpoint
+      return NextResponse.json({ error: "Invalid OTP or email." }, { status: 400 });
     }
 
-    // ✅ FIX 1: Use correct field names (otp and otpExpires)
     if (!user.otp || !user.otpExpires) {
       return NextResponse.json(
-        { error: "No OTP request found. Request a new OTP." },
+        { error: "No active OTP found. Please request a new one." },
         { status: 400 }
       );
     }
 
-    const now = new Date();
-    if (user.otpExpires < now) {
-      // Clear expired OTP
-      user.otp = null;
+    // ── 6. Expiry check ─────────────────────────────────────────────────────
+    if (new Date(user.otpExpires) < new Date()) {
+      user.otp        = null;
       user.otpExpires = null;
       await user.save();
       return NextResponse.json(
-        { error: "OTP has expired. Please request a new OTP." },
+        { error: "OTP has expired. Please request a new one." },
         { status: 400 }
       );
     }
 
-    // ✅ FIX 2: Compare plain OTP (it's stored as plain text, not hashed)
-    if (String(user.otp).trim() !== String(otp).trim()) {
+    // ── 7. OTP comparison ───────────────────────────────────────────────────
+    if (user.otp !== otpNorm) {
       return NextResponse.json(
         { error: "Invalid OTP. Please check and try again." },
         { status: 400 }
       );
     }
 
-    // ✅ OTP CHECK ONLY (step 2)
+    // ── 8a. OTP-check only (step 2 in the UI flow) ──────────────────────────
     if (newPassword === "__OTP_CHECK__") {
       return NextResponse.json({ otpValid: true });
     }
 
-    if (!newPassword) {
+    // ── 8b. Full password reset ─────────────────────────────────────────────
+    if (!newPassword || typeof newPassword !== "string") {
+      return NextResponse.json({ error: "New password is required." }, { status: 400 });
+    }
+
+    const passwordNorm = String(newPassword).slice(0, LIMITS.password);
+
+    if (passwordNorm.length < 6) {
       return NextResponse.json(
-        { error: "New password required" },
+        { error: "Password must be at least 6 characters." },
         { status: 400 }
       );
     }
 
-    if (String(newPassword).length < 6) {
-      return NextResponse.json(
-        { error: "Password should be at least 6 characters" },
-        { status: 400 }
-      );
-    }
-
-    // ✅ FIX 3: Let the pre-save hook handle password hashing
-    // Just assign the plain password - the User model's pre-save hook will hash it
-    user.password = String(newPassword);
-
-    // ✅ Clear OTP after success
-    user.otp = null;
+    // Assign plain — pre-save hook in User model hashes it
+    user.password   = passwordNorm;
+    user.otp        = null;
     user.otpExpires = null;
+    // Increment tokenVersion to force-logout all existing sessions
+    user.tokenVersion = (user.tokenVersion ?? 0) + 1;
+    await user.save();
 
-    await user.save(); // Pre-save hook will hash the password
-
-    return NextResponse.json({
-      message: "Password updated successfully",
-    });
-  } catch (err: any) {
-    console.error("Forgot password verify error:", err);
-    return NextResponse.json(
-      { error: "Failed to update password" },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: "Password updated successfully." });
+  } catch (err: unknown) {
+    console.error("[forgot-password/verify] unhandled error:", err);
+    return NextResponse.json({ error: "Failed to update password." }, { status: 500 });
   }
 }

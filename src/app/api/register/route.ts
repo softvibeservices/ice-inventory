@@ -1,21 +1,36 @@
 // src/app/api/register/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import { transporter } from "@/lib/nodemailer";
 import crypto from "crypto";
+import { rateLimit } from "@/lib/rateLimit";
+import { sanitiseRegisterBody } from "@/lib/registerValidation";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const OTP_LENGTH = 6;
 const OTP_TTL_MINUTES = 10;
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
-const CONTACT_RE = /^[0-9]{10}$/;
-const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/i;
+/** Maximum raw body size we will accept (bytes) */
+const MAX_BODY_BYTES = 8_192; // 8 KB — far more than any legit register payload
 
-function generateNumericOtp(len = OTP_LENGTH) {
+/** Rate-limit: max 5 registration attempts per IP per hour */
+const RATE_LIMIT_REGISTER = { limit: 5, windowSeconds: 3600 };
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function generateNumericOtp(len = OTP_LENGTH): string {
   const max = 10 ** len;
-  const n = crypto.randomInt(0, max);
-  return n.toString().padStart(len, "0");
+  return crypto.randomInt(0, max).toString().padStart(len, "0");
+}
+
+function getClientIp(req: NextRequest): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    req.headers.get("x-real-ip") ??
+    "unknown"
+  );
 }
 
 function buildRegisterEmailHtml({
@@ -23,91 +38,131 @@ function buildRegisterEmailHtml({
   otp,
   expiresMinutes,
   supportEmail,
-  frontendUrl,
-  shopName,
   userName,
 }: {
   appName: string;
   otp: string;
   expiresMinutes: number;
   supportEmail: string;
-  frontendUrl?: string;
-  shopName?: string;
   userName?: string;
-}) {
-  const safeApp = appName || "IceCream Inventory";
+}): string {
+  const safeApp     = appName     || "IceCream Inventory";
   const safeSupport = supportEmail || "support@yourdomain.com";
+
   return `<!doctype html>
-  <html>
-    <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-    <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial; background:#f7fafc; margin:0; padding:32px;">
-      <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 10px 30px rgba(2,6,23,0.08);">
-        <div style="padding:20px 24px;background:linear-gradient(90deg,#EFF6FF,#A7F3D0);">
-          <h2 style="margin:0;color:#0f172a;font-size:18px;">${safeApp}</h2>
-        </div>
-        <div style="padding:22px;">
-          <p>Hello ${userName ?? "there"},</p>
-          <p>Use the verification code below to activate your account.</p>
-          <div style="margin:18px 0;display:flex;align-items:center;justify-content:center;">
-            <div style="background:#0f172a;color:#fff;padding:12px 20px;border-radius:10px;font-size:22px;letter-spacing:4px;">
-              ${otp}
-            </div>
-          </div>
-          <p>This code will expire in <strong>${expiresMinutes} minutes</strong>. Do not share this code with anyone.</p>
-          <p>If you did not sign up, ignore this email or contact <a href="mailto:${safeSupport}">${safeSupport}</a>.</p>
-          <hr style="border:none;border-top:1px solid #eef2ff;margin:18px 0;" />
-          <p style="color:#9ca3af;font-size:12px;">© ${new Date().getFullYear()} ${safeApp}.</p>
-        </div>
+<html>
+  <head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+  <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial;background:#f7fafc;margin:0;padding:32px;">
+    <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 10px 30px rgba(2,6,23,0.08);">
+      <div style="padding:20px 24px;background:linear-gradient(90deg,#EFF6FF,#A7F3D0);">
+        <h2 style="margin:0;color:#0f172a;font-size:18px;">${safeApp}</h2>
       </div>
-    </body>
-  </html>`;
+      <div style="padding:22px;">
+        <p>Hello ${userName ?? "there"},</p>
+        <p>Use the verification code below to activate your account.</p>
+        <div style="margin:18px 0;text-align:center;">
+          <div style="display:inline-block;background:#0f172a;color:#fff;padding:12px 20px;border-radius:10px;font-size:22px;letter-spacing:4px;">
+            ${otp}
+          </div>
+        </div>
+        <p>This code will expire in <strong>${expiresMinutes} minutes</strong>. Do not share it with anyone.</p>
+        <p>If you did not sign up, please ignore this email or contact
+          <a href="mailto:${safeSupport}">${safeSupport}</a>.
+        </p>
+        <hr style="border:none;border-top:1px solid #eef2ff;margin:18px 0;"/>
+        <p style="color:#9ca3af;font-size:12px;">© ${new Date().getFullYear()} ${safeApp}.</p>
+      </div>
+    </div>
+  </body>
+</html>`;
 }
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const { name, email, contact, shopName, shopAddress, gstin, password } = body ?? {};
+// ─── Route handler ────────────────────────────────────────────────────────────
 
-    // ✅ Admin registration requires all fields
-    if (!name || !email || !contact || !shopName || !shopAddress || !gstin || !password) {
-      return NextResponse.json({ error: "All fields are required." }, { status: 400 });
+export async function POST(req: NextRequest) {
+  try {
+    // ── 1. Body size guard ──────────────────────────────────────────────────
+    const contentLength = Number(req.headers.get("content-length") ?? 0);
+    if (contentLength > MAX_BODY_BYTES) {
+      return NextResponse.json({ error: "Request too large." }, { status: 413 });
     }
 
-    const emailNorm = String(email).trim().toLowerCase();
-    const contactNorm = String(contact).replace(/\D/g, "").trim();
-    const gstinNorm = String(gstin).trim().toUpperCase();
-    const shopAddressNorm = String(shopAddress).trim().slice(0, 1000);
+    // ── 2. Rate limiting (per IP) ───────────────────────────────────────────
+    const ip  = getClientIp(req);
+    const rl  = rateLimit(`register:${ip}`, RATE_LIMIT_REGISTER);
 
-    if (!EMAIL_RE.test(emailNorm)) return NextResponse.json({ error: "Please provide a valid email address." }, { status: 400 });
-    if (!CONTACT_RE.test(contactNorm)) return NextResponse.json({ error: "Contact must be 10 digits." }, { status: 400 });
-    if (!GSTIN_RE.test(gstinNorm)) return NextResponse.json({ error: "Invalid GSTIN format." }, { status: 400 });
-    if (typeof password !== "string" || password.length < 6) return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        {
+          error: "Too many registration attempts. Please try again later.",
+          retryAfterSeconds: rl.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rl.retryAfterSeconds),
+            "X-RateLimit-Limit": String(RATE_LIMIT_REGISTER.limit),
+            "X-RateLimit-Remaining": "0",
+          },
+        }
+      );
+    }
 
+    // ── 3. Parse body safely ────────────────────────────────────────────────
+    let raw: Record<string, unknown>;
+    try {
+      raw = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    }
+
+    // ── 4. Honeypot check (bot trap — hidden field must be empty) ───────────
+    //    The frontend sends `_hp: ""`. Bots often fill every field.
+    if (raw._hp !== "" && raw._hp !== undefined) {
+      // Silently appear to succeed — don't tell bots they were caught
+      return NextResponse.json(
+        { message: "Account created. A verification code has been sent to the provided email." },
+        { status: 201 }
+      );
+    }
+
+    // ── 5. Validate & sanitise ──────────────────────────────────────────────
+    const result = sanitiseRegisterBody(raw);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+
+    const { name, email, contact, shopName, shopAddress, gstin, password } = result.data;
+
+    // ── 6. DB: duplicate check ──────────────────────────────────────────────
     await connectDB();
 
-    // Check if admin with this email or GSTIN already exists
-    const exists = await User.findOne({ 
-      $or: [{ email: emailNorm }, { gstin: gstinNorm }],
-      role: { $ne: "manager" } // Don't check against managers
-    });
-    
+    const exists = await User.findOne({
+      $or: [{ email }, { gstin }],
+      role: { $ne: "manager" },
+    }).lean();
+
     if (exists) {
-      return NextResponse.json({ error: "An account with provided details already exists." }, { status: 400 });
+      return NextResponse.json(
+        { error: "An account with the provided email or GSTIN already exists." },
+        { status: 409 }
+      );
     }
 
-    const otp = generateNumericOtp();
+    // ── 7. Create user + OTP ────────────────────────────────────────────────
+    const otp        = generateNumericOtp();
     const otpExpires = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
-    const now = new Date();
+    const now        = new Date();
 
     const newUser = new User({
-      name: String(name).trim(),
-      email: emailNorm,
-      contact: contactNorm,
-      shopName: String(shopName).trim(),
-      shopAddress: shopAddressNorm,
-      gstin: gstinNorm,
-      password: String(password),
-      role: "admin", // ✅ Explicitly set role
+      name,
+      email,
+      contact,
+      shopName,
+      shopAddress,
+      gstin,
+      password,
+      role: "admin",
       isVerified: false,
       isPending: false,
       otp,
@@ -118,38 +173,41 @@ export async function POST(req: Request) {
 
     await newUser.save();
 
-    const appName = process.env.APP_NAME || "IceCream Inventory";
+    // ── 8. Send verification email ──────────────────────────────────────────
+    const appName     = process.env.APP_NAME     || "IceCream Inventory";
     const supportEmail = process.env.SUPPORT_EMAIL || process.env.EMAIL_USER || "support@yourdomain.com";
-    const frontendUrl = process.env.FRONTEND_URL || "";
 
     const html = buildRegisterEmailHtml({
       appName,
       otp,
       expiresMinutes: OTP_TTL_MINUTES,
       supportEmail,
-      frontendUrl,
-      shopName: newUser.shopName,
       userName: newUser.name,
     });
 
     try {
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
-        to: newUser.email,
+        to:   newUser.email,
         subject: `${appName} — Verify your account`,
         text: `Your verification code is ${otp}. It expires in ${OTP_TTL_MINUTES} minutes.`,
         html,
       });
     } catch (mailErr) {
-      console.error("[register] sendMail failed", mailErr);
-      return NextResponse.json({
-        message: "Account created but verification email could not be sent. Please contact support.",
-      }, { status: 201 });
+      console.error("[register] sendMail failed:", mailErr);
+      // User is created but mail failed — don't expose internal error
+      return NextResponse.json(
+        { message: "Account created. Verification email could not be sent. Please contact support." },
+        { status: 201 }
+      );
     }
 
-    return NextResponse.json({ message: "Account created. A verification code has been sent to the provided email." }, { status: 201 });
-  } catch (err: any) {
-    console.error("[register] error:", err);
+    return NextResponse.json(
+      { message: "Account created. A verification code has been sent to the provided email." },
+      { status: 201 }
+    );
+  } catch (err: unknown) {
+    console.error("[register] unhandled error:", err);
     return NextResponse.json({ error: "Unable to register at the moment." }, { status: 500 });
   }
 }
