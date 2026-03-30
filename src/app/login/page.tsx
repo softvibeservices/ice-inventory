@@ -1,5 +1,7 @@
 // ice-inventory\src\app\login\page.tsx
 
+
+
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -12,8 +14,6 @@ import { toast, ToastContainer, Id as ToastId } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { getOrCreateDeviceFingerprint } from "@/utils/deviceFingerprint";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface LoginErrorResponse {
   error?: string;
   code?: "ACCOUNT_LOCKED" | "DEVICE_BANNED" | "DEVICE_BLOCKED";
@@ -21,14 +21,12 @@ interface LoginErrorResponse {
   retryAfterSeconds?: number;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 function formatUnlockTime(isoString: string): string {
   const ms = new Date(isoString).getTime() - Date.now();
   if (ms <= 0) return "shortly";
   const totalMinutes = Math.ceil(ms / 60_000);
   if (totalMinutes >= 60) {
-    const hours   = Math.floor(totalMinutes / 60);
+    const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return minutes > 0
       ? `${hours} hour${hours > 1 ? "s" : ""} ${minutes} minute${minutes > 1 ? "s" : ""}`
@@ -37,50 +35,27 @@ function formatUnlockTime(isoString: string): string {
   return `${totalMinutes} minute${totalMinutes > 1 ? "s" : ""}`;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export default function LoginPage() {
   const router = useRouter();
-
-  const [form, setForm]             = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ email: "", password: "" });
   const [rememberMe, setRememberMe] = useState(false);
-  const [loading, setLoading]       = useState(false);
-  const [showPwd, setShowPwd]       = useState(false);
-
-  /**
-   * Synchronous in-flight guard.
-   * React state updates are async — a second click can fire before the
-   * first render with loading=true completes. This ref is checked
-   * synchronously at the very top of handleSubmit, stopping duplicate calls.
-   */
+  const [loading, setLoading] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
   const inFlightRef = useRef(false);
-
-  /**
-   * Stable toast ID.
-   * We update a single toast instead of pushing new ones, so hammering
-   * the button only ever shows ONE error message at a time.
-   */
   const toastIdRef = useRef<ToastId | null>(null);
 
-  // ── Auto-login ────────────────────────────────────────────────────────────
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
-    const remember   = localStorage.getItem("rememberMe");
+    const remember = localStorage.getItem("rememberMe");
     if (storedUser && remember === "true") {
       router.push("/dashboard");
     }
   }, [router]);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  /**
-   * Show or update the single persistent error toast.
-   * Updating instead of creating prevents the toast stack visible in the bug.
-   */
   const showErrorToast = (message: string, autoClose: number | false = 4000) => {
     if (toastIdRef.current && toast.isActive(toastIdRef.current)) {
       toast.update(toastIdRef.current, { render: message, type: "error", autoClose });
@@ -89,247 +64,257 @@ export default function LoginPage() {
     }
   };
 
-  // ── Submit ────────────────────────────────────────────────────────────────
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Synchronous guard — checked before any async work.
-    // This is the primary fix for the multi-toast / count-stuck bug.
     if (inFlightRef.current) return;
-
     inFlightRef.current = true;
     setLoading(true);
 
     try {
       const clientDeviceId = getOrCreateDeviceFingerprint();
-
       const res = await fetch("/api/login", {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ ...form, rememberMe, clientDeviceId }),
+        body: JSON.stringify({ ...form, rememberMe, clientDeviceId }),
       });
 
       const data: LoginErrorResponse & {
         token?: string;
-        user?: {
-          _id: string;
-          managerId?: string | null;
-          email: string;
-          name: string;
-          role: string;
-        };
+        user?: { _id: string; managerId?: string | null; email: string; name: string; role: string };
       } = await res.json();
 
-      // ── Success ─────────────────────────────────────────────────────────
       if (res.ok && data.token && data.user) {
-        localStorage.setItem(
-          "user",
-          JSON.stringify({
-            _id:       data.user._id,
-            managerId: data.user.managerId ?? null,
-            email:     data.user.email,
-            name:      data.user.name,
-            role:      data.user.role,
-          })
-        );
-        localStorage.setItem("token",      data.token);
+        localStorage.setItem("user", JSON.stringify({
+          _id: data.user._id,
+          managerId: data.user.managerId ?? null,
+          email: data.user.email,
+          name: data.user.name,
+          role: data.user.role,
+        }));
+        localStorage.setItem("token", data.token);
         localStorage.setItem("rememberMe", rememberMe ? "true" : "false");
-
         toast.success("Login successful! Redirecting…");
         setTimeout(() => router.push("/dashboard"), 1800);
-        // Keep loading=true + inFlight=true for the redirect animation.
-        // The component unmounts naturally — no reset needed.
         return;
       }
 
-      // ── Account temporarily locked ───────────────────────────────────────
       if (data.code === "ACCOUNT_LOCKED") {
-        const wait = data.unblockAt
-          ? ` Try again in ${formatUnlockTime(data.unblockAt)}.`
-          : "";
+        const wait = data.unblockAt ? ` Try again in ${formatUnlockTime(data.unblockAt)}.` : "";
         showErrorToast(`Account locked.${wait}`, 8000);
         return;
       }
-
-      // ── Device-level blocks ──────────────────────────────────────────────
       if (data.code === "DEVICE_BANNED") {
-        showErrorToast(
-          data.error ?? "This device has been banned. Please contact support.",
-          8000
-        );
+        showErrorToast(data.error ?? "This device has been banned. Please contact support.", 8000);
         return;
       }
-
       if (data.code === "DEVICE_BLOCKED") {
-        showErrorToast(
-          data.error ?? "This device is temporarily blocked.",
-          8000
-        );
+        showErrorToast(data.error ?? "This device is temporarily blocked.", 8000);
         return;
       }
-
-      // ── IP rate-limit ────────────────────────────────────────────────────
       if (res.status === 429) {
-        const wait = data.retryAfterSeconds
-          ? ` Please wait ${data.retryAfterSeconds}s.`
-          : "";
+        const wait = data.retryAfterSeconds ? ` Please wait ${data.retryAfterSeconds}s.` : "";
         showErrorToast(`Too many attempts from this network.${wait}`, 6000);
         return;
       }
-
-      // ── Wrong password / unverified / pending / rejected ─────────────────
-      // Server message already includes remaining count, e.g.:
-      // "Invalid credentials. 3 attempts remaining before your account is locked."
       showErrorToast(data.error ?? "Invalid credentials.");
-
     } catch {
       showErrorToast("Something went wrong. Please check your connection and try again.");
     } finally {
-      // Re-enable form for next attempt (unless we returned early for redirect).
       inFlightRef.current = false;
       setLoading(false);
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-[#020617] via-[#020b2c] to-[#031136] text-white">
+    <div className="min-h-screen flex flex-col bg-[#F9FAFB] font-sans">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+        * { font-family: 'DM Sans', sans-serif; }
+        .font-mono { font-family: 'DM Mono', monospace; }
+        .input-field {
+          width: 100%;
+          background: #fff;
+          border: 1.5px solid #E5E7EB;
+          border-radius: 10px;
+          padding: 11px 14px 11px 40px;
+          font-size: 14px;
+          color: #111827;
+          outline: none;
+          transition: border-color 0.15s, box-shadow 0.15px;
+        }
+        .input-field::placeholder { color: #9CA3AF; }
+        .input-field:focus { border-color: #0066FF; box-shadow: 0 0 0 3px rgba(0,102,255,0.08); }
+        .input-field:disabled { opacity: 0.5; background: #F3F4F6; }
+        .btn-primary {
+          width: 100%;
+          background: #0066FF;
+          color: #fff;
+          border: none;
+          border-radius: 10px;
+          padding: 12px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background 0.15s, transform 0.1s;
+          display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-primary:hover:not(:disabled) { background: #0052CC; }
+        .btn-primary:active:not(:disabled) { transform: scale(0.99); }
+        .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+        .divider { height: 1px; background: #E5E7EB; margin: 20px 0; }
+        .feature-pill {
+          display: flex; align-items: center; gap: 10px;
+          padding: 12px 16px;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 10px;
+          font-size: 13px;
+          color: rgba(255,255,255,0.8);
+        }
+        .feature-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ADE80; flex-shrink: 0; }
+      `}</style>
+
       <Navbar />
 
-      <main className="flex flex-1 items-center justify-center px-4 py-10">
-        <div className="w-full max-w-5xl rounded-2xl overflow-hidden shadow-2xl bg-white/5 backdrop-blur-xl border border-white/10 flex flex-col md:flex-row">
+      <main className="flex flex-1 items-center justify-center px-4 py-12">
+        <div className="w-full max-w-4xl flex rounded-2xl overflow-hidden shadow-xl border border-gray-100 bg-white">
 
-          {/* ── LEFT PANEL ── */}
-          <div className="hidden md:flex md:w-1/2 flex-col justify-center px-10 bg-gradient-to-br from-cyan-600/20 to-blue-700/20 border-r border-white/10">
-            <h2 className="text-3xl font-extrabold mb-4 text-cyan-400">Welcome Back</h2>
-            <p className="text-slate-300 leading-relaxed">
-              Manage inventory, billing, delivery partners and analytics —
-              all from one powerful dashboard.
+          {/* LEFT — Brand panel */}
+          <div className="hidden md:flex md:w-5/12 flex-col justify-between p-10 bg-[#0A0A0A]">
+            <div>
+              <div className="inline-flex items-center gap-2 bg-white/10 border border-white/10 rounded-full px-3 py-1 mb-8">
+                <span className="feature-pill-dot"></span>
+                <span className="text-white/70 text-xs font-medium">Ice Inventory Platform</span>
+              </div>
+              <h2 className="text-3xl font-bold text-white leading-tight mb-3">
+                The inventory OS for ice cream wholesalers.
+              </h2>
+              <p className="text-white/50 text-sm leading-relaxed">
+                Real-time stock, expiry alerts, delivery tracking — unified in one clean dashboard.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {["Real-time stock visibility", "Automatic expiry notifications", "Sales & performance reports"].map((f) => (
+                <div key={f} className="feature-pill">
+                  <span className="feature-pill-dot"></span>
+                  {f}
+                </div>
+              ))}
+            </div>
+
+            <p className="text-white/20 text-xs">
+              © {new Date().getFullYear()} Ice Inventory. All rights reserved.
             </p>
-            <ul className="mt-6 space-y-3 text-slate-300 text-sm">
-              <li>✓ Real-time stock updates</li>
-              <li>✓ Expiry &amp; delivery alerts</li>
-              <li>✓ Sales &amp; performance insights</li>
-            </ul>
           </div>
 
-          {/* ── RIGHT PANEL ── */}
-          <div className="flex-1 px-6 sm:px-10 py-10">
-            <h2 className="text-2xl sm:text-3xl font-bold text-center text-cyan-400 mb-2">
-              Login
-            </h2>
-            <p className="text-center text-slate-300 mb-8 text-sm sm:text-base">
-              Secure access to your account
-            </p>
-
-            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-
-              {/* EMAIL */}
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input
-                  name="email"
-                  type="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  placeholder="Enter your email"
-                  required
-                  autoComplete="email"
-                  disabled={loading}
-                  className="w-full rounded-md bg-white/10 border border-white/20 py-3 pl-10 pr-3 text-white placeholder-slate-400 outline-none focus:border-cyan-400 disabled:opacity-50 transition"
-                />
+          {/* RIGHT — Form panel */}
+          <div className="flex-1 flex flex-col justify-center px-8 sm:px-12 py-12">
+            <div className="max-w-sm mx-auto w-full">
+              <div className="mb-8">
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">Sign in</h1>
+                <p className="text-sm text-gray-500">Welcome back. Enter your credentials to continue.</p>
               </div>
 
-              {/* PASSWORD */}
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input
-                  name="password"
-                  type={showPwd ? "text" : "password"}
-                  value={form.password}
-                  onChange={handleChange}
-                  placeholder="Enter your password"
-                  required
-                  autoComplete="current-password"
-                  disabled={loading}
-                  className="w-full rounded-md bg-white/10 border border-white/20 py-3 pl-10 pr-10 text-white placeholder-slate-400 outline-none focus:border-cyan-400 disabled:opacity-50 transition"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd((s) => !s)}
-                  disabled={loading}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition disabled:opacity-50"
-                  aria-label={showPwd ? "Hide password" : "Show password"}
-                  tabIndex={-1}
-                >
-                  {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+              <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                {/* EMAIL */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
+                    <input
+                      name="email"
+                      type="email"
+                      value={form.email}
+                      onChange={handleChange}
+                      placeholder="you@example.com"
+                      required
+                      autoComplete="email"
+                      disabled={loading}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
+                {/* PASSWORD */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Password</label>
+                    <Link href="/forgot-password" className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                      Forgot password?
+                    </Link>
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
+                    <input
+                      name="password"
+                      type={showPwd ? "text" : "password"}
+                      value={form.password}
+                      onChange={handleChange}
+                      placeholder="••••••••"
+                      required
+                      autoComplete="current-password"
+                      disabled={loading}
+                      className="input-field"
+                      style={{ paddingRight: "40px" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPwd((s) => !s)}
+                      disabled={loading}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
+                      aria-label={showPwd ? "Hide password" : "Show password"}
+                      tabIndex={-1}
+                    >
+                      {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* REMEMBER ME */}
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    id="rememberMe"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    disabled={loading}
+                    className="w-4 h-4 rounded border-gray-300 accent-blue-600"
+                  />
+                  <label htmlFor="rememberMe" className="text-sm text-gray-600 select-none cursor-pointer">
+                    Stay signed in for 90 days
+                  </label>
+                </div>
+
+                {/* SUBMIT */}
+                <button type="submit" disabled={loading} className="btn-primary" style={{ marginTop: "8px" }}>
+                  {loading ? (
+                    <><Loader2 className="animate-spin" size={16} />Verifying…</>
+                  ) : "Sign in"}
                 </button>
-              </div>
+              </form>
 
-              {/* REMEMBER ME */}
-              <div className="flex items-center gap-2 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  id="rememberMe"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  disabled={loading}
-                  className="accent-cyan-500"
-                />
-                <label htmlFor="rememberMe">
-                  Remember Me{" "}
-                  <span className="text-slate-400 text-xs">(stay logged in for 90 days)</span>
-                </label>
-              </div>
+              <div className="divider" />
 
-              {/* SUBMIT */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 rounded-md py-3 font-semibold transition bg-gradient-to-r from-cyan-500 to-blue-600 hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <><Loader2 className="animate-spin" size={18} />Verifying…</>
-                ) : (
-                  "Login"
-                )}
-              </button>
-            </form>
-
-            {/* LINKS */}
-            <div className="mt-6 text-center text-sm text-slate-300">
-              <Link href="/forgot-password" className="text-cyan-400 hover:underline">
-                Forgot Password?
-              </Link>
-              <span className="mx-2 text-slate-500">·</span>
-              <Link href="/verify-account" className="text-cyan-400 hover:underline">
-                Verify Account
-              </Link>
-              <span className="mx-2 text-slate-500">·</span>
-              <Link href="/register" className="text-cyan-400 hover:underline">
-                Create Account
-              </Link>
+              <p className="text-center text-sm text-gray-500">
+                Don&apos;t have an account?{" "}
+                <Link href="/register" className="text-blue-600 hover:text-blue-700 font-semibold">
+                  Create one
+                </Link>
+              </p>
+              <p className="text-center text-sm text-gray-500 mt-2">
+                Need to verify?{" "}
+                <Link href="/verify-account" className="text-blue-600 hover:text-blue-700 font-semibold">
+                  Verify account
+                </Link>
+              </p>
             </div>
           </div>
-
         </div>
       </main>
 
       <Footer />
-
-      {/*
-        limit={1} is the second layer of defense: even if two requests somehow
-        both reach the toast call, the second replaces the first instead of
-        stacking a new one below it.
-      */}
-      <ToastContainer
-        position="top-center"
-        autoClose={3000}
-        theme="dark"
-        limit={1}
-      />
+      <ToastContainer position="top-center" autoClose={3000} theme="light" limit={1} />
     </div>
   );
 }

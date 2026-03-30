@@ -217,27 +217,23 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <meta name="theme-color" content="#020b1a" />
+        <meta name="theme-color" content="#ffffff" />
       </head>
-      <body
-        className="h-full min-h-screen bg-[#020b1a] text-white antialiased overflow-x-hidden"
-      >
+      <body className="h-full min-h-screen bg-white text-gray-900 antialiased">
         <Toaster
           position="top-right"
           toastOptions={{
             duration: 2000,
             style: {
-              background: "#0f172a",
-              color: "#e5e7eb",
-              borderRadius: "6px",
-              fontSize: "13px",
+              background: "#ffffff",
+              color: "#1f2937",
+              border: "1px solid #e5e7eb",
+              borderRadius: "8px",
+              fontSize: "14px",
             },
           }}
         />
-        <div
-          id="app-root"
-          className="min-h-screen flex flex-col relative overflow-x-hidden"
-        >
+        <div id="app-root" className="min-h-screen flex flex-col">
           {children}
         </div>
       </body>
