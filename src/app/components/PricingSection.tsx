@@ -402,17 +402,7 @@ export default function PricingSection() {
           ))}
         </div>
 
-        {/* ───────────────── VALUE STRIP ───────────────── */}
-        <div className="mb-16 rounded-2xl border border-cyan-100 bg-cyan-50 px-6 py-5">
-          <p className="text-sm sm:text-[15px] text-cyan-900 leading-7">
-            <span className="font-semibold">How Ice Inventory pricing works:</span>{" "}
-            pricing is mainly aligned to your monthly invoice volume, staff size,
-            delivery operations and business complexity — not random inflated
-            product limits.
-          </p>
-        </div>
-
-        {/* ───────────────── CUSTOM PLAN ───────────────── */}
+     {/* ───────────────── CUSTOM PLAN ───────────────── */}
         <div className="mb-16 flex flex-col lg:flex-row lg:items-center justify-between gap-5 border border-dashed border-gray-300 rounded-2xl px-6 sm:px-8 py-6 bg-gray-50">
           <div className="max-w-2xl">
             <h3 className="text-lg font-bold text-gray-900 mb-1">

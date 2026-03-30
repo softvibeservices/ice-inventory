@@ -15,7 +15,7 @@ export default function Navbar() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
-            <span className="text-white text-lg font-bold">I</span>
+            <span className="text-white text-lg font-bold">IC</span>
           </div>
           <span className="font-semibold text-gray-900">IceCream Inventory</span>
         </Link>
