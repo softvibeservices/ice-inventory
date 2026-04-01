@@ -5,33 +5,40 @@ import { Toaster } from "react-hot-toast";
 import type { Metadata } from "next";
 
 const BASE_URL = "https://ice-inventory.vercel.app";
+const BRAND_NAME = "Ice Inventory";
+const OG_IMAGE = "/og-image.png";
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
 
   title: {
-    default: "IceCream Inventory — Ice Cream Wholesale Management Software",
-    template: "%s | IceCream Inventory",
+    default: "Ice Inventory — Inventory, Billing & Delivery Software for Ice Cream Businesses",
+    template: `%s | ${BRAND_NAME}`,
   },
+
   description:
-    "IceCream Inventory is a complete inventory, billing, delivery and analytics platform for ice cream wholesalers. Manage products, customers, orders, GST invoices, stock levels, delivery partners and live GPS tracking from one dashboard.",
+    "Ice Inventory is inventory, billing, stock tracking and delivery management software for ice cream wholesalers, distributors and shop owners. Manage products, GST invoices, customer ledger, orders, delivery partners and analytics from one dashboard.",
+
   keywords: [
-    "ice cream inventory management",
-    "ice cream wholesale software",
+    "ice inventory",
+    "ice cream inventory software",
     "ice cream billing software",
-    "ice cream stock management",
-    "wholesale inventory system",
-    "GST billing software ice cream",
-    "ice cream delivery tracking",
-    "ice cream business software",
-    "ice cream order management",
+    "ice cream wholesale management software",
+    "ice cream distributor software",
+    "stock tracking software for ice cream business",
+    "GST billing software for ice cream shop",
+    "ice cream order management software",
+    "ice cream delivery management software",
+    "inventory software for frozen food business",
+    "customer ledger software for distributors",
+    "ice cream business software India",
     "ice cream ERP",
-    "frozen food inventory software",
-    "ice cream wholesaler app",
+    "inventory and billing software for ice cream shop",
   ],
-  authors: [{ name: "IceCream Inventory", url: BASE_URL }],
-  creator: "IceCream Inventory",
-  publisher: "IceCream Inventory",
+
+  authors: [{ name: BRAND_NAME, url: BASE_URL }],
+  creator: BRAND_NAME,
+  publisher: BRAND_NAME,
   category: "Business Software",
 
   alternates: {
@@ -41,6 +48,7 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
+    nocache: false,
     googleBot: {
       index: true,
       follow: true,
@@ -53,31 +61,34 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: BASE_URL,
-    siteName: "IceCream Inventory",
-    title: "IceCream Inventory — Ice Cream Wholesale Management Software",
+    siteName: BRAND_NAME,
+    title:
+      "Ice Inventory — Inventory, Billing & Delivery Software for Ice Cream Businesses",
     description:
-      "Complete inventory, billing, delivery and analytics platform for ice cream wholesalers. GST invoices, live GPS tracking, stock alerts, customer ledger and sales insights — in one system.",
+      "Manage stock, billing, GST invoices, customer ledger, delivery workflow and analytics for your ice cream business in one modern dashboard.",
+    locale: "en_IN",
     images: [
       {
-        url: "/og-image.png",
+        url: OG_IMAGE,
         width: 1200,
         height: 630,
-        alt: "IceCream Inventory Management System",
+        alt: "Ice Inventory software dashboard preview",
       },
     ],
-    locale: "en_IN",
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "IceCream Inventory — Ice Cream Wholesale Management Software",
+    title:
+      "Ice Inventory — Inventory, Billing & Delivery Software for Ice Cream Businesses",
     description:
-      "Inventory, billing, delivery and analytics platform for ice cream wholesalers. GST billing, live GPS tracking, stock alerts and more.",
-    images: ["/og-image.png"],
+      "Inventory, billing, GST invoices, stock tracking, customer ledger and delivery management software for ice cream businesses.",
+    images: [OG_IMAGE],
   },
 
-  applicationName: "IceCream Inventory",
+  applicationName: BRAND_NAME,
   referrer: "origin-when-cross-origin",
+
   formatDetection: {
     email: false,
     address: false,
@@ -101,34 +112,38 @@ export default function RootLayout({
       {
         "@type": "SoftwareApplication",
         "@id": `${BASE_URL}/#software`,
-        name: "IceCream Inventory",
+        name: BRAND_NAME,
         url: BASE_URL,
-        description:
-          "IceCream Inventory is a complete web-based management platform for ice cream wholesalers. It covers product management, customer records, order processing, GST billing, stock tracking, delivery partner management and live GPS tracking.",
         applicationCategory: "BusinessApplication",
         operatingSystem: "Web",
-        inLanguage: "en",
+        inLanguage: "en-IN",
+        description:
+          "Ice Inventory is a web-based inventory, billing, stock tracking and delivery management platform built for ice cream wholesalers, distributors and retail business owners.",
+        offers: {
+          "@type": "Offer",
+          price: "0",
+          priceCurrency: "INR",
+          category: "Free Trial",
+        },
         featureList: [
-          "Product Management with dynamic categories and units",
-          "Customer Management with credit and debit ledger",
-          "Order Lifecycle Management with settlement history",
-          "GST Bill Generation with PDF export",
-          "Stock Management with low-stock alerts",
-          "Restock History Tracking with bulk CSV and Excel import",
-          "Sales Analytics and Insights Dashboard",
-          "Customer Ledger with transaction history",
-          "Delivery Partner Management with OTP authentication",
-          "Live GPS Delivery Tracking via Leaflet maps",
-          "Manager Role and Permissions",
-          "Sticky Notes for quick order dispatch",
-          "Bulk Product Import via CSV and Excel",
-          "Cloudinary image storage for logo, QR code and signature",
+          "Inventory management for ice cream products",
+          "GST invoice generation",
+          "Customer ledger and payment tracking",
+          "Order and billing management",
+          "Stock tracking and low stock alerts",
+          "Delivery partner workflow",
+          "Live delivery tracking",
+          "Manager role access",
+          "Sales analytics dashboard",
+          "Bulk import for products and stock",
+          "PDF exports for invoices and reports",
+          "Business settings with GST and invoice configuration",
         ],
       },
       {
         "@type": "Organization",
         "@id": `${BASE_URL}/#organization`,
-        name: "IceCream Inventory",
+        name: BRAND_NAME,
         url: BASE_URL,
         logo: {
           "@type": "ImageObject",
@@ -139,11 +154,22 @@ export default function RootLayout({
         "@type": "WebSite",
         "@id": `${BASE_URL}/#website`,
         url: BASE_URL,
-        name: "IceCream Inventory",
+        name: BRAND_NAME,
         description:
-          "Ice cream wholesale inventory, billing and delivery management software",
+          "Inventory, billing, stock tracking and delivery management software for ice cream businesses.",
         publisher: { "@id": `${BASE_URL}/#organization` },
-        inLanguage: "en",
+        inLanguage: "en-IN",
+      },
+      {
+        "@type": "WebPage",
+        "@id": `${BASE_URL}/#webpage`,
+        url: BASE_URL,
+        name: `${BRAND_NAME} Homepage`,
+        isPartOf: { "@id": `${BASE_URL}/#website` },
+        about: { "@id": `${BASE_URL}/#software` },
+        description:
+          "Homepage of Ice Inventory, a software platform for inventory, billing, delivery and stock management in the ice cream business industry.",
+        inLanguage: "en-IN",
       },
       {
         "@type": "FAQPage",
@@ -151,58 +177,50 @@ export default function RootLayout({
         mainEntity: [
           {
             "@type": "Question",
-            name: "What is IceCream Inventory?",
+            name: "What is Ice Inventory?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "IceCream Inventory is a complete web-based management platform for ice cream wholesalers and retailers. It covers product management, customer records, order processing, GST billing, stock tracking, delivery partner management and live GPS tracking in a single system.",
+              text: "Ice Inventory is inventory, billing, stock tracking and delivery management software for ice cream wholesalers, distributors and shop owners. It helps businesses manage products, invoices, customers, stock, orders and delivery operations from one dashboard.",
             },
           },
           {
             "@type": "Question",
-            name: "Does IceCream Inventory support GST billing?",
+            name: "Does Ice Inventory support GST billing?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. IceCream Inventory generates GST-compliant PDF invoices with your business logo, QR code, digital signature, seller GSTIN, composition line and full itemised billing details.",
+              text: "Yes. Ice Inventory supports GST-ready billing and invoice generation for ice cream businesses, including customer billing records and downloadable invoice documents.",
             },
           },
           {
             "@type": "Question",
-            name: "Can I track delivery partners in real time?",
+            name: "Can I manage delivery partners with Ice Inventory?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Delivery partners broadcast their GPS coordinates from a dedicated mobile-friendly interface. Admins view the live location on an interactive Leaflet map, updated in real time.",
+              text: "Yes. Ice Inventory includes delivery workflow support, delivery partner management and order tracking for businesses that handle dispatch and order delivery operations.",
             },
           },
           {
             "@type": "Question",
-            name: "Is bulk import supported for products and restock?",
+            name: "Who should use Ice Inventory?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Products can be imported in bulk from CSV or Excel files. Restock quantities can also be uploaded in bulk with automatic product name matching.",
+              text: "Ice Inventory is built for ice cream wholesalers, distributors, retailers and business owners who need software for stock tracking, billing, customer records, GST invoices and delivery operations.",
             },
           },
           {
             "@type": "Question",
-            name: "How is authentication handled in IceCream Inventory?",
+            name: "Can I track stock and inventory with Ice Inventory?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "User registration requires OTP email verification via Gmail SMTP. Delivery partner login is OTP-based with JWT tokens. Password changes require a separate OTP step. There is no third-party authentication dependency.",
+              text: "Yes. Ice Inventory helps businesses manage products, stock levels, restocks, low stock alerts and inventory records in one place.",
             },
           },
           {
             "@type": "Question",
-            name: "Can I create manager or staff accounts?",
+            name: "Does Ice Inventory support customer ledger management?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Admins can create manager sub-accounts. Managers share the dashboard with role-scoped access and have their own OTP-secured password management.",
-            },
-          },
-          {
-            "@type": "Question",
-            name: "What can be exported as PDF?",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "GST invoices, customer reports, restock history reports and stock history summaries can all be exported as formatted PDFs directly from the dashboard.",
+              text: "Yes. Ice Inventory includes customer ledger and payment tracking features so businesses can manage balances, settlement history and invoice records efficiently.",
             },
           },
         ],
@@ -213,31 +231,70 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full scroll-smooth" suppressHydrationWarning>
       <head>
+        {/* Hidden semantic SEO / AEO support */}
+        <meta
+          name="theme-color"
+          content="#ffffff"
+        />
+        <meta
+          name="apple-mobile-web-app-title"
+          content={BRAND_NAME}
+        />
+        <meta
+          name="application-name"
+          content={BRAND_NAME}
+        />
+        <meta
+          name="mobile-web-app-capable"
+          content="yes"
+        />
+        <meta
+          name="apple-mobile-web-app-capable"
+          content="yes"
+        />
+
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <meta name="theme-color" content="#020b1a" />
       </head>
-      <body
-        className="h-full min-h-screen bg-[#020b1a] text-white antialiased overflow-x-hidden"
-      >
+
+      <body className="h-full min-h-screen bg-white text-gray-900 antialiased">
+        {/* Hidden semantic content for crawlers / AEO */}
+        <div className="sr-only" aria-hidden="true">
+          <h1>Ice Inventory</h1>
+          <p>
+            Ice Inventory is inventory, billing, stock tracking and delivery
+            management software for ice cream wholesalers, distributors and
+            retail business owners.
+          </p>
+          <p>
+            The platform helps businesses manage products, GST billing,
+            invoices, stock levels, customer ledger, orders, delivery partners
+            and analytics from one dashboard.
+          </p>
+          <p>
+            Ice Inventory is designed for ice cream business operations in
+            India and supports inventory workflows, billing workflows and
+            delivery management workflows.
+          </p>
+        </div>
+
         <Toaster
           position="top-right"
           toastOptions={{
             duration: 2000,
             style: {
-              background: "#0f172a",
-              color: "#e5e7eb",
-              borderRadius: "6px",
-              fontSize: "13px",
+              background: "#ffffff",
+              color: "#1f2937",
+              border: "1px solid #e5e7eb",
+              borderRadius: "8px",
+              fontSize: "14px",
             },
           }}
         />
-        <div
-          id="app-root"
-          className="min-h-screen flex flex-col relative overflow-x-hidden"
-        >
+
+        <div id="app-root" className="min-h-screen flex flex-col">
           {children}
         </div>
       </body>
