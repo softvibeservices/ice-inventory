@@ -19,13 +19,14 @@ const plans = {
     yearly: { price: 4999, per: "/year", save: "Save ₹989" },
     features: [
       "120 invoices / month",
-      "100 customers",
-      "60 products",
+      "60 customers",
+      "50 products",
       "Admin only (no manager seats)",
-      "Billing + inventory + customer records",
+      "Full billing + inventory system",
+      "Customer ledger & payment tracking",
+      "PDF invoices with GST",
       "Basic stock alerts",
-      "Customer ledger",
-      "PDF invoice generation",
+      "Sales reports",
     ],
     cta: "Start with Launch",
   },
@@ -41,13 +42,18 @@ const plans = {
     yearly: { price: 14999, per: "/year", save: "Save ₹2,988" },
     features: [
       "400 invoices / month",
-      "300 customers",
+      "100 customers",
       "120 products",
-      "Up to 3 managers",
-      "Up to 5 delivery partners",
-      "Full delivery workflow",
+      "1 Admin + Up to 3 Managers",
+      "Up to 5 Delivery Partners",
+      "Delivery partner mobile app",
+      "Live map tracking of deliveries",
+      "Delivery workflow management",
       "Sales analytics dashboard",
-      "Priority onboarding support",
+      "Customer payment history",
+      "Advanced stock management",
+      "Role-based permissions",
+      "Priority support",
     ],
     cta: "Choose Scale",
   },
@@ -62,25 +68,34 @@ const plans = {
     sixmonths: { price: 13499, per: "/6 months", save: "Save ₹1,494" },
     yearly: { price: 24999, per: "/year", save: "Save ₹4,989" },
     features: [
-      "1,200 invoices / month",
+      "1,500 invoices / month",
       "Unlimited customers",
       "300 products",
-      "Up to 10 managers",
-      "Up to 15 delivery partners",
-      "Advanced analytics + reports",
-      "Priority support",
-      "High-volume workflow support",
+      "1 Admin + Up to 10 Managers",
+      "Up to 15 Delivery Partners",
+      "Delivery partner mobile app",
+      "Real-time map + Route optimization",
+      "Advanced delivery analytics",
+      "Bulk billing operations",
+      "Advanced business reports",
+      "Custom workflows",
+      "Role-based permissions",
+      "Dedicated priority support",
+      "Data export & backup",
     ],
     cta: "Scale with Business",
   },
 } as const;
 
 const FREE_TRIAL_FEATURES = [
-  "50 invoices total",
-  "25 customers",
-  "40 products",
-  "Admin only",
-  "Core billing + inventory access",
+  "50 invoices during trial",
+  "20 customers",
+  "30 products",
+  "Admin only (shop owner)",
+  "Basic billing + inventory",
+  "Customer ledger",
+  "PDF invoice generation",
+  "Stock alerts",
 ];
 
 const ADDONS = [
@@ -305,8 +320,8 @@ export default function PricingSection() {
             </div>
 
             <p className="text-sm text-gray-600 leading-7 mb-6">
-              Explore Ice Inventory with enough capacity to test billing,
-              products and customer workflows before subscribing.
+              Test Ice Inventory for 30 days with enough capacity to explore
+              billing, products, and customer workflows before choosing a paid plan.
             </p>
 
             <ul className="space-y-3 mb-8 flex-1">
