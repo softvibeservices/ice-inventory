@@ -132,19 +132,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    const { name, email, contact, shopName, shopAddress, gstin, password } = result.data;
+    const { name, email, contact, password } = result.data;
 
     // ── 6. DB: duplicate check ──────────────────────────────────────────────
     await connectDB();
 
     const exists = await User.findOne({
-      $or: [{ email }, { gstin }],
+      email,
       role: { $ne: "manager" },
     }).lean();
 
     if (exists) {
       return NextResponse.json(
-        { error: "An account with the provided email or GSTIN already exists." },
+        { error: "An account with this email already exists." },
         { status: 409 }
       );
     }
@@ -158,9 +158,6 @@ export async function POST(req: NextRequest) {
       name,
       email,
       contact,
-      shopName,
-      shopAddress,
-      gstin,
       password,
       role: "admin",
       isVerified: false,
