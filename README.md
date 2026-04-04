@@ -1,4 +1,4 @@
-
+Hello, created by nitaraj 
 # 🍦 IceCream Inventory Management System
 
 An advanced inventory management web app for ice cream retailers and wholesalers — built with **Next.js (App Router)**, **TypeScript**, **MongoDB**, **Cloudinary**, and **Tailwind CSS**.  
