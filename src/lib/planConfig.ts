@@ -21,6 +21,14 @@
 //  IMPORTANT: Even on sixmonths/yearly billing periods, invoices reset
 //  every calendar month. This counter represents the PER-MONTH cap
 //  regardless of billing period length.
+//
+//  HOW LIMITS ARE ENFORCED AT RUNTIME:
+//    1. Call getEffectiveLimits(subscription.planId, subscription.customLimits)
+//       to get the base plan config.
+//    2. Fetch all active AddOn docs for the user.
+//    3. Sum ADDON_BONUS_MAP bonuses from those docs onto the numeric limits.
+//    4. Compare the result to the current usage counters.
+//    See subscriptionGuard.ts for the complete implementation.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PlanId } from "@/models/Subscription";
@@ -168,15 +176,20 @@ export const PLAN_CONFIG: Record<Exclude<PlanId, "customize">, IPlanConfig> = {
 // ─────────────────────────────────────────────────────────────────────────────
 //  getEffectiveLimits()
 //
-//  Resolves the final limits for ANY plan including "customize".
+//  Resolves the final BASE limits for ANY plan including "customize".
 //  For customize plans, starts with business as the base config and
 //  overlays only the fields explicitly set in customLimits.
 //
+//  ⚠️  IMPORTANT: This function returns BASE plan limits only.
+//  It does NOT add AddOn bonuses. Callers that enforce invoice/manager/
+//  delivery limits MUST also fetch active AddOn docs and add the bonuses
+//  from ADDON_BONUS_MAP on top of the values returned here.
+//  See subscriptionGuard.ts → getEffectiveCapabilities() for the full
+//  merged result including add-on bonuses.
+//
 //  Usage:
 //    const limits = getEffectiveLimits(subscription.planId, subscription.customLimits);
-//    if (limits.invoicesPerMonth !== null && sub.invoicesThisMonth >= limits.invoicesPerMonth) {
-//      // block invoice creation
-//    }
+//    // limits.invoicesPerMonth is the PLAN base only — add addon bonuses before comparing
 // ─────────────────────────────────────────────────────────────────────────────
 import type { ICustomLimits } from "@/models/Subscription";
 

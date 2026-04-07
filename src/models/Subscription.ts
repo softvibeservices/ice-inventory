@@ -39,7 +39,16 @@ export type BillingPeriod = "monthly" | "sixmonths" | "yearly";
 //
 //  active    → plan is live, within expiresAt, all limits enforced normally
 //  expired   → expiresAt passed; block writes, allow reads only
-//  cancelled → user or admin cancelled; cancelledAt is set; write-blocked same as expired
+//  cancelled → user or admin cancelled; cancelledAt is set
+//             ACCESS continues until expiresAt — write-blocked only after that
+//
+//  VALID TRANSITIONS (enforced in subscriptionTransitions.ts):
+//    free_trial active  → active (paid)    [on first payment webhook]
+//    active             → cancelled        [user cancels; access until expiresAt]
+//    active             → expired          [cron/lazy check; expiresAt passed]
+//    cancelled          → active           [reactivation; only if expiresAt > now]
+//    cancelled          → expired          [cron; expiresAt passed while cancelled]
+//    expired            → active           [new payment; treated as fresh subscription]
 // ─────────────────────────────────────────────────────────────────────────────
 export type SubscriptionStatus = "active" | "expired" | "cancelled";
 
@@ -49,7 +58,7 @@ export type SubscriptionStatus = "active" | "expired" | "cancelled";
 //  Used ONLY when planId = "customize".
 //  Manually set by internal admin for negotiated enterprise tenants.
 //
-//  Two types of overrides (Section 9 of pricing spec):
+//  Two types of overrides:
 //
 //  A) Numeric limits — count-based restrictions
 //     null on any field = unlimited for that resource
@@ -95,6 +104,15 @@ export interface ISubscription extends Document {
   planId: PlanId;
   billingPeriod: BillingPeriod | null; // null for free_trial
 
+  // ── Plan history ──────────────────────────────────────────────────────────
+  //  previousPlanId: the plan that was active immediately before the current one.
+  //  Set on every plan transition. Used for:
+  //    — proration calculation if we add it later
+  //    — support audits ("what plan were they on before?")
+  //    — analytics / churn analysis
+  //  undefined on brand-new free_trial subscriptions (no prior plan).
+  previousPlanId?: PlanId;
+
   status: SubscriptionStatus;
 
   // ── Lifecycle dates ───────────────────────────────────────────────────────
@@ -102,23 +120,60 @@ export interface ISubscription extends Document {
   expiresAt: Date;    // free_trial → startedAt + 30 days; paid → end of billing cycle
   cancelledAt?: Date; // set only when status transitions to "cancelled"
 
+  // ── Trial → paid conversion tracking ─────────────────────────────────────
+  //  Set exactly once: the moment the user makes their first paid payment and
+  //  transitions out of free_trial. Never reset or overwritten.
+  //  undefined for users still on or who never left free_trial.
+  //  Used for:
+  //    — analytics ("time to convert")
+  //    — preventing trial re-activation abuse
+  //    — billing history display ("member since")
+  trialConvertedAt?: Date;
+
+  // ── Scheduled downgrade ───────────────────────────────────────────────────
+  //  When a user requests a downgrade, we do NOT immediately change planId.
+  //  Instead we schedule it to take effect at the end of the current billing cycle.
+  //
+  //  scheduledDowngradeTo:  the planId to switch to at downgradeEffectiveAt.
+  //  downgradeEffectiveAt:  always set to current expiresAt at the time of request.
+  //
+  //  At renewal time (cron or lazy check), if downgradeEffectiveAt <= now:
+  //    1. Set previousPlanId = planId
+  //    2. Set planId = scheduledDowngradeTo
+  //    3. Recalculate expiresAt for the new plan's billing period
+  //    4. Clear both fields (set to undefined)
+  //    5. Reset invoicesThisMonth + invoiceCountResetAt
+  //
+  //  IMPORTANT: both fields must be set/cleared together atomically.
+  //  IMPORTANT: downgrade to "free_trial" is NOT allowed via this path.
+  scheduledDowngradeTo?: Exclude<PlanId, "free_trial">;
+  downgradeEffectiveAt?: Date;
+
   // ── Invoice usage tracking ────────────────────────────────────────────────
   //
   //  invoicesThisMonth:
   //    Paid plans only. Monthly rolling counter.
   //    Resets to 0 lazily: on any invoice limit check, if invoiceCountResetAt
-  //    is from a prior calendar month → reset counter in the same operation.
+  //    is from a prior calendar month → reset counter in the SAME atomic write.
   //    Effective limit = planConfig.invoicesPerMonth + sum of active AddOn bonuses.
   //    AddOn bonuses are NOT cached here — always summed live from AddOn collection.
   //    NOT used for free_trial enforcement (use invoicesUsedTotal instead).
   //
   //  invoiceCountResetAt:
-  //    Timestamp of last monthly reset. Used for lazy reset logic.
+  //    Timestamp of the last monthly reset. Lazy reset logic compares
+  //    this date's month+year to the current month+year.
+  //    Also used by addonAlignment.ts to compute add-on expiry alignment.
   //
   //  invoicesUsedTotal:
   //    LIFETIME cumulative counter. Never resets.
   //    PRIMARY enforcement for free_trial (cap = 50 total, not per-month).
   //    Also increments for paid plans but NOT used for paid plan enforcement.
+  //
+  //  RACE CONDITION GUARD:
+  //    Never increment invoicesThisMonth with two separate DB calls.
+  //    Use a single atomic findOneAndUpdate with $inc + conditional reset.
+  //    See subscriptionGuard.ts → checkInvoiceLimitAndIncrement() for the
+  //    correct implementation pattern.
   //
   invoicesThisMonth: number;
   invoiceCountResetAt: Date;
@@ -160,6 +215,14 @@ const SubscriptionSchema = new Schema<ISubscription>(
       enum: ["monthly", "sixmonths", "yearly", null],
       default: null, // null = free_trial; set on first paid upgrade
     },
+
+    // ── Plan history ──────────────────────────────────────────────────────────
+    previousPlanId: {
+      type: String,
+      enum: ["free_trial", "launch", "scale", "business", "customize"],
+      default: undefined,
+    },
+
     status: {
       type: String,
       enum: ["active", "expired", "cancelled"],
@@ -187,6 +250,25 @@ const SubscriptionSchema = new Schema<ISubscription>(
       default: undefined,
     },
 
+    // ── Trial conversion ──────────────────────────────────────────────────────
+    trialConvertedAt: {
+      type: Date,
+      default: undefined,
+    },
+
+    // ── Scheduled downgrade ───────────────────────────────────────────────────
+    //  Both fields must always be set or cleared together.
+    //  "free_trial" excluded — you cannot schedule a downgrade to free trial.
+    scheduledDowngradeTo: {
+      type: String,
+      enum: ["launch", "scale", "business", "customize"],
+      default: undefined,
+    },
+    downgradeEffectiveAt: {
+      type: Date,
+      default: undefined,
+    },
+
     // ── Invoice counters ──────────────────────────────────────────────────────
     invoicesThisMonth: {
       type: Number,
@@ -207,12 +289,6 @@ const SubscriptionSchema = new Schema<ISubscription>(
     },
 
     // ── Custom plan config (customize planId ONLY) ────────────────────────────
-    //  Absent for all standard plans.
-    //  Numeric fields: undefined = inherit from business base via getEffectiveLimits()
-    //  Feature flags:  undefined = inherit from business base via getEffectiveLimits()
-    //
-    //  invoicesPerMonth stored as Number — null is intentionally allowed to
-    //  represent unlimited invoices for negotiated enterprise tenants.
     customLimits: {
       // A) Numeric overrides
       invoicesPerMonth: { type: Number, min: 0, default: undefined },
@@ -241,9 +317,12 @@ const SubscriptionSchema = new Schema<ISubscription>(
 );
 
 // ── Indexes ───────────────────────────────────────────────────────────────────
-SubscriptionSchema.index({ userId: 1 });    // primary — fetched on every API write
-SubscriptionSchema.index({ status: 1 });    // expiry sweep / admin dashboard queries
-SubscriptionSchema.index({ expiresAt: 1 }); // lazy expiry check + cron jobs
+SubscriptionSchema.index({ userId: 1 });              // primary — fetched on every API write
+SubscriptionSchema.index({ status: 1 });              // admin dashboard queries
+SubscriptionSchema.index({ expiresAt: 1 });           // lazy expiry check
+SubscriptionSchema.index({ status: 1, expiresAt: 1 }); // expiry cron sweep — query pattern:
+                                                        // { status: "active", expiresAt: { $lt: now } }
+                                                        // { status: "cancelled", expiresAt: { $lt: now } }
 
 const Subscription =
   models.Subscription ||

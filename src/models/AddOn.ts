@@ -35,7 +35,8 @@ export type AddOnType =
 //
 //  These add-ons have no recurring billing and no expiry date.
 //  Limit-check logic skips expiry validation for these types.
-//  They remain as historical records with isActive=true after service delivery.
+//  They remain as permanent historical records with isActive=true after delivery.
+//  Expiry cron MUST exclude these from its sweep.
 // ─────────────────────────────────────────────────────────────────────────────
 export const ONE_TIME_ADDON_TYPES: AddOnType[] = ["setup_migration"];
 
@@ -107,14 +108,37 @@ export interface IAddOn extends Document {
   isActive: boolean;
 
   // ── Billing / expiry ──────────────────────────────────────────────────────
-  //  Recurring add-ons: expiresAt = end of paid month/cycle.
-  //    Active and in effect when:  isActive=true AND expiresAt > now
-  //    After expiry:               set isActive=false (via cron or lazy check)
+  //  Recurring add-ons: expiresAt = next occurrence of the user's subscription
+  //    reset date, computed by addonAlignment.ts → computeAddOnExpiry().
+  //
+  //  WHY ALIGNMENT MATTERS:
+  //    The user's subscription invoices reset on a fixed calendar day each month
+  //    (tracked in Subscription.invoiceCountResetAt). If a user buys an add-on
+  //    on the 20th but their reset is the 1st, a naive "now + 30 days" expiry
+  //    would give them invoice bonuses through the 20th of the next month — 20
+  //    days past when their base limit resets. addonAlignment.ts computes the
+  //    next reset date from invoiceCountResetAt so the add-on always expires in
+  //    sync with the subscription's monthly invoice reset.
+  //
+  //  Active and in effect when:  isActive=true AND expiresAt > now
+  //  After expiry:               cron or lazy check sets isActive=false
   //
   //  One-time add-ons (setup_migration): expiresAt is null.
   //    isActive=true means the service was delivered — not that it renews.
-  //    These are kept as permanent historical records.
+  //    These are kept as permanent historical records; expiry cron skips them.
   expiresAt: Date | null; // null for one-time add-ons
+
+  // ── Billing anchor ────────────────────────────────────────────────────────
+  //  The calendar day-of-month (1–28) on which this user's subscription resets
+  //  invoices. Copied from Subscription.invoiceCountResetAt at purchase time.
+  //
+  //  Stored here so:
+  //    — addonAlignment.ts can compute the next expiry without fetching Subscription
+  //    — renewal logic can re-align expiry even if the subscription resets mid-month
+  //
+  //  null for one-time add-ons (setup_migration).
+  //  Capped at 28 to avoid February edge cases.
+  billingAnchorDay: number | null;
 
   // ── Payment reference ─────────────────────────────────────────────────────
   //  The PaymentRecord that created this add-on.
@@ -170,11 +194,22 @@ const AddOnSchema = new Schema<IAddOn>(
 
     // ── Billing / expiry ──────────────────────────────────────────────────────
     //  null for one-time add-ons (setup_migration).
-    //  Required to be explicitly set for recurring add-ons by purchase handler.
+    //  For recurring add-ons, purchase handler MUST compute this via
+    //  addonAlignment.ts → computeAddOnExpiry() — never use "now + 30 days".
     expiresAt: {
       type: Date,
-      required: true,
-      default: null, // purchase handler must override for recurring add-ons
+      default: null,
+    },
+
+    // ── Billing anchor ────────────────────────────────────────────────────────
+    //  Set by purchase handler from Subscription.invoiceCountResetAt day-of-month.
+    //  Capped at 28 to avoid February edge cases.
+    //  null for one-time add-ons.
+    billingAnchorDay: {
+      type: Number,
+      min: 1,
+      max: 28,
+      default: null,
     },
 
     // ── Payment reference ─────────────────────────────────────────────────────
@@ -190,9 +225,24 @@ const AddOnSchema = new Schema<IAddOn>(
 );
 
 // ── Indexes ───────────────────────────────────────────────────────────────────
-AddOnSchema.index({ userId: 1, isActive: 1 });    // primary: fetch active add-ons per user
-AddOnSchema.index({ userId: 1, type: 1 });         // check if user has a specific add-on type
-AddOnSchema.index({ expiresAt: 1, isActive: 1 }); // expiry cron sweep
+//
+//  PRIMARY — active add-ons per user (called on every limit check):
+AddOnSchema.index({ userId: 1, isActive: 1 });
+
+//  TYPE CHECK — does this user have a specific add-on type active?
+AddOnSchema.index({ userId: 1, type: 1 });
+
+//  EXPIRY CRON SWEEP — finds all expired recurring add-ons to deactivate:
+//    query: { isActive: true, expiresAt: { $lt: now }, type: { $nin: ONE_TIME_ADDON_TYPES } }
+AddOnSchema.index({ expiresAt: 1, isActive: 1 });
+
+//  DUPLICATE GUARD — prevents two active recurring add-ons of the same type
+//  for the same user being created in a race condition.
+//  sparse: true so null expiresAt (one-time add-ons) are excluded.
+AddOnSchema.index(
+  { userId: 1, type: 1, expiresAt: 1 },
+  { sparse: true, name: "addon_duplicate_guard" }
+);
 
 const AddOn = models.AddOn || mongoose.model<IAddOn>("AddOn", AddOnSchema);
 
