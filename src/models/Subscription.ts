@@ -1,85 +1,66 @@
 // src/models/Subscription.ts
+//
+// ─────────────────────────────────────────────────────────────────────────────
+//  Subscription model — one document per admin user.
+//
+//  A Subscription tracks:
+//    - Which plan the user is on (planId)
+//    - How long (billingPeriod, currentPeriodEnd)
+//    - Usage counters (invoicesUsedThisMonth, invoicesUsedTotal)
+//    - The monthly reset anchor date (invoiceCountResetAt)
+//    - Custom limits for the "customize" plan (set by superAdmin)
+//
+//  The "lazy reset" pattern is used instead of a cron job:
+//    Before any invoice-count check, lazyResetInvoiceCountIfNeeded()
+//    in subscriptionGuard.ts advances invoiceCountResetAt and resets
+//    invoicesUsedThisMonth if the anchor date has passed. This works
+//    perfectly on Vercel Free Tier with no background jobs.
+//
+//  Every admin user gets exactly ONE Subscription document.
+//  Created automatically by /api/verify/route.ts after OTP verification.
+// ─────────────────────────────────────────────────────────────────────────────
 
-import mongoose, { Schema, Document, models } from "mongoose";
+import mongoose, { Schema, Document, models, Model } from "mongoose";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  PlanId
 //
-//  free_trial  → ₹0, 30 days, 50 LIFETIME invoices (not monthly)
-//  launch      → ₹499/mo    — solo owner, no managers, no delivery
-//  scale       → ₹1,499/mo  — distributors, 3 managers, 5 delivery partners
-//  business    → ₹2,499/mo  — high-volume, 10 managers, 15 delivery partners
-//  customize   → manually configured; limits stored in customLimits below
-//
-//  All numeric limits and feature flags for standard plans live in
-//  src/lib/planConfig.ts — NOT in this schema.
-//  Use getEffectiveLimits(planId, customLimits) for all limit checks.
+//  The five plan tiers. "customize" has no PLAN_CONFIG entry — its limits
+//  are stored directly in Subscription.customLimits and resolved at runtime
+//  by getEffectiveLimits() in planConfig.ts.
 // ─────────────────────────────────────────────────────────────────────────────
-export type PlanId =
-  | "free_trial"
-  | "launch"
-  | "scale"
-  | "business"
-  | "customize";
+export type PlanId = "free_trial" | "launch" | "scale" | "business" | "customize";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  BillingPeriod
-//
-//  Applies ONLY to paid plans (launch / scale / business / customize).
-//  free_trial subscriptions leave billingPeriod as null.
-//
-//  CRITICAL BUSINESS RULE:
-//  Even on sixmonths or yearly plans, invoices reset every calendar month.
-//  A Scale yearly subscriber gets 400 invoices/month × 12 — NOT 4,800 pooled.
 // ─────────────────────────────────────────────────────────────────────────────
 export type BillingPeriod = "monthly" | "sixmonths" | "yearly";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  SubscriptionStatus
-//
-//  active    → plan is live, within expiresAt, all limits enforced normally
-//  expired   → expiresAt passed; block writes, allow reads only
-//  cancelled → user or admin cancelled; cancelledAt is set
-//             ACCESS continues until expiresAt — write-blocked only after that
-//
-//  VALID TRANSITIONS (enforced in subscriptionTransitions.ts):
-//    free_trial active  → active (paid)    [on first payment webhook]
-//    active             → cancelled        [user cancels; access until expiresAt]
-//    active             → expired          [cron/lazy check; expiresAt passed]
-//    cancelled          → active           [reactivation; only if expiresAt > now]
-//    cancelled          → expired          [cron; expiresAt passed while cancelled]
-//    expired            → active           [new payment; treated as fresh subscription]
 // ─────────────────────────────────────────────────────────────────────────────
-export type SubscriptionStatus = "active" | "expired" | "cancelled";
+export type SubscriptionStatus = "active" | "expired" | "cancelled" | "grace";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ICustomLimits
 //
-//  Used ONLY when planId = "customize".
-//  Manually set by internal admin for negotiated enterprise tenants.
+//  Used only for "customize" plan subscriptions. SuperAdmin sets these values
+//  manually. Any field left undefined falls back to the "business" plan value
+//  in getEffectiveLimits().
 //
-//  Two types of overrides:
-//
-//  A) Numeric limits — count-based restrictions
-//     null on any field = unlimited for that resource
-//     undefined = inherit from base plan (business) in getEffectiveLimits()
-//
-//  B) Feature flags — yes/no capability overrides
-//     undefined = inherit from base plan (business) in getEffectiveLimits()
-//     Only set fields that DEVIATE from what the business plan grants.
-//
-//  NOTE: invoicesPerMonth here follows the same per-calendar-month reset
-//  rule as all standard plans. null = unlimited invoices per month.
+//  All numeric fields use null to mean "unlimited" (same semantics as
+//  IPlanConfig in planConfig.ts).
 // ─────────────────────────────────────────────────────────────────────────────
 export interface ICustomLimits {
-  // A) Numeric overrides (undefined = inherit from business base)
-  invoicesPerMonth?: number | null; // null = unlimited
-  customers?: number | null;        // null = unlimited
-  products?: number | null;         // null = unlimited
+  // ── Numeric limits ────────────────────────────────────────────────────────
+  invoicesPerMonth?: number | null;
+  invoicesTotal?: number | null;
+  customers?: number | null;
+  products?: number | null;
   managers?: number;
   deliveryPartners?: number;
 
-  // B) Feature flag overrides (undefined = inherit from business base)
+  // ── Feature flags ─────────────────────────────────────────────────────────
   hasDeliveryModule?: boolean;
   hasLiveTracking?: boolean;
   hasRouteOptimization?: boolean;
@@ -93,96 +74,73 @@ export interface ICustomLimits {
   hasDedicatedSupport?: boolean;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  ISubscription — the Mongoose document interface
+// ─────────────────────────────────────────────────────────────────────────────
 export interface ISubscription extends Document {
   // ── Ownership ─────────────────────────────────────────────────────────────
-  //  One subscription per admin user only.
-  //  Managers inherit limits from their admin's subscription (via adminId on User).
-  //  Delivery partners never get a subscription.
-  userId: mongoose.Types.ObjectId; // ref → User (admin role ONLY)
+  //  One subscription per admin user. Unique index enforces this.
+  userId: mongoose.Types.ObjectId;
 
   // ── Plan identity ─────────────────────────────────────────────────────────
   planId: PlanId;
-  billingPeriod: BillingPeriod | null; // null for free_trial
 
-  // ── Plan history ──────────────────────────────────────────────────────────
-  //  previousPlanId: the plan that was active immediately before the current one.
-  //  Set on every plan transition. Used for:
-  //    — proration calculation if we add it later
-  //    — support audits ("what plan were they on before?")
-  //    — analytics / churn analysis
-  //  undefined on brand-new free_trial subscriptions (no prior plan).
-  previousPlanId?: PlanId;
+  // ── Billing period ────────────────────────────────────────────────────────
+  //  monthly   = billed every month
+  //  sixmonths = billed every 6 months
+  //  yearly    = billed annually
+  //
+  //  NOTE: Even on sixmonths/yearly billing, invoicesPerMonth resets
+  //  every calendar month. billingPeriod controls PAYMENT frequency only,
+  //  not invoice reset frequency.
+  billingPeriod: BillingPeriod;
 
+  // ── Subscription lifecycle ─────────────────────────────────────────────────
   status: SubscriptionStatus;
 
-  // ── Lifecycle dates ───────────────────────────────────────────────────────
-  startedAt: Date;    // when this plan became active
-  expiresAt: Date;    // free_trial → startedAt + 30 days; paid → end of billing cycle
-  cancelledAt?: Date; // set only when status transitions to "cancelled"
+  // ── Date range ────────────────────────────────────────────────────────────
+  startDate: Date;
 
-  // ── Trial → paid conversion tracking ─────────────────────────────────────
-  //  Set exactly once: the moment the user makes their first paid payment and
-  //  transitions out of free_trial. Never reset or overwritten.
-  //  undefined for users still on or who never left free_trial.
-  //  Used for:
-  //    — analytics ("time to convert")
-  //    — preventing trial re-activation abuse
-  //    — billing history display ("member since")
-  trialConvertedAt?: Date;
+  // null for free_trial — free trial ends by invoice count, not by date.
+  // Set to the end of the paid billing period for launch/scale/business/customize.
+  currentPeriodEnd: Date | null;
 
-  // ── Scheduled downgrade ───────────────────────────────────────────────────
-  //  When a user requests a downgrade, we do NOT immediately change planId.
-  //  Instead we schedule it to take effect at the end of the current billing cycle.
-  //
-  //  scheduledDowngradeTo:  the planId to switch to at downgradeEffectiveAt.
-  //  downgradeEffectiveAt:  always set to current expiresAt at the time of request.
-  //
-  //  At renewal time (cron or lazy check), if downgradeEffectiveAt <= now:
-  //    1. Set previousPlanId = planId
-  //    2. Set planId = scheduledDowngradeTo
-  //    3. Recalculate expiresAt for the new plan's billing period
-  //    4. Clear both fields (set to undefined)
-  //    5. Reset invoicesThisMonth + invoiceCountResetAt
-  //
-  //  IMPORTANT: both fields must be set/cleared together atomically.
-  //  IMPORTANT: downgrade to "free_trial" is NOT allowed via this path.
-  scheduledDowngradeTo?: Exclude<PlanId, "free_trial">;
-  downgradeEffectiveAt?: Date;
+  // Populated only for free_trial plans. Set to startDate + 30 days.
+  // After trialEndsAt, the plan is also considered expired (belt-and-suspenders).
+  // For paid plans this is null.
+  trialEndsAt: Date | null;
 
-  // ── Invoice usage tracking ────────────────────────────────────────────────
+  // ── Invoice usage counters ────────────────────────────────────────────────
+  //  invoicesUsedThisMonth — reset lazily when invoiceCountResetAt passes.
+  //    Checked against invoicesPerMonth for paid plans.
   //
-  //  invoicesThisMonth:
-  //    Paid plans only. Monthly rolling counter.
-  //    Resets to 0 lazily: on any invoice limit check, if invoiceCountResetAt
-  //    is from a prior calendar month → reset counter in the SAME atomic write.
-  //    Effective limit = planConfig.invoicesPerMonth + sum of active AddOn bonuses.
-  //    AddOn bonuses are NOT cached here — always summed live from AddOn collection.
-  //    NOT used for free_trial enforcement (use invoicesUsedTotal instead).
-  //
-  //  invoiceCountResetAt:
-  //    Timestamp of the last monthly reset. Lazy reset logic compares
-  //    this date's month+year to the current month+year.
-  //    Also used by addonAlignment.ts to compute add-on expiry alignment.
-  //
-  //  invoicesUsedTotal:
-  //    LIFETIME cumulative counter. Never resets.
-  //    PRIMARY enforcement for free_trial (cap = 50 total, not per-month).
-  //    Also increments for paid plans but NOT used for paid plan enforcement.
-  //
-  //  RACE CONDITION GUARD:
-  //    Never increment invoicesThisMonth with two separate DB calls.
-  //    Use a single atomic findOneAndUpdate with $inc + conditional reset.
-  //    See subscriptionGuard.ts → checkInvoiceLimitAndIncrement() for the
-  //    correct implementation pattern.
-  //
-  invoicesThisMonth: number;
-  invoiceCountResetAt: Date;
+  //  invoicesUsedTotal — never reset. Checked against invoicesTotal for
+  //    free_trial (50-invoice lifetime cap). Ignored for paid plans.
+  invoicesUsedThisMonth: number;
   invoicesUsedTotal: number;
 
-  // ── Custom plan config (customize planId ONLY) ────────────────────────────
-  //  undefined for all standard plans (free_trial / launch / scale / business).
-  //  For standard plans, ALL limits and feature flags come from planConfig.ts.
-  //  For customize plan, getEffectiveLimits() merges this with business base.
+  // ── Invoice count reset anchor ────────────────────────────────────────────
+  //  The date (calendar day) on which invoicesUsedThisMonth resets to 0.
+  //  Also used by addonAlignment.ts to compute add-on expiry dates so that
+  //  add-on bonuses always expire in sync with the subscription's monthly
+  //  invoice reset.
+  //
+  //  How it works (lazy reset):
+  //    1. Request comes in for a guarded route.
+  //    2. subscriptionGuard.ts fetches the Subscription.
+  //    3. lazyResetInvoiceCountIfNeeded() checks:
+  //         if (now >= invoiceCountResetAt) → reset counter, advance date by 1 month
+  //    4. Save the Subscription.
+  //    5. Continue with the limit check on the fresh counter.
+  //
+  //  Initial value: same day next month from registration.
+  //    e.g., registered April 9 → invoiceCountResetAt = May 9
+  invoiceCountResetAt: Date;
+
+  // ── Custom limits (customize plan only) ──────────────────────────────────
+  //  Only populated for planId === "customize". SuperAdmin sets these.
+  //  getEffectiveLimits() in planConfig.ts overlays these on top of the
+  //  "business" plan base config.
   customLimits?: ICustomLimits;
 
   // ── Timestamps ────────────────────────────────────────────────────────────
@@ -191,7 +149,38 @@ export interface ISubscription extends Document {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Schema definition
+//  ICustomLimits sub-schema
+//
+//  Using Schema.Types.Mixed would lose type safety on individual fields.
+//  A proper sub-schema with individual fields is used instead so that
+//  partial updates via $set work cleanly in MongoDB.
+// ─────────────────────────────────────────────────────────────────────────────
+const CustomLimitsSchema = new Schema<ICustomLimits>(
+  {
+    invoicesPerMonth:             { type: Number, default: null },
+    invoicesTotal:                { type: Number, default: null },
+    customers:                    { type: Number, default: null },
+    products:                     { type: Number, default: null },
+    managers:                     { type: Number, default: 0 },
+    deliveryPartners:             { type: Number, default: 0 },
+
+    hasDeliveryModule:            { type: Boolean, default: false },
+    hasLiveTracking:              { type: Boolean, default: false },
+    hasRouteOptimization:         { type: Boolean, default: false },
+    hasAdvancedDeliveryAnalytics: { type: Boolean, default: false },
+    hasBulkBilling:               { type: Boolean, default: false },
+    hasAdvancedReports:           { type: Boolean, default: false },
+    hasCustomWorkflows:           { type: Boolean, default: false },
+    hasDataExport:                { type: Boolean, default: false },
+    hasDataBackup:                { type: Boolean, default: false },
+    hasPrioritySupport:           { type: Boolean, default: false },
+    hasDedicatedSupport:          { type: Boolean, default: false },
+  },
+  { _id: false } // Embedded sub-document — no separate _id needed
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SubscriptionSchema
 // ─────────────────────────────────────────────────────────────────────────────
 const SubscriptionSchema = new Schema<ISubscription>(
   {
@@ -200,7 +189,6 @@ const SubscriptionSchema = new Schema<ISubscription>(
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true, // DB-level constraint: one subscription per admin
     },
 
     // ── Plan identity ─────────────────────────────────────────────────────────
@@ -208,124 +196,92 @@ const SubscriptionSchema = new Schema<ISubscription>(
       type: String,
       enum: ["free_trial", "launch", "scale", "business", "customize"],
       required: true,
-      default: "free_trial",
     },
+
+    // ── Billing period ────────────────────────────────────────────────────────
     billingPeriod: {
       type: String,
-      enum: ["monthly", "sixmonths", "yearly", null],
-      default: null, // null = free_trial; set on first paid upgrade
+      enum: ["monthly", "sixmonths", "yearly"],
+      default: "monthly",
     },
 
-    // ── Plan history ──────────────────────────────────────────────────────────
-    previousPlanId: {
-      type: String,
-      enum: ["free_trial", "launch", "scale", "business", "customize"],
-      default: undefined,
-    },
-
+    // ── Lifecycle status ──────────────────────────────────────────────────────
     status: {
       type: String,
-      enum: ["active", "expired", "cancelled"],
-      required: true,
+      enum: ["active", "expired", "cancelled", "grace"],
       default: "active",
     },
 
-    // ── Lifecycle dates ───────────────────────────────────────────────────────
-    startedAt: {
+    // ── Dates ─────────────────────────────────────────────────────────────────
+    startDate: {
       type: Date,
       required: true,
-      default: () => new Date(),
-    },
-    expiresAt: {
-      type: Date,
-      required: true,
-      // Never defaulted — must be explicitly set by registration/upgrade logic:
-      //   free_trial → startedAt + 30 days
-      //   monthly    → startedAt + 1 calendar month
-      //   sixmonths  → startedAt + 6 calendar months
-      //   yearly     → startedAt + 1 calendar year
-    },
-    cancelledAt: {
-      type: Date,
-      default: undefined,
     },
 
-    // ── Trial conversion ──────────────────────────────────────────────────────
-    trialConvertedAt: {
+    currentPeriodEnd: {
       type: Date,
-      default: undefined,
+      default: null, // null for free_trial
     },
 
-    // ── Scheduled downgrade ───────────────────────────────────────────────────
-    //  Both fields must always be set or cleared together.
-    //  "free_trial" excluded — you cannot schedule a downgrade to free trial.
-    scheduledDowngradeTo: {
-      type: String,
-      enum: ["launch", "scale", "business", "customize"],
-      default: undefined,
-    },
-    downgradeEffectiveAt: {
+    trialEndsAt: {
       type: Date,
-      default: undefined,
+      default: null, // null for paid plans
     },
 
-    // ── Invoice counters ──────────────────────────────────────────────────────
-    invoicesThisMonth: {
+    // ── Invoice usage ─────────────────────────────────────────────────────────
+    invoicesUsedThisMonth: {
       type: Number,
-      required: true,
       default: 0,
       min: 0,
     },
+
+    invoicesUsedTotal: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    // ── Invoice reset anchor ──────────────────────────────────────────────────
     invoiceCountResetAt: {
       type: Date,
       required: true,
-      default: () => new Date(),
-    },
-    invoicesUsedTotal: {
-      type: Number,
-      required: true,
-      default: 0,
-      min: 0,
     },
 
-    // ── Custom plan config (customize planId ONLY) ────────────────────────────
+    // ── Custom limits (customize plan only) ───────────────────────────────────
     customLimits: {
-      // A) Numeric overrides
-      invoicesPerMonth: { type: Number, min: 0, default: undefined },
-      customers:        { type: Number, min: 0, default: undefined },
-      products:         { type: Number, min: 0, default: undefined },
-      managers:         { type: Number, min: 0, default: undefined },
-      deliveryPartners: { type: Number, min: 0, default: undefined },
-
-      // B) Feature flag overrides
-      hasDeliveryModule:            { type: Boolean, default: undefined },
-      hasLiveTracking:              { type: Boolean, default: undefined },
-      hasRouteOptimization:         { type: Boolean, default: undefined },
-      hasAdvancedDeliveryAnalytics: { type: Boolean, default: undefined },
-      hasBulkBilling:               { type: Boolean, default: undefined },
-      hasAdvancedReports:           { type: Boolean, default: undefined },
-      hasCustomWorkflows:           { type: Boolean, default: undefined },
-      hasDataExport:                { type: Boolean, default: undefined },
-      hasDataBackup:                { type: Boolean, default: undefined },
-      hasPrioritySupport:           { type: Boolean, default: undefined },
-      hasDedicatedSupport:          { type: Boolean, default: undefined },
+      type: CustomLimitsSchema,
+      default: undefined, // Only present when planId === "customize"
     },
   },
   {
-    timestamps: true,
+    timestamps: true, // Adds createdAt and updatedAt automatically
+    collection: "subscriptions",
   }
 );
 
-// ── Indexes ───────────────────────────────────────────────────────────────────
-SubscriptionSchema.index({ userId: 1 });              // primary — fetched on every API write
-SubscriptionSchema.index({ status: 1 });              // admin dashboard queries
-SubscriptionSchema.index({ expiresAt: 1 });           // lazy expiry check
-SubscriptionSchema.index({ status: 1, expiresAt: 1 }); // expiry cron sweep — query pattern:
-                                                        // { status: "active", expiresAt: { $lt: now } }
-                                                        // { status: "cancelled", expiresAt: { $lt: now } }
+// ─────────────────────────────────────────────────────────────────────────────
+//  Indexes
+//
+//  { userId: 1 } unique — enforces one subscription per admin user.
+//    This is the primary lookup key for all subscription checks.
+//
+//  { status: 1, currentPeriodEnd: 1 } — used by superAdmin queries that
+//    filter by plan status and expiry date range.
+//
+//  { planId: 1 } — used by superAdmin analytics (users-by-plan count).
+// ─────────────────────────────────────────────────────────────────────────────
+SubscriptionSchema.index({ userId: 1 }, { unique: true });
+SubscriptionSchema.index({ status: 1, currentPeriodEnd: 1 });
+SubscriptionSchema.index({ planId: 1 });
 
-const Subscription =
-  models.Subscription ||
+// ─────────────────────────────────────────────────────────────────────────────
+//  Model export
+//
+//  The `models.Subscription || model(...)` pattern prevents Next.js from
+//  re-registering the model on every hot reload in development.
+// ─────────────────────────────────────────────────────────────────────────────
+const Subscription: Model<ISubscription> =
+  (models.Subscription as Model<ISubscription>) ||
   mongoose.model<ISubscription>("Subscription", SubscriptionSchema);
 
 export default Subscription;

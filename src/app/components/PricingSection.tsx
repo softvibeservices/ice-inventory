@@ -1,5 +1,5 @@
 "use client";
-// src/app/components/PricingSection.tsx
+  // src/app/components/PricingSection.tsx
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
