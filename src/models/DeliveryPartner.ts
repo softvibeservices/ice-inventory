@@ -18,6 +18,7 @@ export interface IDeliveryPartner extends Document {
 
   notifiedAt: Date | null;
   sessionToken: string | null;
+  fcmToken: string | null;    // ← ADD THIS LINE
 
   lastLocation?: {
     latitude: number;
@@ -49,6 +50,7 @@ const DeliveryPartnerSchema = new Schema<IDeliveryPartner>(
 
     notifiedAt: { type: Date, default: null },
     sessionToken: { type: String, default: null },
+    fcmToken: { type: String, default: null },
 
     lastLocation: {
       latitude: Number,
