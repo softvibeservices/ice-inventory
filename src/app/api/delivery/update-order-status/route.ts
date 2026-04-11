@@ -5,6 +5,10 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
+// ── FCM: new imports ──────────────────────────────────────────────────────────
+import admin from "@/lib/firebase-admin";
+import DeliveryPartner from "@/models/DeliveryPartner";
+// ─────────────────────────────────────────────────────────────────────────────
 
 type DeliveryStatus = "Pending" | "On the Way" | "Delivered";
 
@@ -14,6 +18,8 @@ interface LeanOrder {
   deliveryPartnerId?: mongoose.Types.ObjectId | string | null;
   deliveryOnTheWayAt?: Date | null;
   deliveryCompletedAt?: Date | null;
+  shopName?: string;
+  customerName?: string;
 }
 
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -43,7 +49,7 @@ export async function PATCH(req: Request) {
     await connectDB();
 
     const existingOrder = await Order.findById(orderId)
-      .select("deliveryStatus deliveryPartnerId")
+      .select("deliveryStatus deliveryPartnerId shopName customerName")
       .lean<LeanOrder | null>();
 
     if (!existingOrder) {
@@ -83,6 +89,10 @@ export async function PATCH(req: Request) {
 
     if (note) update.deliveryNotes = note;
 
+    // ── Track whether this is a first-time assignment ─────────────────────────
+    const isFirstAssignment = status === "On the Way" && !existingOrder.deliveryPartnerId;
+    // ─────────────────────────────────────────────────────────────────────────
+
     if (status === "On the Way") {
       update.deliveryPartnerId = partnerObjId;
       update.deliveryOnTheWayAt = now;
@@ -111,6 +121,42 @@ export async function PATCH(req: Request) {
         { status: 409 }
       );
     }
+
+    // ── FCM: send notification on first assignment only ───────────────────────
+    // This is fire-and-forget — a failed FCM send must NOT fail the order update.
+    if (isFirstAssignment) {
+      (async () => {
+        try {
+          const partner = await DeliveryPartner.findById(partnerId).select("fcmToken");
+          if (partner?.fcmToken) {
+            await admin.messaging().send({
+              token: partner.fcmToken,
+              notification: {
+                title: "New Order Assigned",
+                body: `Order for ${existingOrder.shopName || existingOrder.customerName || "customer"} assigned to you`,
+              },
+              data: {
+                orderId: String(updatedOrder._id),
+                type: "new_order",
+                customerName: existingOrder.customerName || "",
+                shopName: existingOrder.shopName || "",
+              },
+              android: {
+                priority: "high",
+                notification: {
+                  channelId: "new_orders",
+                  sound: "default",
+                },
+              },
+            });
+          }
+        } catch (fcmError: any) {
+          // Non-fatal — order is already saved, just log the failure
+          console.error("FCM send failed (non-fatal):", fcmError?.message ?? fcmError);
+        }
+      })();
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json(
       {
