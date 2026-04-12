@@ -1,6 +1,5 @@
 // src/app/dashboard/orders/page.tsx
 
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -63,6 +62,7 @@ type Order = {
   deliveryNotes?: string;
   remarks?: string;
   createdAt?: string;
+  updatedAt?: string; // ✅ Included for last-edited display and sort
 };
 
 type Product = {
@@ -84,6 +84,7 @@ type SettleMethod = "Cash" | "Bank/UPI" | "Debt";
 type CashBankMethod = "Cash" | "Bank/UPI";
 type TabFilter = "Unsettled" | "Settled" | "Discarded" | "Debt";
 
+// ✅ Updated SortMode includes updated-desc and updated-asc
 type SortMode =
   | "date-desc"
   | "date-asc"
@@ -96,7 +97,9 @@ type SortMode =
   | "area-asc"
   | "area-desc"
   | "serial-asc"
-  | "serial-desc";
+  | "serial-desc"
+  | "updated-desc"
+  | "updated-asc";
 
 function getToken(): string {
   if (typeof window === "undefined") return "";
@@ -817,7 +820,7 @@ export default function OrdersPage() {
               </div>
             </div>
 
-            {/* ONLY MASTER CONTROL BAR */}
+            {/* MASTER CONTROL BAR */}
             <div className="px-4 sm:px-5 lg:px-6 py-4 bg-slate-50/70 border-b border-slate-200">
               <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
                 <div className="min-w-0">
@@ -842,26 +845,42 @@ export default function OrdersPage() {
                     />
                   </div>
 
-                  {/* Sort */}
-                  <div className="relative w-full sm:min-w-[220px]">
+                  {/* Sort — ✅ includes new Last Edited options */}
+                  <div className="relative w-full sm:min-w-[240px]">
                     <SlidersHorizontal className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <select
                       value={sortMode}
                       onChange={(e) => setSortMode(e.target.value as SortMode)}
                       className="w-full appearance-none rounded-xl border border-slate-300 bg-white pl-9 pr-10 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
-                      <option value="date-desc">Newest first</option>
-                      <option value="date-asc">Oldest first</option>
-                      <option value="total-desc">Highest amount</option>
-                      <option value="total-asc">Lowest amount</option>
-                      <option value="shop-asc">Shop A → Z</option>
-                      <option value="shop-desc">Shop Z → A</option>
-                      <option value="customer-asc">Customer A → Z</option>
-                      <option value="customer-desc">Customer Z → A</option>
-                      <option value="area-asc">Area A → Z</option>
-                      <option value="area-desc">Area Z → A</option>
-                      <option value="serial-asc">Serial low → high</option>
-                      <option value="serial-desc">Serial high → low</option>
+                      <optgroup label="Bill Date">
+                        <option value="date-desc">Newest first</option>
+                        <option value="date-asc">Oldest first</option>
+                      </optgroup>
+                      <optgroup label="Last Edited">
+                        <option value="updated-desc">Recently edited first</option>
+                        <option value="updated-asc">Oldest edit first</option>
+                      </optgroup>
+                      <optgroup label="Amount">
+                        <option value="total-desc">Highest amount</option>
+                        <option value="total-asc">Lowest amount</option>
+                      </optgroup>
+                      <optgroup label="Shop">
+                        <option value="shop-asc">Shop A → Z</option>
+                        <option value="shop-desc">Shop Z → A</option>
+                      </optgroup>
+                      <optgroup label="Customer">
+                        <option value="customer-asc">Customer A → Z</option>
+                        <option value="customer-desc">Customer Z → A</option>
+                      </optgroup>
+                      <optgroup label="Area">
+                        <option value="area-asc">Area A → Z</option>
+                        <option value="area-desc">Area Z → A</option>
+                      </optgroup>
+                      <optgroup label="Serial">
+                        <option value="serial-asc">Serial low → high</option>
+                        <option value="serial-desc">Serial high → low</option>
+                      </optgroup>
                     </select>
                   </div>
 

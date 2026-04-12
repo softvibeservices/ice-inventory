@@ -50,7 +50,7 @@ export type Order = {
 
   remarks?: string;
   createdAt?: string;
-  updatedAt?: string; // ✅ NEW: Added updatedAt field
+  updatedAt?: string; // ✅ Used to show "last edited" on card and for sort
 };
 
 export type CustomerLite = {
@@ -76,6 +76,8 @@ export type SortMode =
   | "area-asc"
   | "area-desc"
   | "serial-asc"
-  | "serial-desc";
+  | "serial-desc"
+  | "updated-desc"   // ✅ NEW: Recently edited first
+  | "updated-asc";   // ✅ NEW: Oldest edit first
 
 export type CashBankMethod = "Cash" | "Bank/UPI";

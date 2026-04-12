@@ -7,7 +7,7 @@ import OrderCard from "./OrderCard";
 import { Order, CustomerLite, TabFilter, SortMode } from "@/types/orders.type";
 import DownloadReportButton from "./DownloadReportButton";
 import RevertDeliveryModal from "./RevertDeliveryModal";
-import { RotateCcw, Truck, RefreshCcw, Download } from "lucide-react";
+import { RotateCcw, Truck, RefreshCcw } from "lucide-react";
 
 type OrderListProps = {
   tab: TabFilter;
@@ -145,7 +145,7 @@ export default function OrderList({
       });
     }
 
-    // Sort comes from page.tsx only
+    // Sort — includes new updated-desc / updated-asc modes
     list.sort((a, b) => {
       const oa = a.order;
       const ob = b.order;
@@ -184,6 +184,17 @@ export default function OrderList({
           return cmpStr(oa.serialNumber, ob.serialNumber);
         case "serial-desc":
           return cmpStr(ob.serialNumber, oa.serialNumber);
+        // ✅ NEW sort modes — fall back to createdAt when updatedAt is absent
+        case "updated-desc":
+          return (
+            new Date(ob.updatedAt || ob.createdAt || 0).getTime() -
+            new Date(oa.updatedAt || oa.createdAt || 0).getTime()
+          );
+        case "updated-asc":
+          return (
+            new Date(oa.updatedAt || oa.createdAt || 0).getTime() -
+            new Date(ob.updatedAt || ob.createdAt || 0).getTime()
+          );
         default:
           return 0;
       }
