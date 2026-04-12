@@ -281,7 +281,7 @@ export async function getEffectiveCapabilities(
     // Apply feature flag unlocks
     const featureFlag = ADDON_FEATURE_UNLOCK_MAP[addon.type];
     if (featureFlag) {
-      (merged as Record<string, unknown>)[featureFlag] = true;
+      (merged as unknown as Record<string, unknown>)[featureFlag] = true;
     }
   }
 
