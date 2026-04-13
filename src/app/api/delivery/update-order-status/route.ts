@@ -5,10 +5,6 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
-// ── FCM: new imports ──────────────────────────────────────────────────────────
-import admin from "@/lib/firebase-admin";
-import DeliveryPartner from "@/models/DeliveryPartner";
-// ─────────────────────────────────────────────────────────────────────────────
 
 type DeliveryStatus = "Pending" | "On the Way" | "Delivered";
 
@@ -89,10 +85,6 @@ export async function PATCH(req: Request) {
 
     if (note) update.deliveryNotes = note;
 
-    // ── Track whether this is a first-time assignment ─────────────────────────
-    const isFirstAssignment = status === "On the Way" && !existingOrder.deliveryPartnerId;
-    // ─────────────────────────────────────────────────────────────────────────
-
     if (status === "On the Way") {
       update.deliveryPartnerId = partnerObjId;
       update.deliveryOnTheWayAt = now;
@@ -102,6 +94,8 @@ export async function PATCH(req: Request) {
       update.deliveryCompletedAt = now;
     }
 
+    // Atomic update: only succeed if the order hasn't been concurrently modified
+    // and is not already assigned to a different partner.
     const updatedOrder = await Order.findOneAndUpdate(
       {
         _id: orderId,
@@ -122,41 +116,16 @@ export async function PATCH(req: Request) {
       );
     }
 
-    // ── FCM: send notification on first assignment only ───────────────────────
-    // This is fire-and-forget — a failed FCM send must NOT fail the order update.
-    if (isFirstAssignment) {
-      (async () => {
-        try {
-          const partner = await DeliveryPartner.findById(partnerId).select("fcmToken");
-          if (partner?.fcmToken) {
-            await admin.messaging().send({
-              token: partner.fcmToken,
-              notification: {
-                title: "New Order Assigned",
-                body: `Order for ${existingOrder.shopName || existingOrder.customerName || "customer"} assigned to you`,
-              },
-              data: {
-                orderId: String(updatedOrder._id),
-                type: "new_order",
-                customerName: existingOrder.customerName || "",
-                shopName: existingOrder.shopName || "",
-              },
-              android: {
-                priority: "high",
-                notification: {
-                  channelId: "new_orders",
-                  sound: "default",
-                },
-              },
-            });
-          }
-        } catch (fcmError: any) {
-          // Non-fatal — order is already saved, just log the failure
-          console.error("FCM send failed (non-fatal):", fcmError?.message ?? fcmError);
-        }
-      })();
-    }
-    // ─────────────────────────────────────────────────────────────────────────
+    // NOTE: No FCM notification here intentionally.
+    //
+    // The "New Order Available" broadcast was already sent to ALL approved delivery
+    // partners when the order was created (in POST /api/bills).
+    //
+    // When a partner moves status from Pending → "On the Way" they are self-assigning
+    // the order — notifying the same person who just pressed the button is pointless.
+    //
+    // If you later want to notify the ADMIN that a partner picked up the order,
+    // add that logic here (fetch the admin's FCM token from User model and send).
 
     return NextResponse.json(
       {
