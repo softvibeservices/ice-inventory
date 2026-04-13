@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Customer from "@/models/Customer";
 import { verifyUserRequest } from "@/lib/userAuth";
+import { checkCustomerLimit } from "@/lib/subscriptionGuard";
 
 export async function POST(req: Request) {
   const auth = await verifyUserRequest(req);
@@ -21,6 +22,29 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    // ─── PHASE 3: Customer limit guard ────────────────────────────────────────
+    // Count existing customers for this user before allowing creation.
+    const currentCount = await Customer.countDocuments({
+      userId: new mongoose.Types.ObjectId(auth.userId),
+    });
+
+    const customerCheck = await checkCustomerLimit(auth.userId, currentCount);
+    if (!customerCheck.allowed) {
+      return NextResponse.json(
+        {
+          error:
+            customerCheck.limit === 0
+              ? "Your subscription has expired. Please renew your plan to add customers."
+              : `You have reached your customer limit (${customerCheck.used}/${customerCheck.limit}). Upgrade your plan to add more customers.`,
+          upgradeRequired: true,
+          used: customerCheck.used,
+          limit: customerCheck.limit,
+        },
+        { status: 403 }
+      );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Always use auth.userId — never trust userId from body
     const customer = await Customer.create({

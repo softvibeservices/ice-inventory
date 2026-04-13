@@ -9,6 +9,10 @@ import Product from "@/models/Product";
 import Customer from "@/models/Customer";
 import { getNextSerialNumber } from "@/services/serialNumber.service";
 import { verifyUserRequest } from "@/lib/userAuth";
+import {
+  checkInvoiceLimit,
+  incrementInvoiceCount,
+} from "@/lib/subscriptionGuard";
 
 function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
   if (!id) return undefined;
@@ -22,6 +26,27 @@ export async function POST(req: Request) {
   if (auth instanceof NextResponse) return auth;
 
   await connectDB();
+
+  // ─── PHASE 3: Invoice limit guard ────────────────────────────────────────
+  // Check before any DB work — fail fast if the user is over their plan limit.
+  // checkInvoiceLimit() internally calls lazyResetInvoiceCountIfNeeded() so
+  // the counter is always current before the comparison.
+  const invoiceCheck = await checkInvoiceLimit(auth.userId);
+  if (!invoiceCheck.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          invoiceCheck.limit === 0
+            ? "Your subscription has expired. Please renew your plan to create bills."
+            : `You have reached your monthly invoice limit (${invoiceCheck.used}/${invoiceCheck.limit}). Upgrade your plan to create more bills.`,
+        upgradeRequired: true,
+        used: invoiceCheck.used,
+        limit: invoiceCheck.limit,
+      },
+      { status: 403 }
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   try {
     const body = await req.json();
@@ -240,6 +265,12 @@ export async function POST(req: Request) {
     } finally {
       session.endSession();
     }
+
+    // ─── PHASE 3: Increment invoice counter after successful creation ─────────
+    // Uses atomic $inc — safe under concurrent requests. Called AFTER the
+    // transaction succeeds so the counter is never incremented for failed bills.
+    await incrementInvoiceCount(auth.userId);
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Compute next serial preview without touching DB
     const y = parseInt(serialNumber.substring(0, 2), 10);

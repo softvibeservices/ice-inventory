@@ -6,6 +6,7 @@ import Order from "@/models/Order";
 import Customer from "@/models/Customer";
 import User from "@/models/User";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
+import { checkFeatureFlag } from "@/lib/subscriptionGuard";
 
 export async function GET(req: Request) {
   // 🔐 DELIVERY AUTH (OPTIONAL)
@@ -28,6 +29,31 @@ export async function GET(req: Request) {
     if (userId && !mongoose.Types.ObjectId.isValid(userId)) {
       return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
     }
+
+    // ─── PHASE 3: Delivery module feature flag guard ─────────────────────────
+    // If a userId (admin) is provided, verify that admin's plan includes the
+    // delivery module before returning their orders to any caller.
+    // Delivery partners authenticated via delivery token are exempt from this
+    // check — they are already registered (meaning the admin had the module
+    // enabled at registration time) and should always be able to see their
+    // assigned orders.
+    if (userId && !partnerId) {
+      const deliveryFeatureCheck = await checkFeatureFlag(
+        userId,
+        "hasDeliveryModule"
+      );
+      if (!deliveryFeatureCheck.allowed) {
+        return NextResponse.json(
+          {
+            error:
+              "The Delivery Module is not enabled on this account's plan. Upgrade to Scale or Business to use delivery order management.",
+            upgradeRequired: true,
+          },
+          { status: 403 }
+        );
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     await connectDB();
 

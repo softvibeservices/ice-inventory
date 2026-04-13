@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
 import { verifyUserRequest } from "@/lib/userAuth";
+import { checkProductLimit } from "@/lib/subscriptionGuard";
 
 export async function POST(req: Request) {
   const auth = await verifyUserRequest(req);
@@ -19,6 +20,29 @@ export async function POST(req: Request) {
     }
 
     await connectDB();
+
+    // ─── PHASE 3: Product limit guard ─────────────────────────────────────────
+    // Count existing products for this user, then check against plan limit.
+    const currentCount = await Product.countDocuments({
+      userId: new mongoose.Types.ObjectId(auth.userId),
+    });
+
+    const productCheck = await checkProductLimit(auth.userId, currentCount);
+    if (!productCheck.allowed) {
+      return NextResponse.json(
+        {
+          error:
+            productCheck.limit === 0
+              ? "Your subscription has expired. Please renew your plan to add products."
+              : `You have reached your product limit (${productCheck.used}/${productCheck.limit}). Upgrade your plan to add more products.`,
+          upgradeRequired: true,
+          used: productCheck.used,
+          limit: productCheck.limit,
+        },
+        { status: 403 }
+      );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const newProduct = await Product.create({
       userId: new mongoose.Types.ObjectId(auth.userId),
