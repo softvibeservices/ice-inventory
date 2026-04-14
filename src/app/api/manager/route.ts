@@ -7,6 +7,10 @@ import User from "@/models/User";
 import Device from "@/models/Device";
 import bcrypt from "bcryptjs";
 import { verifyUserRequest } from "@/lib/userAuth";
+import {
+  checkManagerLimit,
+  checkFeatureFlag,
+} from "@/lib/subscriptionGuard";
 
 // ─────────────────────────────────────────────
 //  POST — Create manager (OTP verified)
@@ -35,6 +39,50 @@ export async function POST(req: Request) {
     await connectDB();
 
     const adminObjId = new mongoose.Types.ObjectId(auth.userId);
+
+    // ─── PHASE 3: Manager seat limit + feature flag guard ────────────────────
+    // Launch and free_trial plans have 0 manager seats — check the feature flag
+    // first so we can give a clear "upgrade required" message before doing any
+    // OTP validation work.
+
+    // Step 1: Check if the plan allows any manager seats at all
+    const featureCheck = await checkFeatureFlag(auth.userId, "hasDeliveryModule");
+    // Note: managers are available on Scale+ which also has hasDeliveryModule.
+    // But Launch plan has 0 managers even without delivery. We check the manager
+    // count directly — checkManagerLimit handles the 0-seat case correctly.
+
+    // Step 2: Count current active + pending managers
+    const currentManagerCount = await User.countDocuments({
+      adminId: adminObjId,
+      role: "manager",
+      $or: [{ isPending: false }, { isPending: { $exists: false } }],
+    });
+
+    // Also count pending managers awaiting OTP verification
+    const pendingCount = await User.countDocuments({
+      adminId: adminObjId,
+      role: "manager",
+      isPending: true,
+    });
+
+    const totalManagerCount = currentManagerCount + pendingCount;
+
+    const managerCheck = await checkManagerLimit(auth.userId, totalManagerCount);
+    if (!managerCheck.allowed) {
+      return NextResponse.json(
+        {
+          error:
+            managerCheck.limit === 0
+              ? "Your current plan does not include manager seats. Upgrade to Scale or Business to add managers."
+              : `You have reached your manager seat limit (${managerCheck.used}/${managerCheck.limit}). Upgrade your plan or purchase a Manager Seat add-on.`,
+          upgradeRequired: true,
+          used: managerCheck.used,
+          limit: managerCheck.limit,
+        },
+        { status: 403 }
+      );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     const pendingManager = await User.findOne({
       adminId: adminObjId,
@@ -92,7 +140,7 @@ export async function POST(req: Request) {
         isPending: false,
         otp: null,
         otpExpires: null,
-        tokenVersion: 0, // ✅ initialize tokenVersion
+        tokenVersion: 0,
       },
       { new: true, select: "-password" }
     );
@@ -245,12 +293,12 @@ export async function PATCH(req: Request) {
     }
 
     if (action === "block" || action === "ban") {
-      // ✅ Increment tokenVersion → invalidates ALL existing JWTs for this manager
+      // Increment tokenVersion → invalidates ALL existing JWTs for this manager
       const updated = await User.findByIdAndUpdate(
         manager._id,
         {
           status: "blocked",
-          $inc: { tokenVersion: 1 }, // ← KEY: forces logout on next request
+          $inc: { tokenVersion: 1 },
         },
         { new: true, select: "-password" }
       );
@@ -322,7 +370,7 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // ✅ Clean up all device records for the deleted manager
+    // Clean up all device records for the deleted manager
     await Device.deleteMany({ userId: deleted._id });
 
     return NextResponse.json({

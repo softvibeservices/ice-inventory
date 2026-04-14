@@ -6,6 +6,7 @@ import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import LocationHistory from "@/models/LocationHistory";
 import { verifyUserRequest } from "@/lib/userAuth";
+import { checkFeatureFlag } from "@/lib/subscriptionGuard";
 
 interface LeanPartnerLocation {
   _id: string;
@@ -22,6 +23,26 @@ interface LeanPartnerLocation {
 export async function GET(req: Request) {
   const auth = await verifyUserRequest(req);
   if (auth instanceof NextResponse) return auth;
+
+  // ─── PHASE 3: Live tracking feature flag guard ────────────────────────────
+  // hasLiveTracking is only available on Scale+ plans.
+  // hasDeliveryModule is a prerequisite — but hasLiveTracking is the more
+  // specific flag for this endpoint. Check both for belt-and-suspenders.
+  const liveTrackingCheck = await checkFeatureFlag(
+    auth.userId,
+    "hasLiveTracking"
+  );
+  if (!liveTrackingCheck.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "Live location tracking is not available on your current plan. Upgrade to Scale or Business to access real-time delivery tracking.",
+        upgradeRequired: true,
+      },
+      { status: 403 }
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   try {
     const { searchParams } = new URL(req.url);

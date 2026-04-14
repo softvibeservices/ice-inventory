@@ -7,6 +7,10 @@ import Order from "@/models/Order";
 import Product from "@/models/Product";
 import Customer from "@/models/Customer";
 import { verifyUserRequest } from "@/lib/userAuth";
+import {
+  checkInvoiceLimit,
+  incrementInvoiceCount,
+} from "@/lib/subscriptionGuard";
 
 function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
   if (!id) return undefined;
@@ -19,6 +23,27 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   await connectDB();
+
+  // ─── PHASE 3: Invoice limit guard ────────────────────────────────────────
+  // Orders created here generate invoices (they decrement stock and create
+  // a settlement trail). Apply the same invoice limit as POST /api/bills.
+  // checkInvoiceLimit() calls lazyResetInvoiceCountIfNeeded() internally.
+  const invoiceCheck = await checkInvoiceLimit(auth.userId);
+  if (!invoiceCheck.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          invoiceCheck.limit === 0
+            ? "Your subscription has expired. Please renew your plan to create orders."
+            : `You have reached your monthly invoice limit (${invoiceCheck.used}/${invoiceCheck.limit}). Upgrade your plan to create more orders.`,
+        upgradeRequired: true,
+        used: invoiceCheck.used,
+        limit: invoiceCheck.limit,
+      },
+      { status: 403 }
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   try {
     const body = await req.json();
@@ -135,6 +160,11 @@ export async function POST(req: NextRequest) {
     } finally {
       session.endSession();
     }
+
+    // ─── PHASE 3: Increment invoice counter after successful creation ─────────
+    // Called AFTER the transaction to ensure we only count successful orders.
+    await incrementInvoiceCount(auth.userId);
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ success: true, order }, { status: 201 });
   } catch (err: any) {

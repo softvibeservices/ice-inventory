@@ -6,6 +6,10 @@ import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import User from "@/models/User";
 import bcrypt from "bcryptjs";
+import {
+  checkDeliveryPartnerLimit,
+  checkFeatureFlag,
+} from "@/lib/subscriptionGuard";
 
 export async function POST(req: Request) {
   try {
@@ -47,7 +51,7 @@ export async function POST(req: Request) {
       ? String(adminEmailFromClient).toLowerCase()
       : null;
 
-    // ✅ Auto-populate createdByUser from adminEmail
+    // Auto-populate createdByUser from adminEmail
     if (adminEmail && !createdByUserObjId) {
       const manager = await User.findOne({ email: adminEmail }).select("_id");
       if (manager) {
@@ -61,6 +65,63 @@ export async function POST(req: Request) {
       const owner = await User.findById(createdByUserObjId).select("email");
       if (owner?.email) adminEmail = owner.email.toLowerCase();
     }
+
+    // ─── PHASE 3: Delivery module feature flag + partner limit guards ─────────
+    // The admin user registering this delivery partner must be identified.
+    // We use createdByUser/adminId from the body (set by the frontend from
+    // the authenticated session's userId).
+    const ownerUserId = createdByUserObjId || adminIdObjId;
+
+    if (ownerUserId) {
+      // Step 1: Check if admin's plan includes the delivery module at all.
+      // Launch and free_trial plans have hasDeliveryModule = false.
+      const deliveryFeatureCheck = await checkFeatureFlag(
+        ownerUserId.toString(),
+        "hasDeliveryModule"
+      );
+      if (!deliveryFeatureCheck.allowed) {
+        return NextResponse.json(
+          {
+            error:
+              "Your current plan does not include the Delivery Module. Upgrade to Scale or Business to manage delivery partners.",
+            upgradeRequired: true,
+          },
+          { status: 403 }
+        );
+      }
+
+      // Step 2: Count active + pending delivery partners and check the limit.
+      const currentPartnerCount = await DeliveryPartner.countDocuments({
+        $or: [
+          { createdByUser: ownerUserId },
+          { createdByUser: ownerUserId.toString() },
+          ...(adminEmail
+            ? [{ adminEmail: { $regex: new RegExp(`^${adminEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") } }]
+            : []),
+        ],
+        status: { $in: ["pending", "approved"] },
+      });
+
+      const partnerCheck = await checkDeliveryPartnerLimit(
+        ownerUserId.toString(),
+        currentPartnerCount
+      );
+      if (!partnerCheck.allowed) {
+        return NextResponse.json(
+          {
+            error:
+              partnerCheck.limit === 0
+                ? "Your subscription has expired. Please renew your plan to add delivery partners."
+                : `You have reached your delivery partner limit (${partnerCheck.used}/${partnerCheck.limit}). Upgrade your plan or purchase a Delivery Partners add-on.`,
+            upgradeRequired: true,
+            used: partnerCheck.used,
+            limit: partnerCheck.limit,
+          },
+          { status: 403 }
+        );
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     // 🔒 DUPLICATE CHECK
     const existingPartner = await DeliveryPartner.findOne({

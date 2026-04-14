@@ -1,5 +1,5 @@
 "use client";
-// src/app/components/PricingSection.tsx
+  // src/app/components/PricingSection.tsx
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -38,8 +38,8 @@ const plans = {
     description:
       "Built for active ice cream distributors managing daily orders, staff operations, delivery flow and business reporting.",
     monthly: { price: 1499, per: "/mo", save: "" },
-    sixmonths: { price: 7999, per: "/6 months", save: "Save ₹994" },
-    yearly: { price: 14999, per: "/year", save: "Save ₹2,988" },
+    sixmonths: { price: 7999, per: "/6 months", save: "Save ₹995" },
+    yearly: { price: 14999, per: "/year", save: "Save ₹2,989" },
     features: [
       "400 invoices / month",
       "100 customers",
@@ -65,7 +65,7 @@ const plans = {
     description:
       "Ideal for serious distributors handling large invoice volume, multiple staff members, bigger dispatch teams and advanced workflows.",
     monthly: { price: 2499, per: "/mo", save: "" },
-    sixmonths: { price: 13499, per: "/6 months", save: "Save ₹1,494" },
+    sixmonths: { price: 13499, per: "/6 months", save: "Save ₹1,495" },
     yearly: { price: 24999, per: "/year", save: "Save ₹4,989" },
     features: [
       "1,500 invoices / month",

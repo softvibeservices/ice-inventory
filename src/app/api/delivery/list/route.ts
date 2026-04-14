@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import { verifyUserRequest } from "@/lib/userAuth";
+import { checkFeatureFlag } from "@/lib/subscriptionGuard";
 
 function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -21,6 +22,26 @@ export async function GET(req: Request) {
     );
   }
 
+  // ─── PHASE 3: Delivery module feature flag guard ───────────────────────────
+  // Only Scale+ plans have hasDeliveryModule = true.
+  // Return a clear upgrade prompt for Launch/free_trial users instead of
+  // an empty list which could be confusing.
+  const deliveryFeatureCheck = await checkFeatureFlag(
+    auth.userId,
+    "hasDeliveryModule"
+  );
+  if (!deliveryFeatureCheck.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "Your current plan does not include the Delivery Module. Upgrade to Scale or Business to access delivery partner management.",
+        upgradeRequired: true,
+      },
+      { status: 403 }
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") ?? undefined;
@@ -30,7 +51,6 @@ export async function GET(req: Request) {
     const userObjectId = new mongoose.Types.ObjectId(auth.userId);
 
     // We still need adminEmail for backwards compat with legacy records
-    // Import User only for email lookup — role is already in token
     const { default: User } = await import("@/models/User");
     const user = await User.findById(auth.userId).select("email");
     const adminEmail = user?.email ? String(user.email).toLowerCase() : null;

@@ -78,7 +78,7 @@ export default function DownloadReportButton({
   };
 
   const addPageNumbers = (doc: jsPDF) => {
-    const pageCount = doc.internal.getNumberOfPages();
+   const pageCount = (doc.internal as any).getNumberOfPages();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
 
