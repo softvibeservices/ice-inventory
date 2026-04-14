@@ -14,6 +14,8 @@ interface LeanOrder {
   deliveryPartnerId?: mongoose.Types.ObjectId | string | null;
   deliveryOnTheWayAt?: Date | null;
   deliveryCompletedAt?: Date | null;
+  shopName?: string;
+  customerName?: string;
 }
 
 const VALID_TRANSITIONS: Record<DeliveryStatus, DeliveryStatus[]> = {
@@ -43,7 +45,7 @@ export async function PATCH(req: Request) {
     await connectDB();
 
     const existingOrder = await Order.findById(orderId)
-      .select("deliveryStatus deliveryPartnerId")
+      .select("deliveryStatus deliveryPartnerId shopName customerName")
       .lean<LeanOrder | null>();
 
     if (!existingOrder) {
@@ -92,6 +94,8 @@ export async function PATCH(req: Request) {
       update.deliveryCompletedAt = now;
     }
 
+    // Atomic update: only succeed if the order hasn't been concurrently modified
+    // and is not already assigned to a different partner.
     const updatedOrder = await Order.findOneAndUpdate(
       {
         _id: orderId,
@@ -111,6 +115,17 @@ export async function PATCH(req: Request) {
         { status: 409 }
       );
     }
+
+    // NOTE: No FCM notification here intentionally.
+    //
+    // The "New Order Available" broadcast was already sent to ALL approved delivery
+    // partners when the order was created (in POST /api/bills).
+    //
+    // When a partner moves status from Pending → "On the Way" they are self-assigning
+    // the order — notifying the same person who just pressed the button is pointless.
+    //
+    // If you later want to notify the ADMIN that a partner picked up the order,
+    // add that logic here (fetch the admin's FCM token from User model and send).
 
     return NextResponse.json(
       {

@@ -9,6 +9,11 @@ import Product from "@/models/Product";
 import Customer from "@/models/Customer";
 import { getNextSerialNumber } from "@/services/serialNumber.service";
 import { verifyUserRequest } from "@/lib/userAuth";
+import DeliveryPartner from "@/models/DeliveryPartner";
+
+// ── FCM ───────────────────────────────────────────────────────────────────────
+import admin from "@/lib/firebase-admin";
+// ─────────────────────────────────────────────────────────────────────────────
 import {
   checkInvoiceLimit,
   incrementInvoiceCount,
@@ -272,6 +277,69 @@ export async function POST(req: Request) {
     await incrementInvoiceCount(auth.userId);
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ── FCM: Broadcast "New order available" to ALL approved delivery partners ──
+    // Fire-and-forget — a failed FCM send must NOT fail the bill/order creation.
+    (async () => {
+      try {
+        // Find all approved partners for this admin/shop who have an FCM token.
+        const approvedPartners = await DeliveryPartner.find({
+          createdByUser: userObjectId,
+          status: "approved",
+          fcmToken: { $ne: null },
+        })
+          .select("fcmToken")
+          .lean<{ fcmToken: string }[]>();
+
+        const tokens = approvedPartners
+          .map((p: any) => p.fcmToken as string)
+          .filter(Boolean);
+
+        if (tokens.length === 0) {
+          console.log("[FCM] No approved partners with FCM tokens found — skipping broadcast");
+          return;
+        }
+
+        const shopName: string = order.shopName || order.customerName || "a customer";
+
+        // FCM allows max 500 tokens per sendEachForMulticast call.
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+          const batch = tokens.slice(i, i + BATCH_SIZE);
+          const response = await admin.messaging().sendEachForMulticast({
+            tokens: batch,
+            notification: {
+              title: "New Order Available",
+              body: `New order for ${shopName} — check the app`,
+            },
+            data: {
+              orderId: String(order._id),
+              type: "new_order",
+              customerName: order.customerName || "",
+              shopName: order.shopName || "",
+            },
+            android: {
+              priority: "high",
+              notification: {
+                channelId: "new_orders",
+                sound: "default",
+              },
+            },
+          });
+
+          const failedCount = response.responses.filter((r: { success: boolean }) => !r.success).length;
+          if (failedCount > 0) {
+            console.warn(`[FCM] ${failedCount}/${batch.length} messages failed in batch`);
+          } else {
+            console.log(`[FCM] Broadcast sent to ${batch.length} partners`);
+          }
+        }
+      } catch (fcmError: any) {
+        // Non-fatal — order is already saved; just log.
+        console.error("[FCM] Broadcast failed (non-fatal):", fcmError?.message ?? fcmError);
+      }
+    })();
+    // ─────────────────────────────────────────────────────────────────────────
+
     // Compute next serial preview without touching DB
     const y = parseInt(serialNumber.substring(0, 2), 10);
     const mo = parseInt(serialNumber.substring(2, 4), 10);
@@ -294,12 +362,15 @@ export async function POST(req: Request) {
       nextSeq.toString().padStart(4, "0");
 
     return NextResponse.json(
-      { success: true, bill, order, serialNumber, nextSerialNumber: nextSerialPreview },
+      { bill, order, nextSerialPreview },
       { status: 201 }
     );
   } catch (err: any) {
     console.error("POST /api/bills error:", err);
-    return NextResponse.json({ error: err?.message || "Failed to create bill" }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message ?? "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
