@@ -3,25 +3,22 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  Razorpay SDK — shared instance + signature verification helpers
 //
-//  This file is the ONLY place Razorpay is initialised.
-//  Import `razorpay` for order creation.
-//  Import `verifyRazorpaySignature` for HMAC-SHA256 payment signature verification.
-//  Import `verifyRazorpayWebhookSignature` for webhook signature verification.
-//  Import `RazorpayOrder` for typing order creation responses.
+//  CHANGES FROM PREVIOUS VERSION:
+//    - SDK instance is now lazily initialised via getRazorpay() instead of
+//      being created at module load time. This prevents Next.js static
+//      generation from evaluating the Razorpay constructor before env vars
+//      are available, eliminating the DYNAMIC_SERVER_USAGE build warnings.
+//    - createOrder() now calls getRazorpay() internally — no external API change.
+//    - Default export `razorpay` replaced by named export `getRazorpay()` to
+//      enforce lazy access. Direct use of the default export is removed.
 //
-//  SECURITY NOTE:
-//    verifyRazorpaySignature uses crypto.timingSafeEqual() to compare the
-//    computed HMAC digest against the received signature. This prevents
-//    timing attacks where an attacker could guess the signature byte-by-byte
-//    based on how long the comparison takes with a naive string comparison.
+//  ENV VARS REQUIRED (set in Vercel project settings + .env.local):
+//    RAZORPAY_KEY_ID              — Razorpay Key ID           (server-side only)
+//    RAZORPAY_KEY_SECRET          — Razorpay Key Secret       (server-side only, NEVER expose)
+//    RAZORPAY_WEBHOOK_SECRET      — Razorpay Dashboard → Webhooks → Secret
+//    NEXT_PUBLIC_RAZORPAY_KEY_ID  — same Key ID, NEXT_PUBLIC_ prefix for frontend
 //
-//  ENV VARS REQUIRED (add to .env.local):
-//    RAZORPAY_KEY_ID              — your Razorpay Key ID     (server-side only)
-//    RAZORPAY_KEY_SECRET          — your Razorpay Key Secret (server-side only, NEVER expose)
-//    RAZORPAY_WEBHOOK_SECRET      — set in Razorpay Dashboard → Webhooks → Secret
-//    NEXT_PUBLIC_RAZORPAY_KEY_ID  — same Key ID, prefixed so frontend can read it
-//
-//  NOTE: razorpay.ts is SERVER-SIDE ONLY. Never import it into client components.
+//  SERVER-SIDE ONLY. Never import this file into client components or pages.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import Razorpay from "razorpay";
@@ -31,80 +28,81 @@ import crypto   from "crypto";
 //  RazorpayOrder
 //
 //  Explicit interface for the object returned by razorpay.orders.create().
-//  The Razorpay Node.js SDK types sometimes resolve `orders.create` return
-//  type as `void` in older versions, causing TypeScript errors on property
-//  access (e.g. `.id`). This interface is cast over the result to guarantee
-//  correct typing in all route files.
+//  The Razorpay Node.js SDK types the return as IMap<any> / void in some
+//  version declarations. We cast to this interface to get correct TS types
+//  in all route files without any `any` casts.
 //
-//  Fields match Razorpay's Orders API response exactly:
+//  Matches Razorpay Orders API response:
 //  https://razorpay.com/docs/api/orders/
 // ─────────────────────────────────────────────────────────────────────────────
 export interface RazorpayOrder {
-  id:           string;          // e.g. "order_ABC123XYZ"
-  entity:       string;          // always "order"
-  amount:       number;          // in paise
-  amount_paid:  number;          // paise paid so far
-  amount_due:   number;          // paise remaining
-  currency:     string;          // "INR"
-  receipt?:     string;          // your receipt string
-  offer_id?:    string | null;
-  status:       "created" | "attempted" | "paid";
-  attempts:     number;
-  notes:        Record<string, string> | [];
-  created_at:   number;          // Unix timestamp
+  id:          string;            // e.g. "order_ABC123XYZ"
+  entity:      string;            // always "order"
+  amount:      number;            // in paise
+  amount_paid: number;            // paise paid so far
+  amount_due:  number;            // paise remaining
+  currency:    string;            // "INR"
+  receipt?:    string;
+  offer_id?:   string | null;
+  status:      "created" | "attempted" | "paid";
+  attempts:    number;
+  notes:       Record<string, string> | [];
+  created_at:  number;            // Unix timestamp
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Shared Razorpay SDK instance
+//  Lazy Razorpay singleton
 //
-//  Used by:
-//    - /api/payment/create-order         → razorpay.orders.create(...)
-//    - /api/payment/addon/create-order   → razorpay.orders.create(...)
+//  WHY LAZY?
+//    The previous version called `new Razorpay(...)` at module load time.
+//    Next.js evaluates all imported modules during the static page generation
+//    phase of `next build`. At that point, process.env vars may not be loaded
+//    yet, and accessing `request.headers` inside the same module graph
+//    triggers DYNAMIC_SERVER_USAGE build errors across every API route that
+//    imports this file.
 //
-//  The instance is created once at module load time (singleton pattern).
-//  Next.js module caching ensures this is not re-created on every request.
+//    By deferring construction to the first actual request (getRazorpay()),
+//    we guarantee the SDK is only instantiated inside a real server handler,
+//    where env vars are always present.
 //
-//  ENV GUARD:
-//    If RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET are missing at startup,
-//    we log a clear warning so developers catch misconfiguration early
-//    rather than getting cryptic Razorpay API errors at runtime.
+//  getRazorpay() throws a hard error if env vars are missing so the failure
+//  is immediately visible in Vercel function logs, not silently swallowed.
 // ─────────────────────────────────────────────────────────────────────────────
-if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-  console.warn(
-    "[razorpay] WARNING: RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is not set. " +
-    "Payment routes will fail at runtime. Check your .env.local file."
-  );
+let _razorpay: Razorpay | null = null;
+
+export function getRazorpay(): Razorpay {
+  if (_razorpay) return _razorpay;
+
+  const keyId     = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+  if (!keyId || !keySecret) {
+    throw new Error(
+      "[razorpay] RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET environment variable is not set. " +
+      "Add both to your Vercel project environment variables and redeploy."
+    );
+  }
+
+  _razorpay = new Razorpay({ key_id: keyId, key_secret: keySecret });
+  return _razorpay;
 }
-
-const razorpay = new Razorpay({
-  key_id:     process.env.RAZORPAY_KEY_ID     ?? "",
-  key_secret: process.env.RAZORPAY_KEY_SECRET ?? "",
-});
-
-export default razorpay;
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  createOrder()
 //
-//  Typed wrapper around razorpay.orders.create() that returns the explicit
-//  RazorpayOrder interface instead of the SDK's under-specified IMap<any>.
+//  Typed wrapper around razorpay.orders.create().
+//  Returns the explicit RazorpayOrder interface instead of the SDK's
+//  under-specified IMap<any>, eliminating TS2322 / TS2339 errors in routes.
 //
-//  Use this in route files instead of calling razorpay.orders.create() directly
-//  to get correct TypeScript types without `any` casts in every route.
+//  Throws on Razorpay API failure — callers must wrap in try/catch.
 //
-//  Throws the original Razorpay SDK error on failure — callers must wrap in
-//  try/catch and handle the error (e.g. return 502).
-//
-//  @param params — same params as razorpay.orders.create()
-//  @returns       — fully typed RazorpayOrder
+//  @param params  same params object as razorpay.orders.create()
+//  @returns       fully typed RazorpayOrder
 // ─────────────────────────────────────────────────────────────────────────────
 export async function createOrder(
-  params: Parameters<typeof razorpay.orders.create>[0]
+  params: Parameters<Razorpay["orders"]["create"]>[0]
 ): Promise<RazorpayOrder> {
-  // The Razorpay SDK types `orders.create` return as `IMap<any>` (or `void`
-  // in some version declarations). We cast via `unknown` to our explicit
-  // RazorpayOrder interface which matches the actual API response shape.
-  const result = await razorpay.orders.create(params);
+  const result = await getRazorpay().orders.create(params);
   return result as unknown as RazorpayOrder;
 }
 
@@ -115,19 +113,15 @@ export async function createOrder(
 //  modal. Call this BEFORE activating any subscription or add-on.
 //
 //  HOW IT WORKS:
-//    1. Razorpay constructs the signed message as: `${orderId}|${paymentId}`
-//    2. Razorpay hashes this message using your Key Secret via HMAC-SHA256.
-//    3. Your server independently recomputes the same HMAC.
-//    4. If the digests match, the payment is authentic.
+//    Razorpay constructs: `${orderId}|${paymentId}` and hashes it with your
+//    Key Secret. We independently recompute the same HMAC and compare.
 //
-//  Used by:
-//    - /api/payment/verify               (subscription payment callback)
-//    - /api/payment/addon/verify         (add-on payment callback)
+//  Uses crypto.timingSafeEqual() to prevent timing-based side-channel attacks.
 //
-//  @param orderId    — razorpay_order_id from the checkout response
-//  @param paymentId  — razorpay_payment_id from the checkout response
-//  @param signature  — razorpay_signature from the checkout response
-//  @returns          — true if signature is valid, false if tampered
+//  @param orderId    razorpay_order_id from the checkout modal callback
+//  @param paymentId  razorpay_payment_id from the checkout modal callback
+//  @param signature  razorpay_signature from the checkout modal callback
+//  @returns          true if valid, false if tampered or env var missing
 // ─────────────────────────────────────────────────────────────────────────────
 export function verifyRazorpaySignature(
   orderId:   string,
@@ -135,34 +129,29 @@ export function verifyRazorpaySignature(
   signature: string
 ): boolean {
   try {
-    const keySecret = process.env.RAZORPAY_KEY_SECRET ?? "";
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!keySecret) {
       console.error("[verifyRazorpaySignature] RAZORPAY_KEY_SECRET is not set.");
       return false;
     }
 
-    // Build the message Razorpay signs: "orderId|paymentId"
     const message = `${orderId}|${paymentId}`;
 
-    // Compute the expected HMAC-SHA256 digest
     const expectedDigest = crypto
       .createHmac("sha256", keySecret)
       .update(message)
       .digest("hex");
 
-    // Use timingSafeEqual to prevent timing attacks.
-    // Both buffers must be the same byte length for timingSafeEqual to work.
+    // timingSafeEqual requires equal-length buffers
     const expectedBuffer = Buffer.from(expectedDigest, "hex");
-    const receivedBuffer = Buffer.from(signature,       "hex");
+    const receivedBuffer = Buffer.from(signature,      "hex");
 
-    if (expectedBuffer.length !== receivedBuffer.length) {
-      return false;
-    }
+    if (expectedBuffer.length !== receivedBuffer.length) return false;
 
     return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
   } catch {
-    // Any error (e.g., malformed hex string) is treated as an invalid signature
+    // Malformed hex, empty strings, etc. → treat as invalid
     return false;
   }
 }
@@ -170,54 +159,45 @@ export function verifyRazorpaySignature(
 // ─────────────────────────────────────────────────────────────────────────────
 //  verifyRazorpayWebhookSignature()
 //
-//  Verifies the HMAC-SHA256 signature on incoming Razorpay webhook calls.
-//  This is DIFFERENT from verifyRazorpaySignature():
+//  Verifies the HMAC-SHA256 signature on incoming Razorpay webhook POST calls.
 //
-//    verifyRazorpaySignature        → uses RAZORPAY_KEY_SECRET
-//                                     message = `${orderId}|${paymentId}`
+//  KEY DIFFERENCE from verifyRazorpaySignature():
+//    ┌─────────────────────────────────┬──────────────────────────────────┐
+//    │ verifyRazorpaySignature         │ verifyRazorpayWebhookSignature   │
+//    ├─────────────────────────────────┼──────────────────────────────────┤
+//    │ Secret: RAZORPAY_KEY_SECRET     │ Secret: RAZORPAY_WEBHOOK_SECRET  │
+//    │ Message: orderId|paymentId      │ Message: raw request body string │
+//    │ Used by: /verify, /addon/verify │ Used by: /webhook                │
+//    └─────────────────────────────────┴──────────────────────────────────┘
 //
-//    verifyRazorpayWebhookSignature → uses RAZORPAY_WEBHOOK_SECRET
-//                                     message = raw request body (string)
+//  CRITICAL: rawBody MUST be the exact string from req.text() — do NOT
+//  parse it as JSON first. Re-serialising changes whitespace and breaks HMAC.
 //
-//  The webhook secret is configured separately in your Razorpay Dashboard
-//  under: Settings → Webhooks → [your endpoint] → Secret
-//
-//  CRITICAL: The raw body MUST be passed as a string (not parsed JSON).
-//  Parsing the body before hashing changes the string and breaks verification.
-//  In the webhook route, read with `await req.text()` — NOT `await req.json()`.
-//
-//  Used by:
-//    - /api/payment/webhook             (Razorpay server-to-server webhook)
-//
-//  @param rawBody    — the raw request body as a string (from req.text())
-//  @param signature  — the x-razorpay-signature header value
-//  @returns          — true if webhook signature is valid, false if tampered
+//  @param rawBody   raw request body string (from await req.text())
+//  @param signature x-razorpay-signature header value
+//  @returns         true if valid, false if tampered or env var missing
 // ─────────────────────────────────────────────────────────────────────────────
 export function verifyRazorpayWebhookSignature(
   rawBody:   string,
   signature: string
 ): boolean {
   try {
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET ?? "";
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
       console.error("[verifyRazorpayWebhookSignature] RAZORPAY_WEBHOOK_SECRET is not set.");
       return false;
     }
 
-    // Compute HMAC-SHA256 of the raw body using the webhook secret
     const expectedDigest = crypto
       .createHmac("sha256", webhookSecret)
       .update(rawBody)
       .digest("hex");
 
-    // timingSafeEqual requires equal-length buffers
     const expectedBuffer = Buffer.from(expectedDigest, "hex");
-    const receivedBuffer = Buffer.from(signature,       "hex");
+    const receivedBuffer = Buffer.from(signature,      "hex");
 
-    if (expectedBuffer.length !== receivedBuffer.length) {
-      return false;
-    }
+    if (expectedBuffer.length !== receivedBuffer.length) return false;
 
     return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
   } catch {

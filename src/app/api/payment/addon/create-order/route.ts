@@ -3,61 +3,40 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/payment/addon/create-order
 //
-//  Step 1 of the add-on purchase payment flow.
-//  Very similar to /api/payment/create-order but for add-ons instead of plans.
-//
-//  Flow:
-//    1. Frontend POSTs { addonType, quantity }
-//    2. This route validates the request, checks the user has an active paid
-//       subscription (add-ons require a paid plan — not free_trial), computes
-//       the amount SERVER-SIDE, creates a Razorpay order, creates a pending
-//       PaymentRecord.
-//    3. Returns Razorpay order details to the frontend.
-//    4. Frontend opens Razorpay checkout modal.
-//    5. On payment success, frontend calls /api/payment/addon/verify.
-//
-//  Auth: JWT required — admin role only. Managers are blocked (403).
-//
-//  SECURITY:
-//    - Amount is ALWAYS computed server-side from ADDON_PRICES.
-//    - User must have an ACTIVE NON-FREE_TRIAL subscription. Add-ons on a
-//      free trial don't make sense — the user should upgrade first.
-//    - One-time add-ons (setup_migration) have quantity locked to 1.
-//    - Non-bulk add-ons also have quantity locked at 1 per purchase.
-//    - Bulk add-ons (extra_invoice_100, extra_invoice_300) allow quantity > 1.
-//
-//  ADDON PRICES (in rupees, server-authoritative):
-//    extra_invoice_100: ₹199/mo  (recurring)
-//    extra_invoice_300: ₹499/mo  (recurring)
-//    extra_manager:     ₹149/mo  (recurring)
-//    extra_delivery:    ₹199/mo  (recurring)
-//    advanced_reports:  ₹299/mo  (recurring, feature unlock)
-//    setup_migration:   ₹499     (one-time)
-//
-//  FIX NOTES (TypeScript errors resolved):
-//    - razorpay.orders.create() replaced with typed createOrder() wrapper
-//      from @/lib/razorpay. This eliminates:
-//        TS2322: Type 'RazorpayOrder' is not assignable to type 'void' (line 216)
-//        TS2339: Property 'id' does not exist on type 'void'  (lines 246, 252)
-//    - razorpayErr typed as `unknown` instead of `any`
+//  CHANGES FROM PREVIOUS VERSION:
+//    - Added `export const dynamic = "force-dynamic"` (line below imports).
+//      This is required for any Next.js App Router API route that uses
+//      request.headers, request.url, cookies, or reads env vars at runtime.
+//      Without it, Next.js attempts to statically render the route during
+//      `next build`, hits request.headers in verifyUserRequest(), and throws
+//      DYNAMIC_SERVER_USAGE — which floods Vercel build logs with errors.
+//    - createOrder() import updated: now imported from the updated razorpay.ts
+//      which uses lazy initialisation (getRazorpay() singleton).
+//      No call-site changes needed — createOrder() API is unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { NextResponse }                from "next/server";
-import mongoose                        from "mongoose";
-import { connectDB }                   from "@/lib/mongodb";
-import { verifyUserRequest }           from "@/lib/userAuth";
-import { createOrder, RazorpayOrder }  from "@/lib/razorpay";
-import PaymentRecord                   from "@/models/PaymentRecord";
-import Subscription                    from "@/models/Subscription";
-import type { AddOnType }              from "@/models/AddOn";
-import { ONE_TIME_ADDON_TYPES }        from "@/models/AddOn";
+import { NextResponse }               from "next/server";
+import mongoose                       from "mongoose";
+import { connectDB }                  from "@/lib/mongodb";
+import { verifyUserRequest }          from "@/lib/userAuth";
+import { createOrder, RazorpayOrder } from "@/lib/razorpay";
+import PaymentRecord                  from "@/models/PaymentRecord";
+import Subscription                   from "@/models/Subscription";
+import type { AddOnType }             from "@/models/AddOn";
+import { ONE_TIME_ADDON_TYPES }       from "@/models/AddOn";
+
+// ─── CRITICAL: Required on every API route that reads request.headers ────────
+//
+//  Tells Next.js this route must ALWAYS be server-rendered on demand — never
+//  statically pre-rendered at build time. Without this, `next build` tries to
+//  render the route and fails with DYNAMIC_SERVER_USAGE when it encounters
+//  request.headers inside verifyUserRequest().
+//
+export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ADDON_PRICES
-//
-//  Server-side authoritative add-on pricing in RUPEES.
-//  Matches PricingSection.tsx ADDONS array exactly.
-//  Multiply by 100 to convert to Razorpay paise.
+//  ADDON_PRICES — server-side authoritative pricing in RUPEES.
+//  Multiply by 100 for Razorpay paise. Matches PricingSection.tsx exactly.
 // ─────────────────────────────────────────────────────────────────────────────
 const ADDON_PRICES: Record<AddOnType, number> = {
   extra_invoice_100: 199,
@@ -68,21 +47,9 @@ const ADDON_PRICES: Record<AddOnType, number> = {
   setup_migration:   499,
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  BULK_ADDONS
-//
-//  Add-ons that can be purchased with quantity > 1.
-//  e.g., buying 2x extra_invoice_100 adds 200 extra invoices/month.
-//
-//  All other add-ons are locked to quantity = 1 per purchase:
-//    - advanced_reports: feature flag unlock — no meaning to buy 2
-//    - setup_migration:  one-time service — no meaning to buy 2
-//    - extra_manager:    each purchase = 1 seat; buy multiple times for more
-//    - extra_delivery:   each purchase = 3 partners; buy multiple times for more
-// ─────────────────────────────────────────────────────────────────────────────
+// Add-ons that support quantity > 1 per purchase
 const BULK_ADDONS: AddOnType[] = ["extra_invoice_100", "extra_invoice_300"];
 
-// All valid AddOnType values
 const VALID_ADDON_TYPES: AddOnType[] = [
   "extra_invoice_100",
   "extra_invoice_300",
@@ -97,7 +64,7 @@ const VALID_ADDON_TYPES: AddOnType[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 export async function POST(req: Request): Promise<NextResponse> {
   try {
-    // ── 1. Auth check — admin only, block managers ────────────────────────────
+    // ── 1. Auth — admin only, block managers ──────────────────────────────────
     const auth = await verifyUserRequest(req);
     if (auth instanceof NextResponse) return auth;
 
@@ -124,57 +91,40 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const { addonType, quantity: rawQuantity } = body;
 
-    // Validate addonType
     if (
       typeof addonType !== "string" ||
       !VALID_ADDON_TYPES.includes(addonType as AddOnType)
     ) {
       return NextResponse.json(
-        {
-          error: `Invalid addonType. Must be one of: ${VALID_ADDON_TYPES.join(", ")}.`,
-        },
+        { error: `Invalid addonType. Must be one of: ${VALID_ADDON_TYPES.join(", ")}.` },
         { status: 400 }
       );
     }
 
     const validatedAddonType = addonType as AddOnType;
-
-    // Determine quantity:
-    //  - One-time add-ons: always 1
-    //  - Non-bulk add-ons: always 1
-    //  - Bulk add-ons: default 1, validate positive integer
-    const isOneTime  = ONE_TIME_ADDON_TYPES.includes(validatedAddonType);
-    const isBulkable = BULK_ADDONS.includes(validatedAddonType);
+    const isOneTime          = ONE_TIME_ADDON_TYPES.includes(validatedAddonType);
+    const isBulkable         = BULK_ADDONS.includes(validatedAddonType);
 
     let quantity = 1;
 
     if (isBulkable && rawQuantity !== undefined) {
       const parsedQty = Number(rawQuantity);
-
       if (!Number.isInteger(parsedQty) || parsedQty < 1) {
         return NextResponse.json(
           { error: "quantity must be a positive integer." },
           { status: 400 }
         );
       }
-
       quantity = parsedQty;
     }
 
     // Force quantity to 1 for non-bulk and one-time add-ons
-    if (!isBulkable || isOneTime) {
-      quantity = 1;
-    }
+    if (!isBulkable || isOneTime) quantity = 1;
 
     // ── 3. Connect to MongoDB ─────────────────────────────────────────────────
     await connectDB();
 
-    // ── 4. Check user has an ACTIVE NON-FREE_TRIAL subscription ───────────────
-    //
-    //  Add-ons don't make sense on a free trial — the user should upgrade
-    //  their plan first. This validation runs server-side even if the frontend
-    //  already checks it.
-    //
+    // ── 4. Require active NON-free_trial subscription ─────────────────────────
     const subscription = await Subscription.findOne({ userId }).lean();
 
     if (!subscription) {
@@ -206,17 +156,12 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // ── 5. Compute amount in paise ─────────────────────────────────────────────
+    // ── 5. Compute amount in paise (server-side — never trust client) ─────────
     const pricePerUnitRupees = ADDON_PRICES[validatedAddonType];
     const totalRupees        = pricePerUnitRupees * quantity;
     const amountInPaise      = totalRupees * 100;
 
     // ── 6. Create Razorpay order ──────────────────────────────────────────────
-    //
-    //  Uses the typed createOrder() wrapper from @/lib/razorpay instead of
-    //  razorpay.orders.create() directly. This gives us the explicit
-    //  RazorpayOrder return type and eliminates the TS2322 / TS2339 errors.
-    //
     let razorpayOrder: RazorpayOrder;
 
     try {
@@ -242,7 +187,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // ── 7. Create a pending PaymentRecord in MongoDB ──────────────────────────
+    // ── 7. Create pending PaymentRecord ──────────────────────────────────────
     const paymentRecord = await PaymentRecord.create({
       userId,
       type:            "addon",
@@ -254,7 +199,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       razorpayOrderId: razorpayOrder.id,
     });
 
-    // ── 8. Return Razorpay order details to the frontend ──────────────────────
+    // ── 8. Return Razorpay order details to frontend ──────────────────────────
     return NextResponse.json(
       {
         razorpayOrderId: razorpayOrder.id,
@@ -262,7 +207,6 @@ export async function POST(req: Request): Promise<NextResponse> {
         currency:        "INR",
         keyId:           process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? "",
         paymentRecordId: paymentRecord._id.toString(),
-        // Human-readable summary for the checkout modal
         addonType:       validatedAddonType,
         quantity,
         amountInRupees:  totalRupees,
