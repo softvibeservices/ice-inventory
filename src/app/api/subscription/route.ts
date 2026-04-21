@@ -38,6 +38,8 @@ import {
   lazyResetInvoiceCountIfNeeded,
 } from "@/lib/subscriptionGuard";
 import PaymentRecord from "@/models/PaymentRecord";
+import Customer from "@/models/Customer";
+import Product from "@/models/Product";
 import { PLAN_NAMES } from "@/types/subscription.types";
 import type {
   ISubscriptionStatus,
@@ -96,7 +98,17 @@ export async function GET(req: Request): Promise<NextResponse> {
     // ── 6. Get effective capabilities (plan + add-on bonuses merged) ────────
     const { capabilities } = await getEffectiveCapabilities(userId);
 
-    // ── 7. Build the ISubscriptionStatus response shape ─────────────────────
+    // ── 7. Live counts for customers and products ───────────────────────────
+    //  These are NOT stored on the Subscription doc — they are computed fresh
+    //  on each request via an indexed countDocuments() query. This is cheap
+    //  (single index scan) and always accurate regardless of creates/deletes.
+    //  Running both in parallel keeps latency minimal.
+    const [customersCount, productsCount] = await Promise.all([
+      Customer.countDocuments({ userId }),
+      Product.countDocuments({ userId }),
+    ]);
+
+    // ── 8. Build the ISubscriptionStatus response shape ─────────────────────
     const addOnSummaries: IActiveAddOnSummary[] = activeAddOns.map((addon) => ({
       id: String(addon._id),
       type: addon.type,
@@ -120,13 +132,15 @@ export async function GET(req: Request): Promise<NextResponse> {
       usage: {
         invoicesUsedThisMonth: subscription.invoicesUsedThisMonth,
         invoicesUsedTotal: subscription.invoicesUsedTotal,
+        customersCount,
+        productsCount,
       },
       effectiveLimits: capabilities,
       invoiceCountResetAt: subscription.invoiceCountResetAt.toISOString(),
       activeAddOns: addOnSummaries,
     };
 
-    // ── 8. Fetch last 10 payment records for this user ──────────────────────
+    // ── 9. Fetch last 10 payment records for this user ──────────────────────
     const rawPayments = await PaymentRecord.find({ userId })
       .sort({ createdAt: -1 })
       .limit(10)
@@ -147,7 +161,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       createdAt: (p.createdAt as Date).toISOString(),
     }));
 
-    // ── 9. Return the combined response ─────────────────────────────────────
+    // ── 10. Return the combined response ─────────────────────────────────────
     const response: ISubscriptionStatusResponse = {
       subscription: subscriptionStatus,
       recentPayments,
