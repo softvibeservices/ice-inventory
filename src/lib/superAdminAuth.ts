@@ -1,59 +1,105 @@
-// src/lib/superAdminAuth.ts
-//
-// ─────────────────────────────────────────────────────────────────────────────
-//  SuperAdmin Auth Middleware
-//
-//  This is a thin wrapper around verifyUserRequest() that additionally
-//  enforces that the caller has role === "superAdmin".
-//
-//  Import and use this at the top of every /api/admin/** route handler
-//  instead of verifyUserRequest() directly.
-//
-//  Usage:
-//    const auth = await verifySuperAdminRequest(req);
-//    if (auth instanceof NextResponse) return auth;
-//    // auth.userId, auth.role === "superAdmin" guaranteed past this point
-//
-//  Security contract:
-//    - Returns 401 if the token is missing, invalid, or expired.
-//    - Returns 403 if the authenticated user is NOT a superAdmin.
-//    - Returns the AuthPayload if all checks pass.
-//
-//  This ensures that no admin (role: "admin") or manager (role: "manager")
-//  can ever access any superAdmin API route, even if they have a valid JWT.
-// ─────────────────────────────────────────────────────────────────────────────
+// ice-inventory\src\lib\superAdminAuth.ts
 
-import { NextResponse } from "next/server";
-import { verifyUserRequest, AuthPayload } from "@/lib/userAuth";
+import { NextRequest, NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  verifySuperAdminRequest()
-//
-//  @param req — The incoming Next.js Request object
-//  @returns   — AuthPayload (role guaranteed "superAdmin") or NextResponse error
-// ─────────────────────────────────────────────────────────────────────────────
-export async function verifySuperAdminRequest(
-  req: Request
-): Promise<AuthPayload | NextResponse> {
-  // Step 1: Run the standard auth check (JWT verify, device check, etc.)
-  const auth = await verifyUserRequest(req);
+interface DecodedToken {
+  userId: string;
+  role: string;
+  email?: string;
+  iat?: number;
+  exp?: number;
+}
 
-  // Step 2: If verifyUserRequest returned an error response, bubble it up
-  if (auth instanceof NextResponse) {
-    return auth;
+interface SuperAdminAuthResult {
+  success: true;
+  decoded: DecodedToken;
+}
+
+interface SuperAdminAuthError {
+  success: false;
+  response: NextResponse;
+}
+
+export async function superAdminAuth(
+  req: NextRequest
+): Promise<SuperAdminAuthResult | SuperAdminAuthError> {
+  try {
+    const authHeader = req.headers.get("Authorization");
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return {
+        success: false,
+        response: NextResponse.json(
+          { error: "Authorization header missing or malformed" },
+          { status: 401 }
+        ),
+      };
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    if (!token) {
+      return {
+        success: false,
+        response: NextResponse.json(
+          { error: "Token not provided" },
+          { status: 401 }
+        ),
+      };
+    }
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error("JWT_SECRET is not defined in environment variables");
+      return {
+        success: false,
+        response: NextResponse.json(
+          { error: "Server configuration error" },
+          { status: 500 }
+        ),
+      };
+    }
+
+    let decoded: DecodedToken;
+    try {
+      decoded = jwt.verify(token, jwtSecret) as DecodedToken;
+    } catch (jwtError) {
+      return {
+        success: false,
+        response: NextResponse.json(
+          { error: "Invalid or expired token" },
+          { status: 401 }
+        ),
+      };
+    }
+
+    // Hard role check — only superAdmin can pass
+    if (decoded.role !== "superAdmin") {
+      return {
+        success: false,
+        response: NextResponse.json(
+          {
+            error: "Access denied. SuperAdmin privileges required.",
+            yourRole: decoded.role,
+          },
+          { status: 403 }
+        ),
+      };
+    }
+
+    return {
+      success: true,
+      decoded,
+    };
+  } catch (error) {
+    console.error("SuperAdmin auth error:", error);
+    return {
+      success: false,
+      response: NextResponse.json(
+        { error: "Authentication failed" },
+        { status: 500 }
+      ),
+    };
   }
-
-  // Step 3: Enforce superAdmin role
-  if (auth.role !== "superAdmin") {
-    return NextResponse.json(
-      {
-        error:
-          "Access denied. This endpoint is restricted to superAdmin accounts only.",
-      },
-      { status: 403 }
-    );
-  }
-
-  // Step 4: All checks passed — return the verified payload
-  return auth;
 }
