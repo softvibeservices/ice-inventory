@@ -1,93 +1,178 @@
-// src/app/api/auth/check-email/route.ts
+// src/app/api/subscription/route.ts
 //
 // ─────────────────────────────────────────────────────────────────────────────
-//  POST /api/auth/check-email
+//  GET /api/subscription
 //
-//  Public endpoint — no auth required.
-//  Used by PricingSection.tsx to determine whether a visitor who clicks a
-//  paid-plan CTA has an existing account:
+//  Returns the full subscription status for the authenticated admin user.
+//  This is the primary endpoint consumed by:
+//    - SubscriptionBadge.tsx
+//    - PlanLimitWarning.tsx
+//    - UpgradePromptModal.tsx
+//    - /dashboard/subscription/page.tsx
 //
-//    exists === true  → redirect to /login   (they can log in and then upgrade)
-//    exists === false → redirect to /register (they need to create an account)
+//  Auth: Admin only (not manager — managers don't have their own subscription;
+//        they operate under their admin's subscription).
 //
-//  Only checks admin-role users (not managers or delivery partners).
-//  Returns { exists: boolean } — nothing else, to minimise information leakage.
+//  The response shape is ISubscriptionStatusResponse from subscription.types.ts:
+//    {
+//      subscription: ISubscriptionStatus  — plan, usage, limits, add-ons
+//      recentPayments: IPaymentRecordSummary[] — last 10 payment records
+//    }
 //
-//  Rate-limited to 10 requests per IP per minute to prevent email enumeration.
+//  Lazy operations performed before responding:
+//    1. lazyResetInvoiceCountIfNeeded() — resets monthly counter if past anchor
+//    2. Subscription lazy expiry check (inside getActiveSubscription())
+//    3. Add-on lazy expiry check (inside getActiveAddOns())
+//
+//  This ensures the data shown to the user is always current without needing
+//  background cron jobs (Vercel Free Tier compatible).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
-import User from "@/models/User";
-import { rateLimit } from "@/lib/rateLimit";
+import { verifyUserRequest } from "@/lib/userAuth";
+import {
+  getActiveSubscription,
+  getActiveAddOns,
+  getEffectiveCapabilities,
+  lazyResetInvoiceCountIfNeeded,
+} from "@/lib/subscriptionGuard";
+import PaymentRecord from "@/models/PaymentRecord";
+import Customer from "@/models/Customer";
+import Product from "@/models/Product";
+import { PLAN_NAMES } from "@/types/subscription.types";
+import type {
+  ISubscriptionStatus,
+  IActiveAddOnSummary,
+  IPaymentRecordSummary,
+  ISubscriptionStatusResponse,
+} from "@/types/subscription.types";
 
-export const dynamic = "force-dynamic";
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MAX_BODY_BYTES = 256;
-
-function getClientIp(req: NextRequest): string {
-  return (
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    req.headers.get("x-real-ip") ??
-    "unknown"
-  );
-}
-
-export async function POST(req: NextRequest): Promise<NextResponse> {
-  // ── 1. Body size guard ────────────────────────────────────────────────────
-  const contentLength = Number(req.headers.get("content-length") ?? 0);
-  if (contentLength > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "Request too large." }, { status: 413 });
-  }
-
-  // ── 2. Rate limit ─────────────────────────────────────────────────────────
-  const ip = getClientIp(req);
-  const rl = rateLimit(`check-email:${ip}`, { limit: 10, windowSeconds: 60 });
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { error: "Too many requests. Please slow down.", exists: false },
-      { status: 429 }
-    );
-  }
-
-  // ── 3. Parse body ─────────────────────────────────────────────────────────
-  let raw: Record<string, unknown>;
+// ─────────────────────────────────────────────────────────────────────────────
+//  GET handler
+// ─────────────────────────────────────────────────────────────────────────────
+export async function GET(req: Request): Promise<NextResponse> {
   try {
-    raw = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
-  }
+    // ── 1. Auth check ───────────────────────────────────────────────────────
+    const auth = await verifyUserRequest(req);
+    if (auth instanceof NextResponse) return auth;
 
-  // ── 4. Validate email ─────────────────────────────────────────────────────
-  const emailRaw = raw.email;
-  if (!emailRaw || typeof emailRaw !== "string" || emailRaw.trim() === "") {
-    return NextResponse.json({ error: "Email is required." }, { status: 400 });
-  }
+    // ── 2. Admin-only guard ─────────────────────────────────────────────────
+    //  Managers operate under their admin's subscription.
+    //  The subscription GET is for admin account holders only.
+    if (auth.role === "manager") {
+      return NextResponse.json(
+        {
+          error:
+            "Subscription management is only available to admin account holders.",
+        },
+        { status: 403 }
+      );
+    }
 
-  const email = emailRaw.trim().toLowerCase().slice(0, 254);
-
-  if (!EMAIL_RE.test(email)) {
-    return NextResponse.json(
-      { error: "Invalid email format.", exists: false },
-      { status: 400 }
-    );
-  }
-
-  // ── 5. DB lookup ──────────────────────────────────────────────────────────
-  try {
     await connectDB();
 
-    // Only check admin-role users (not managers, not delivery partners)
-    const user = await User.findOne(
-      { email, role: "admin" },
-      { _id: 1 }         // projection — only need existence, not the doc
-    ).lean();
+    const userId = auth.userId;
 
-    return NextResponse.json({ exists: !!user }, { status: 200 });
-  } catch (err) {
-    console.error("[check-email] DB error:", err);
-    // On error, return exists: false — don't block the user, let them proceed
-    return NextResponse.json({ exists: false }, { status: 200 });
+    // ── 3. Fetch subscription with lazy expiry check ────────────────────────
+    const subscription = await getActiveSubscription(userId);
+
+    if (!subscription) {
+      return NextResponse.json(
+        {
+          error:
+            "No subscription found for this account. Please contact support.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ── 4. Lazy monthly invoice counter reset ───────────────────────────────
+    //  Must run before reading invoicesUsedThisMonth so the displayed count
+    //  is always accurate for the current billing month.
+    await lazyResetInvoiceCountIfNeeded(subscription);
+
+    // ── 5. Fetch active add-ons (with lazy expiry) ──────────────────────────
+    const activeAddOns = await getActiveAddOns(userId);
+
+    // ── 6. Get effective capabilities (plan + add-on bonuses merged) ────────
+    const { capabilities } = await getEffectiveCapabilities(userId);
+
+    // ── 7. Live counts for customers and products ───────────────────────────
+    //  These are NOT stored on the Subscription doc — they are computed fresh
+    //  on each request via an indexed countDocuments() query. This is cheap
+    //  (single index scan) and always accurate regardless of creates/deletes.
+    //  Running both in parallel keeps latency minimal.
+    const [customersCount, productsCount] = await Promise.all([
+      Customer.countDocuments({ userId }),
+      Product.countDocuments({ userId }),
+    ]);
+
+    // ── 8. Build the ISubscriptionStatus response shape ─────────────────────
+    const addOnSummaries: IActiveAddOnSummary[] = activeAddOns.map((addon) => ({
+      id: String(addon._id),
+      type: addon.type,
+      quantity: addon.quantity,
+      expiresAt: addon.expiresAt ? addon.expiresAt.toISOString() : null,
+      isActive: addon.isActive,
+    }));
+
+    const subscriptionStatus: ISubscriptionStatus = {
+      planId: subscription.planId,
+      planName: PLAN_NAMES[subscription.planId],
+      billingPeriod: subscription.billingPeriod,
+      status: subscription.status,
+      startDate: subscription.startDate.toISOString(),
+      currentPeriodEnd: subscription.currentPeriodEnd
+        ? subscription.currentPeriodEnd.toISOString()
+        : null,
+      trialEndsAt: subscription.trialEndsAt
+        ? subscription.trialEndsAt.toISOString()
+        : null,
+      usage: {
+        invoicesUsedThisMonth: subscription.invoicesUsedThisMonth,
+        invoicesUsedTotal: subscription.invoicesUsedTotal,
+        customersCount,
+        productsCount,
+      },
+      effectiveLimits: capabilities,
+      invoiceCountResetAt: subscription.invoiceCountResetAt.toISOString(),
+      activeAddOns: addOnSummaries,
+    };
+
+    // ── 9. Fetch last 10 payment records for this user ──────────────────────
+    const rawPayments = await PaymentRecord.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    const recentPayments: IPaymentRecordSummary[] = rawPayments.map((p) => ({
+      id: String(p._id),
+      type: p.type,
+      planId: p.planId,
+      billingPeriod: p.billingPeriod,
+      addonType: p.addonType,
+      addonQuantity: p.addonQuantity,
+      amount: p.amount,
+      currency: p.currency,
+      status: p.status,
+      razorpayOrderId: p.razorpayOrderId,
+      razorpayPaymentId: p.razorpayPaymentId,
+      createdAt: (p.createdAt as Date).toISOString(),
+    }));
+
+    // ── 10. Return the combined response ─────────────────────────────────────
+    const response: ISubscriptionStatusResponse = {
+      subscription: subscriptionStatus,
+      recentPayments,
+    };
+
+    return NextResponse.json(response, { status: 200 });
+  } catch (error) {
+    console.error("[GET /api/subscription] Unexpected error:", error);
+    return NextResponse.json(
+      { error: "Internal server error. Please try again later." },
+      { status: 500 }
+    );
   }
 }

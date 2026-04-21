@@ -77,6 +77,8 @@ interface SubscriptionStatus {
   usage: {
     invoicesUsedThisMonth: number;
     invoicesUsedTotal: number;
+    customersCount: number;
+    productsCount: number;
   };
   effectiveLimits: EffectiveLimits;
   activeAddOns: ActiveAddOn[];
@@ -644,14 +646,14 @@ export default function SubscriptionPage() {
           <UsageBar
             label="Customers"
             icon={Users}
-            used={0}
+            used={sub.usage.customersCount}
             limit={sub.effectiveLimits.customers}
             suffix=" slots"
           />
           <UsageBar
             label="Products"
             icon={Package}
-            used={0}
+            used={sub.usage.productsCount}
             limit={sub.effectiveLimits.products}
             suffix=" slots"
           />
