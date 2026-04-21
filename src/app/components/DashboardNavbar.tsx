@@ -20,7 +20,9 @@ import {
   Menu,
   X,
   Map,
+  CreditCard,
 } from "lucide-react";
+import SubscriptionBadge from "./SubscriptionBadge";
 
 export default function DashboardNavbar() {
   const pathname = usePathname();
@@ -69,11 +71,11 @@ export default function DashboardNavbar() {
     const fetchNotifications = async () => {
       try {
         const token = localStorage.getItem("token");
-    const res = await fetch(`/api/delivery/notifications`, {
-      headers: { "Authorization": `Bearer ${token}` },
-    });
+        const res = await fetch(`/api/delivery/notifications`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const data = await res.json();
-        
+
         if (typeof data?.pendingPartners === "number") {
           setPendingCount(data.pendingPartners);
         }
@@ -89,17 +91,15 @@ export default function DashboardNavbar() {
     return () => clearInterval(interval);
   }, [userId, role]);
 
- const requestsHref = "/dashboard/delivery-requests";
+  const requestsHref = "/dashboard/delivery-requests";
 
   /* ================= LOGOUT ================= */
- // REPLACE handleLogout with this:
-
-const handleLogout = () => {
-  localStorage.removeItem("user");
-  localStorage.removeItem("token");       // ← NEW
-  localStorage.removeItem("rememberMe");
-  router.push("/login");
-};
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    localStorage.removeItem("rememberMe");
+    router.push("/login");
+  };
 
   return (
     <>
@@ -169,18 +169,22 @@ const handleLogout = () => {
           </nav>
 
           {/* RIGHT */}
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+
+            {/* ── SUBSCRIPTION BADGE (Admin only, desktop) ── */}
+            {role !== "manager" && <SubscriptionBadge />}
+
             {/* NOTIFICATION BELL (Admin only) */}
             {role !== "manager" && (
               <Link href={requestsHref} className="relative group">
                 <div className="relative">
-                  <Bell 
+                  <Bell
                     className={`transition ${
-                      pendingCount > 0 
-                        ? "text-red-400 hover:text-red-300" 
+                      pendingCount > 0
+                        ? "text-red-400 hover:text-red-300"
                         : "text-slate-300 hover:text-cyan-400"
-                    }`} 
-                    size={22} 
+                    }`}
+                    size={22}
                   />
                   {pendingCount > 0 && (
                     <>
@@ -191,10 +195,10 @@ const handleLogout = () => {
                     </>
                   )}
                 </div>
-                
+
                 {pendingCount > 0 && (
                   <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white text-xs px-3 py-1 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    {pendingCount} pending request{pendingCount > 1 ? 's' : ''}
+                    {pendingCount} pending request{pendingCount > 1 ? "s" : ""}
                   </div>
                 )}
               </Link>
@@ -214,7 +218,7 @@ const handleLogout = () => {
               </Link>
             )}
 
-            {/* ✅ LOGOUT BUTTON (Desktop - Manager only) */}
+            {/* LOGOUT BUTTON (Desktop - Manager only) */}
             {role === "manager" && (
               <button
                 onClick={() => setShowDialog(true)}
@@ -259,6 +263,20 @@ const handleLogout = () => {
               {/* Mobile Admin-only items */}
               {role !== "manager" && (
                 <>
+                  {/* ── SUBSCRIPTION LINK (mobile, admin only) ── */}
+                  <Link
+                    href="/dashboard/subscription"
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition ${
+                      pathname === "/dashboard/subscription"
+                        ? "bg-cyan-500/20 text-cyan-400"
+                        : "text-slate-300 hover:bg-white/10"
+                    }`}
+                  >
+                    <CreditCard size={18} />
+                    Subscription
+                  </Link>
+
                   <Link
                     href="/dashboard/profile"
                     onClick={() => setMobileOpen(false)}
@@ -267,13 +285,13 @@ const handleLogout = () => {
                     <UserCircle size={18} />
                     Profile
                   </Link>
-                  
+
                   <Link
                     href={requestsHref}
                     onClick={() => setMobileOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition relative ${
-                      pendingCount > 0 
-                        ? "text-red-400 hover:bg-red-500/10" 
+                      pendingCount > 0
+                        ? "text-red-400 hover:bg-red-500/10"
                         : "text-slate-300 hover:bg-white/10"
                     }`}
                   >
@@ -288,7 +306,7 @@ const handleLogout = () => {
                 </>
               )}
 
-              {/* ✅ LOGOUT (Mobile - Manager only) */}
+              {/* LOGOUT (Mobile - Manager only) */}
               {role === "manager" && (
                 <button
                   onClick={() => {

@@ -10,6 +10,7 @@ export type ActiveTab =
   | "sessions"
   | "password"
   | "serial"
+  | "subscription"
   | "logout";
 
 export type UserProfile = {
