@@ -14,10 +14,18 @@ import DeliveryPartner from "@/models/DeliveryPartner";
 // ── FCM ───────────────────────────────────────────────────────────────────────
 import admin from "@/lib/firebase-admin";
 // ─────────────────────────────────────────────────────────────────────────────
-import {
-  checkInvoiceLimit,
-  incrementInvoiceCount,
-} from "@/lib/subscriptionGuard";
+
+// ── BUG FIX (Bug 2): Replace the two-step check+increment pattern with the
+//    atomic version to eliminate the TOCTOU race condition.
+//    The old flow was:
+//      1. checkInvoiceLimit()    ← reads counter
+//      2. ~10ms of bill creation~
+//      3. incrementInvoiceCount() ← increments counter
+//    Two concurrent requests could both pass step 1 with the same stale
+//    counter, then both increment — consuming 2 slots with only 1 remaining.
+//    atomicCheckAndIncrementInvoice() does the read AND increment in a single
+//    conditional MongoDB findOneAndUpdate, making it race-condition proof.
+import { atomicCheckAndIncrementInvoice } from "@/lib/subscriptionGuard";
 
 function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
   if (!id) return undefined;
@@ -32,11 +40,12 @@ export async function POST(req: Request) {
 
   await connectDB();
 
-  // ─── PHASE 3: Invoice limit guard ────────────────────────────────────────
-  // Check before any DB work — fail fast if the user is over their plan limit.
-  // checkInvoiceLimit() internally calls lazyResetInvoiceCountIfNeeded() so
-  // the counter is always current before the comparison.
-  const invoiceCheck = await checkInvoiceLimit(auth.userId);
+  // ─── BUG FIX (Bug 2 + Bug 3): Atomic invoice limit guard ─────────────────
+  // atomicCheckAndIncrementInvoice() does the check AND the increment in one
+  // atomic DB operation. If allowed=true, the counter has already been
+  // incremented — do NOT call incrementInvoiceCount() anywhere after this.
+  // Also accepts "grace" subscription status (Bug 3 fix).
+  const invoiceCheck = await atomicCheckAndIncrementInvoice(auth.userId);
   if (!invoiceCheck.allowed) {
     return NextResponse.json(
       {
@@ -51,6 +60,8 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
+  // ── If we reach here, the counter has already been incremented atomically.
+  // ── DO NOT call incrementInvoiceCount() anywhere below.
   // ─────────────────────────────────────────────────────────────────────────
 
   try {
@@ -271,11 +282,10 @@ export async function POST(req: Request) {
       session.endSession();
     }
 
-    // ─── PHASE 3: Increment invoice counter after successful creation ─────────
-    // Uses atomic $inc — safe under concurrent requests. Called AFTER the
-    // transaction succeeds so the counter is never incremented for failed bills.
-    await incrementInvoiceCount(auth.userId);
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── IMPORTANT: Do NOT call incrementInvoiceCount() here.
+    // ── The counter was already atomically incremented by
+    // ── atomicCheckAndIncrementInvoice() at the top of this handler.
+    // ── Calling it again would double-count the invoice.
 
     // ── FCM: Broadcast "New order available" to ALL approved delivery partners ──
     // Fire-and-forget — a failed FCM send must NOT fail the bill/order creation.

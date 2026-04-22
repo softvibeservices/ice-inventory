@@ -76,13 +76,16 @@ export async function superAdminAuth(
     }
 
     if (decoded.role !== "superAdmin") {
+      // ── BUG FIX (Bug 5): Removed "yourRole: decoded.role" from the response.
+      //    The old response revealed the exact role of the token holder to any
+      //    caller who receives a 403. This is unnecessary information disclosure —
+      //    an attacker probing the system with a stolen token of any role could
+      //    use this to map out the role hierarchy. The caller already knows their
+      //    own role; this field only helps an attacker.
       return {
         success: false,
         response: NextResponse.json(
-          {
-            error: "Access denied. SuperAdmin privileges required.",
-            yourRole: decoded.role,
-          },
+          { error: "Access denied. Insufficient privileges." },
           { status: 403 }
         ),
       };
@@ -155,11 +158,12 @@ export async function verifySuperAdminRequest(
     }
 
     if (decoded.role !== "superAdmin") {
+      // ── BUG FIX (Bug 5): Removed "yourRole: decoded.role" from the response.
+      //    Returning the token holder's role in a 403 response body is
+      //    unnecessary information disclosure. A legitimate user already knows
+      //    their own role; this field only assists attackers mapping the system.
       return NextResponse.json(
-        {
-          error: "Access denied. SuperAdmin privileges required.",
-          yourRole: decoded.role,
-        },
+        { error: "Access denied. Insufficient privileges." },
         { status: 403 }
       );
     }

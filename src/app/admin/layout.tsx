@@ -1,4 +1,4 @@
-// ice-inventory\src\app\admin\layout.tsx
+// src/app/admin/layout.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -15,7 +15,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    const checkAuth = () => {
+    const checkAuth = async () => {
       const token = localStorage.getItem("token");
 
       if (!token) {
@@ -24,22 +24,33 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       }
 
       try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
+        // ── BUG FIX (Bug 4): Verify the token on the server instead of
+        //    decoding it client-side with atob().
+        //
+        //    The old approach — JSON.parse(atob(token.split(".")[1])) —
+        //    only decodes the Base64url payload. It does NOT verify the
+        //    HMAC signature, so an attacker can craft a token with any
+        //    payload (e.g. {"role":"superAdmin"}) and bypass this check.
+        //
+        //    The new approach sends the token to a lightweight server endpoint
+        //    (/api/admin/verify-access) that calls jwt.verify() with the real
+        //    JWT_SECRET. The admin UI only renders after the server has
+        //    cryptographically confirmed both the signature and the role.
+        const res = await fetch("/api/admin/verify-access", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-        if (payload.role !== "superAdmin") {
-          router.replace("/dashboard");
-          return;
-        }
-
-        const now = Math.floor(Date.now() / 1000);
-        if (payload.exp && payload.exp < now) {
+        if (!res.ok) {
+          // 401 = invalid/expired token  →  redirect to login
+          // 403 = valid token but wrong role  →  redirect to dashboard
           localStorage.removeItem("token");
-          router.replace("/login");
+          router.replace(res.status === 403 ? "/dashboard" : "/login");
           return;
         }
 
         setIsAuthorized(true);
       } catch {
+        // Network error or unexpected failure — treat as unauthenticated
         localStorage.removeItem("token");
         router.replace("/login");
       } finally {

@@ -8,19 +8,25 @@
 //  Never write inline limit checks in route handlers.
 //
 //  ARCHITECTURE:
-//    getEffectiveCapabilities()  → merges plan limits + add-on bonuses
-//    checkInvoiceLimit()         → before creating a bill/order
-//    checkCustomerLimit()        → before creating a customer
-//    checkProductLimit()         → before creating a product
-//    checkManagerLimit()         → before creating a manager
-//    checkDeliveryPartnerLimit() → before creating a delivery partner
-//    checkFeatureFlag()          → before allowing a feature-gated action
-//    incrementInvoiceCount()     → after a bill/order is successfully created
+//    getEffectiveCapabilities()        → merges plan limits + add-on bonuses
+//    checkInvoiceLimit()               → before creating a bill/order (read-only check)
+//    atomicCheckAndIncrementInvoice()  → atomic check+increment replacing the two-step pattern
+//    checkCustomerLimit()              → before creating a customer
+//    checkProductLimit()               → before creating a product
+//    checkManagerLimit()               → before creating a manager
+//    checkDeliveryPartnerLimit()       → before creating a delivery partner
+//    checkFeatureFlag()                → before allowing a feature-gated action
+//    incrementInvoiceCount()           → after a bill/order is successfully created
 //
 //  LAZY RESET PATTERN (Vercel Free Tier compatible):
 //    lazyResetInvoiceCountIfNeeded() runs before any invoice count check.
 //    It advances invoiceCountResetAt and resets invoicesUsedThisMonth to 0
 //    if the reset anchor date has passed. No cron job needed.
+//
+//  GRACE STATUS:
+//    Users in "grace" status (recently expired, within grace period) are
+//    treated the same as "active" for resource access. This prevents paid
+//    users from being locked out immediately upon expiry.
 //
 //  IMPORTANT: Always call connectDB() before using any model in Next.js
 //  API routes because serverless functions may not have an active connection.
@@ -56,6 +62,17 @@ export interface FeatureCheckResult {
 //  This is what route handlers should compare against current usage.
 // ─────────────────────────────────────────────────────────────────────────────
 export type IEffectiveCapabilities = IPlanConfig;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  isAccessibleStatus()
+//
+//  Returns true if the subscription status allows resource creation.
+//  Both "active" and "grace" statuses are permitted — "grace" is a
+//  short window after expiry where the user retains access.
+// ─────────────────────────────────────────────────────────────────────────────
+function isAccessibleStatus(status: string): boolean {
+  return status === "active" || status === "grace";
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  getActiveSubscription()
@@ -301,9 +318,16 @@ export async function getEffectiveCapabilities(
 //    5. For paid plans: check invoicesUsedThisMonth against invoicesPerMonth.
 //    6. null limit = unlimited → always allowed.
 //
+//  ⚠️  BUG FIX (Bug 3): Now accepts both "active" and "grace" subscription
+//      statuses. Previously, only "active" was accepted, locking out users
+//      in their grace period.
+//
+//  NOTE: This is a read-only check. For atomic check+increment, use
+//  atomicCheckAndIncrementInvoice() in POST handlers instead.
+//
 //  Called by:
 //    - POST /api/bills/route.ts
-//    - POST /api/orders/route.ts (if order creation counts as an invoice)
+//    - POST /api/orders/route.ts
 // ─────────────────────────────────────────────────────────────────────────────
 export async function checkInvoiceLimit(
   userId: string | mongoose.Types.ObjectId
@@ -312,8 +336,8 @@ export async function checkInvoiceLimit(
 
   const subscription = await getActiveSubscription(userId);
 
-  if (!subscription || subscription.status !== "active") {
-    // No active subscription — deny creation
+  // ── BUG FIX (Bug 3): Accept "grace" status in addition to "active" ──────
+  if (!subscription || !isAccessibleStatus(subscription.status)) {
     return {
       allowed: false,
       used: 0,
@@ -321,6 +345,7 @@ export async function checkInvoiceLimit(
       upgradeRequired: true,
     };
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Perform lazy monthly reset before checking
   await lazyResetInvoiceCountIfNeeded(subscription);
@@ -361,6 +386,132 @@ export async function checkInvoiceLimit(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  atomicCheckAndIncrementInvoice()
+//
+//  Combines the invoice limit check AND the counter increment into a single
+//  atomic MongoDB findOneAndUpdate call, eliminating the TOCTOU race
+//  condition present in the old check() → create() → increment() pattern.
+//
+//  HOW IT WORKS:
+//    Uses a conditional $inc — only increments if the current counter is
+//    strictly below the plan limit. If no document is updated (result=null),
+//    the limit was already at or above the cap.
+//
+//  Returns the same LimitCheckResult shape as checkInvoiceLimit().
+//  If allowed=true, the increment has ALREADY been applied.
+//  If allowed=false, NO increment was applied — counter is untouched.
+//
+//  ⚠️  This REPLACES the separate checkInvoiceLimit() + incrementInvoiceCount()
+//      two-step calls in bills/route.ts and orders/route.ts.
+//      Do NOT call incrementInvoiceCount() after this — it would double-count.
+//
+//  ⚠️  BUG FIX (Bug 2 + Bug 3): Atomic operation prevents race conditions;
+//      grace status is also accepted alongside active.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function atomicCheckAndIncrementInvoice(
+  userId: string | mongoose.Types.ObjectId
+): Promise<LimitCheckResult> {
+  await connectDB();
+
+  const subscription = await getActiveSubscription(userId);
+
+  // ── BUG FIX (Bug 3): Accept "grace" status in addition to "active" ──────
+  if (!subscription || !isAccessibleStatus(subscription.status)) {
+    return { allowed: false, used: 0, limit: 0, upgradeRequired: true };
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Perform lazy monthly reset BEFORE any check or increment
+  await lazyResetInvoiceCountIfNeeded(subscription);
+
+  const { capabilities } = await getEffectiveCapabilities(userId);
+
+  // ── Free trial: uses invoicesUsedTotal (lifetime cap) ───────────────────
+  if (subscription.planId === "free_trial") {
+    const limit = capabilities.invoicesTotal;
+
+    if (limit === null) {
+      // Unlimited — just increment and allow
+      await Subscription.findOneAndUpdate(
+        { userId },
+        { $inc: { invoicesUsedThisMonth: 1, invoicesUsedTotal: 1 } }
+      );
+      return {
+        allowed: true,
+        used: subscription.invoicesUsedTotal,
+        limit: null,
+        upgradeRequired: false,
+      };
+    }
+
+    // Atomic conditional increment: only if total < limit
+    const result = await Subscription.findOneAndUpdate(
+      { userId, invoicesUsedTotal: { $lt: limit } },
+      { $inc: { invoicesUsedThisMonth: 1, invoicesUsedTotal: 1 } },
+      { new: false } // return OLD doc to read pre-increment value
+    );
+
+    if (!result) {
+      // No document updated = already at or over limit
+      return {
+        allowed: false,
+        used: subscription.invoicesUsedTotal,
+        limit,
+        upgradeRequired: true,
+      };
+    }
+
+    return {
+      allowed: true,
+      used: result.invoicesUsedTotal,
+      limit,
+      upgradeRequired: false,
+    };
+  }
+
+  // ── Paid plans: monthly cap ──────────────────────────────────────────────
+  const limit = capabilities.invoicesPerMonth;
+
+  if (limit === null) {
+    // Unlimited — just increment and allow
+    await Subscription.findOneAndUpdate(
+      { userId },
+      { $inc: { invoicesUsedThisMonth: 1, invoicesUsedTotal: 1 } }
+    );
+    return {
+      allowed: true,
+      used: subscription.invoicesUsedThisMonth,
+      limit: null,
+      upgradeRequired: false,
+    };
+  }
+
+  // Atomic conditional increment: only if monthly counter < limit
+  const result = await Subscription.findOneAndUpdate(
+    { userId, invoicesUsedThisMonth: { $lt: limit } },
+    { $inc: { invoicesUsedThisMonth: 1, invoicesUsedTotal: 1 } },
+    { new: false } // return OLD doc to read pre-increment value
+  );
+
+  if (!result) {
+    // No document updated = already at or over limit
+    return {
+      allowed: false,
+      used: subscription.invoicesUsedThisMonth,
+      limit,
+      upgradeRequired: true,
+    };
+  }
+
+  return {
+    allowed: true,
+    used: result.invoicesUsedThisMonth,
+    limit,
+    upgradeRequired: false,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  incrementInvoiceCount()
 //
 //  Atomically increments both invoicesUsedThisMonth and invoicesUsedTotal.
@@ -369,6 +520,10 @@ export async function checkInvoiceLimit(
 //  Do NOT call before creation — if creation fails, the count would be wrong.
 //
 //  Uses findOneAndUpdate with $inc for atomicity (safe under concurrent requests).
+//
+//  NOTE: This function is kept for backward compatibility with any code paths
+//  that still use the old two-step pattern. New code should use
+//  atomicCheckAndIncrementInvoice() instead for full race-condition safety.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function incrementInvoiceCount(
   userId: string | mongoose.Types.ObjectId
@@ -394,6 +549,8 @@ export async function incrementInvoiceCount(
 //  @param userId        — the admin user's ID
 //  @param currentCount  — current number of customer records for this user
 //                         (caller is responsible for counting before calling)
+//
+//  ⚠️  BUG FIX (Bug 3): Now accepts "grace" status in addition to "active".
 // ─────────────────────────────────────────────────────────────────────────────
 export async function checkCustomerLimit(
   userId: string | mongoose.Types.ObjectId,
@@ -401,9 +558,11 @@ export async function checkCustomerLimit(
 ): Promise<LimitCheckResult> {
   const { capabilities, subscription } = await getEffectiveCapabilities(userId);
 
-  if (!subscription || subscription.status !== "active") {
+  // ── BUG FIX (Bug 3): Accept "grace" status ──────────────────────────────
+  if (!subscription || !isAccessibleStatus(subscription.status)) {
     return { allowed: false, used: currentCount, limit: 0, upgradeRequired: true };
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const limit = capabilities.customers;
 
@@ -426,6 +585,8 @@ export async function checkCustomerLimit(
 //
 //  @param userId        — the admin user's ID
 //  @param currentCount  — current number of product records for this user
+//
+//  ⚠️  BUG FIX (Bug 3): Now accepts "grace" status in addition to "active".
 // ─────────────────────────────────────────────────────────────────────────────
 export async function checkProductLimit(
   userId: string | mongoose.Types.ObjectId,
@@ -433,9 +594,11 @@ export async function checkProductLimit(
 ): Promise<LimitCheckResult> {
   const { capabilities, subscription } = await getEffectiveCapabilities(userId);
 
-  if (!subscription || subscription.status !== "active") {
+  // ── BUG FIX (Bug 3): Accept "grace" status ──────────────────────────────
+  if (!subscription || !isAccessibleStatus(subscription.status)) {
     return { allowed: false, used: currentCount, limit: 0, upgradeRequired: true };
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const limit = capabilities.products;
 
@@ -458,6 +621,8 @@ export async function checkProductLimit(
 //
 //  @param userId        — the admin user's ID
 //  @param currentCount  — current number of active/pending managers
+//
+//  ⚠️  BUG FIX (Bug 3): Now accepts "grace" status in addition to "active".
 // ─────────────────────────────────────────────────────────────────────────────
 export async function checkManagerLimit(
   userId: string | mongoose.Types.ObjectId,
@@ -465,9 +630,11 @@ export async function checkManagerLimit(
 ): Promise<LimitCheckResult> {
   const { capabilities, subscription } = await getEffectiveCapabilities(userId);
 
-  if (!subscription || subscription.status !== "active") {
+  // ── BUG FIX (Bug 3): Accept "grace" status ──────────────────────────────
+  if (!subscription || !isAccessibleStatus(subscription.status)) {
     return { allowed: false, used: currentCount, limit: 0, upgradeRequired: true };
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const limit = capabilities.managers; // Always a number, never null
 
@@ -486,6 +653,8 @@ export async function checkManagerLimit(
 //
 //  @param userId        — the admin user's ID
 //  @param currentCount  — current number of active delivery partners
+//
+//  ⚠️  BUG FIX (Bug 3): Now accepts "grace" status in addition to "active".
 // ─────────────────────────────────────────────────────────────────────────────
 export async function checkDeliveryPartnerLimit(
   userId: string | mongoose.Types.ObjectId,
@@ -493,9 +662,11 @@ export async function checkDeliveryPartnerLimit(
 ): Promise<LimitCheckResult> {
   const { capabilities, subscription } = await getEffectiveCapabilities(userId);
 
-  if (!subscription || subscription.status !== "active") {
+  // ── BUG FIX (Bug 3): Accept "grace" status ──────────────────────────────
+  if (!subscription || !isAccessibleStatus(subscription.status)) {
     return { allowed: false, used: currentCount, limit: 0, upgradeRequired: true };
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const limit = capabilities.deliveryPartners; // Always a number, never null
 
@@ -518,6 +689,8 @@ export async function checkDeliveryPartnerLimit(
 //  @param userId — the admin user's ID
 //  @param flag   — key of IPlanConfig (e.g., "hasDeliveryModule")
 //
+//  ⚠️  BUG FIX (Bug 3): Now accepts "grace" status in addition to "active".
+//
 //  Example usage:
 //    const { allowed } = await checkFeatureFlag(userId, "hasDeliveryModule");
 //    if (!allowed) return NextResponse.json({ error: "Upgrade required" }, { status: 403 });
@@ -528,9 +701,11 @@ export async function checkFeatureFlag(
 ): Promise<FeatureCheckResult> {
   const { capabilities, subscription } = await getEffectiveCapabilities(userId);
 
-  if (!subscription || subscription.status !== "active") {
+  // ── BUG FIX (Bug 3): Accept "grace" status ──────────────────────────────
+  if (!subscription || !isAccessibleStatus(subscription.status)) {
     return { allowed: false, upgradeRequired: true };
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const flagValue = capabilities[flag];
 
