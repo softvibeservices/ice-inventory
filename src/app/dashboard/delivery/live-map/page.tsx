@@ -1,10 +1,16 @@
 // src/app/dashboard/delivery/live-map/page.tsx
+// PHASE 8: Check hasLiveTracking feature flag.
+// If false (Launch plan / free_trial), replace the entire page content with an
+// upgrade prompt instead of showing the partner list. All original logic is
+// preserved — we only add the gate at the top of the render tree.
 "use client";
 
 import { useEffect, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
-import { MapPin, Phone, User, AlertCircle } from "lucide-react";
+import { MapPin, Phone, User, AlertCircle, Lock, ArrowRight } from "lucide-react";
+import Link from "next/link";
+import { useSubscription } from "@/hooks/useSubscription";
 
 interface Partner {
   _id: string;
@@ -14,13 +20,75 @@ interface Partner {
   status: string;
 }
 
-export default function LiveMapHome() {
+// ─────────────────────────────────────────────────────────────────────────────
+//  FeatureGateScreen
+//  Shown when the user's plan does not include live tracking.
+// ─────────────────────────────────────────────────────────────────────────────
+function FeatureGateScreen() {
+  return (
+    <div className="flex flex-col min-h-screen bg-slate-50">
+      <DashboardNavbar />
+
+      <main className="flex-grow w-full max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 flex items-center justify-center">
+        <div className="w-full max-w-md text-center">
+          <div className="w-20 h-20 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto mb-6">
+            <Lock size={32} className="text-blue-500" />
+          </div>
+
+          <h1 className="text-2xl font-bold text-slate-900 mb-3">
+            Live Tracking Not Available
+          </h1>
+
+          <p className="text-slate-600 text-sm leading-6 mb-6">
+            Real-time delivery partner tracking is available on the{" "}
+            <strong>Scale</strong> and <strong>Business</strong> plans.
+            Upgrade your subscription to track your delivery team on a live map.
+          </p>
+
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 text-left">
+            <p className="text-sm font-semibold text-blue-900 mb-2">
+              Live Tracking includes:
+            </p>
+            <ul className="space-y-1.5 text-sm text-blue-800">
+              <li className="flex items-center gap-2">
+                <MapPin size={14} className="text-blue-500 shrink-0" />
+                Real-time GPS tracking of all delivery partners
+              </li>
+              <li className="flex items-center gap-2">
+                <MapPin size={14} className="text-blue-500 shrink-0" />
+                Animated live map with partner locations
+              </li>
+              <li className="flex items-center gap-2">
+                <MapPin size={14} className="text-blue-500 shrink-0" />
+                Order delivery status updates in real time
+              </li>
+            </ul>
+          </div>
+
+          <Link
+            href="/dashboard/subscription"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors text-sm"
+          >
+            View Plans
+            <ArrowRight size={15} />
+          </Link>
+        </div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  LiveMapHome — original component (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+function LiveMapContent() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Get userId from localStorage
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) {
@@ -35,34 +103,33 @@ export default function LiveMapHome() {
     }
   }, []);
 
-  // Load partners
   async function loadPartners() {
     if (!userId) return;
-    
+
     setLoading(true);
     setError("");
-    
+
     try {
       const token = localStorage.getItem("token");
-const res = await fetch(`/api/delivery/list?status=approved`, {
-  headers: { "Authorization": `Bearer ${token}` },
-});
-      
+      const res = await fetch(`/api/delivery/list?status=approved`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+
       if (!res.ok) {
         throw new Error("Failed to load partners");
       }
-      
+
       const data = await res.json();
-      
+
       if (data.error) {
         setError(data.error);
         return;
       }
-      
+
       setPartners(Array.isArray(data) ? data : []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error loading partners:", err);
-      setError(err.message || "Failed to load partners");
+      setError(err instanceof Error ? err.message : "Failed to load partners");
     } finally {
       setLoading(false);
     }
@@ -119,7 +186,7 @@ const res = await fetch(`/api/delivery/list?status=approved`, {
               No Approved Partners
             </h3>
             <p className="text-sm text-yellow-700">
-              You don't have any approved delivery partners yet.
+              You don&apos;t have any approved delivery partners yet.
             </p>
           </div>
         )}
@@ -132,7 +199,6 @@ const res = await fetch(`/api/delivery/list?status=approved`, {
                 key={partner._id}
                 className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
                 onClick={() => {
-                  // Open map in modal instead of new page
                   window.location.href = `/dashboard/delivery/live-map/${partner._id}`;
                 }}
               >
@@ -177,4 +243,35 @@ const res = await fetch(`/api/delivery/list?status=approved`, {
       <Footer />
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Default export — gates access on hasLiveTracking feature flag
+// ─────────────────────────────────────────────────────────────────────────────
+export default function LiveMapHome() {
+  const { subscription, loading } = useSubscription();
+
+  // While subscription is loading, show a neutral loading state
+  if (loading) {
+    return (
+      <div className="flex min-h-screen flex-col bg-slate-50">
+        <DashboardNavbar />
+        <main className="flex-grow flex items-center justify-center">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  // ── PHASE 8: Feature gate ─────────────────────────────────────────────────
+  //  hasLiveTracking is true only on Scale and Business plans.
+  //  Launch and free_trial get the upgrade prompt instead.
+  const hasLiveTracking = subscription?.effectiveLimits.hasLiveTracking ?? false;
+  if (!hasLiveTracking) {
+    return <FeatureGateScreen />;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  return <LiveMapContent />;
 }

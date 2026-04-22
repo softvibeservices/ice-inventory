@@ -4,15 +4,18 @@
 import React, { JSX, useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, Plus, Package } from "lucide-react";
+import { Upload, FileText, Plus, Package, Lock } from "lucide-react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
+import PlanLimitWarning from "@/app/components/PlanLimitWarning";
+import UpgradePromptModal from "@/app/components/UpgradePromptModal";
 import ProductList from "./ProductList";
 import ProductForm from "./ProductForm";
 import DeleteConfirmationModal from "./DeleteConfirmationModal";
 import CSVFormatModal from "./CSVFormatModal";
 import BulkUploadModal from "./BulkUploadModal";
 import { Product, FormState, SortMode } from "@/types/product.type";
+import { useSubscription } from "@/hooks/useSubscription";
 
 export default function ProductsPage(): JSX.Element {
   const router = useRouter();
@@ -28,6 +31,16 @@ export default function ProductsPage(): JSX.Element {
   const [sortMode, setSortMode] = useState<SortMode>("default");
   const [showCSVFormat, setShowCSVFormat] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+
+  // ── PHASE 8: Subscription state ───────────────────────────────────────────
+  const { subscription } = useSubscription();
+  const [upgradeModal, setUpgradeModal] = useState(false);
+
+  //  Derived limit values from the live subscription
+  const productLimit   = subscription?.effectiveLimits.products   ?? null;
+  const productCount   = products.length; // live count from fetched data
+  const isAtLimit      = productLimit !== null && productCount >= productLimit;
+  // ─────────────────────────────────────────────────────────────────────────
 
   const initialForm: FormState = {
     name: "",
@@ -120,7 +133,7 @@ export default function ProductsPage(): JSX.Element {
 
   const cleanPayload = (p: Partial<Product>) =>
     Object.fromEntries(
-      Object.entries(p).filter(([_, v]) => v !== undefined && v !== "")
+      Object.entries(p).filter(([, v]) => v !== undefined && v !== "")
     );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -140,7 +153,7 @@ export default function ProductsPage(): JSX.Element {
     setIsSubmitting(true);
     try {
       const method = editingId ? "PUT" : "POST";
-      let body: any;
+      let body: Record<string, unknown>;
       if (editingId) {
         const cleaned = cleanPayload(payload);
         body = { ...cleaned, id: editingId, userId };
@@ -160,6 +173,14 @@ export default function ProductsPage(): JSX.Element {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+
+        // ── PHASE 8: Handle product limit 403 ────────────────────────────
+        if (res.status === 403 && err?.upgradeRequired) {
+          setUpgradeModal(true);
+          return;
+        }
+        // ─────────────────────────────────────────────────────────────────
+
         throw new Error(err?.error || `${method} failed`);
       }
 
@@ -190,9 +211,9 @@ export default function ProductsPage(): JSX.Element {
       setFormData(initialForm);
       setEditingId(null);
       setShowForm(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(err?.message || "Save failed");
+      toast.error(err instanceof Error ? err.message : "Save failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -236,18 +257,15 @@ export default function ProductsPage(): JSX.Element {
         body: JSON.stringify({ id: confirmDeleteId }),
       });
 
-      if (res.ok) {
-        setProducts((prev) => prev.filter((p) => p._id !== confirmDeleteId));
-        toast.success("Product deleted!");
-      } else {
-        toast.error("Delete failed on server");
-      }
+      if (!res.ok) throw new Error("Delete failed");
+      setProducts((prev) => prev.filter((p) => p._id !== confirmDeleteId));
+      setConfirmDeleteId(null);
+      toast.success("Product deleted");
     } catch (err) {
       console.error(err);
-      toast.error("Delete failed");
+      toast.error("Failed to delete product");
     } finally {
       setIsDeleting(false);
-      setConfirmDeleteId(null);
     }
   };
 
@@ -269,6 +287,16 @@ export default function ProductsPage(): JSX.Element {
       <main className="flex-grow w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
 
+          {/* ── PHASE 8: Plan limit warning ───────────────────────────────── */}
+          {subscription && (
+            <PlanLimitWarning
+              productsCount={productCount}
+              productsLimit={productLimit}
+              planId={subscription.planId}
+            />
+          )}
+          {/* ─────────────────────────────────────────────────────────────── */}
+
           {/* ── Page header ── */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -277,7 +305,13 @@ export default function ProductsPage(): JSX.Element {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 leading-tight">Products</h1>
-                <p className="text-sm text-gray-500">Manage your shop's product catalogue</p>
+                {/* ── PHASE 8: Live usage count in subtitle ── */}
+                <p className="text-sm text-gray-500">
+                  {productLimit !== null
+                    ? `${productCount} / ${productLimit} products used`
+                    : "Manage your shop's product catalogue"}
+                </p>
+                {/* ─────────────────────────────────────────── */}
               </div>
             </div>
 
@@ -304,31 +338,44 @@ export default function ProductsPage(): JSX.Element {
                 Bulk Upload
               </button>
 
-              {/* Add Product — primary */}
-              <button
-                onClick={() => {
-                  if (!showForm) {
-                    setEditingId(null);
-                    setFormData(initialForm);
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }
-                  setShowForm((s) => !s);
-                }}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg
-                            shadow-sm transition-all ${
-                  showForm
-                    ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    : "bg-blue-600 hover:bg-blue-700 text-white"
-                }`}
-              >
-                <Plus size={15} />
-                {showForm ? "Hide Form" : "Add Product"}
-              </button>
+              {/* ── PHASE 8: Add Product — disabled + tooltip when at limit ── */}
+              {isAtLimit ? (
+                <button
+                  onClick={() => setUpgradeModal(true)}
+                  title={`Product limit reached (${productCount}/${productLimit}). Upgrade your plan to add more.`}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg
+                             shadow-sm bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                >
+                  <Lock size={15} />
+                  Add Product
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (!showForm) {
+                      setEditingId(null);
+                      setFormData(initialForm);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }
+                    setShowForm((s) => !s);
+                  }}
+                  className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg
+                              shadow-sm transition-all ${
+                    showForm
+                      ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      : "bg-blue-600 hover:bg-blue-700 text-white"
+                  }`}
+                >
+                  <Plus size={15} />
+                  {showForm ? "Hide Form" : "Add Product"}
+                </button>
+              )}
+              {/* ─────────────────────────────────────────────────────────── */}
             </div>
           </div>
 
           {/* ── Product Form (collapsible) ── */}
-          {showForm && (
+          {showForm && !isAtLimit && (
             <ProductForm
               formData={formData}
               setFormData={setFormData}
@@ -372,6 +419,17 @@ export default function ProductsPage(): JSX.Element {
           onSuccess={() => fetchProducts()}
         />
       )}
+
+      {/* ── PHASE 8: Upgrade prompt modal ─────────────────────────────────── */}
+      <UpgradePromptModal
+        open={upgradeModal}
+        onClose={() => setUpgradeModal(false)}
+        resource="product"
+        used={productCount}
+        limit={productLimit}
+        currentPlanId={subscription?.planId}
+      />
+      {/* ─────────────────────────────────────────────────────────────────── */}
 
       <Toaster position="top-right" reverseOrder={false} />
       <Footer />

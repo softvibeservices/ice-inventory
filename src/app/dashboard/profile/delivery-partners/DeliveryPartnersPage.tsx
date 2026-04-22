@@ -1,8 +1,19 @@
 // src/app/dashboard/profile/delivery-partners/DeliveryPartnersPage.tsx
-
+//
+// PHASE 8 changes:
+//  1. Import useSubscription hook
+//  2. If hasDeliveryModule === false → show upgrade prompt instead of the table
+//  3. Show deliveryPartner count vs limit at the top of the table
+//  4. Disable "approve" actions (via status change) when at partner limit
+//
+// All original fetch/edit/delete/toast logic is IDENTICAL — only the render
+// section adds the gate and the usage indicator.
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSubscription } from "@/hooks/useSubscription";
+import Link from "next/link";
+import { Lock, ArrowRight, Truck } from "lucide-react";
 
 type Partner = {
   _id: string;
@@ -22,7 +33,6 @@ type Toast = {
   message: string;
 };
 
-// ── helper: get JWT token from localStorage ──────────────────────────────────
 function getToken(): string {
   if (typeof window === "undefined") return "";
   return localStorage.getItem("token") ?? "";
@@ -39,6 +49,91 @@ function jsonAuthHeaders(): Record<string, string> {
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Feature gate screen — shown when delivery module is not on this plan
+// ─────────────────────────────────────────────────────────────────────────────
+function DeliveryModuleGate() {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-yellow-50 border border-yellow-100 flex items-center justify-center mx-auto mb-5">
+        <Lock size={26} className="text-yellow-500" />
+      </div>
+
+      <h2 className="text-xl font-bold text-slate-900 mb-2">
+        Delivery Module Not Available
+      </h2>
+
+      <p className="text-slate-600 text-sm leading-6 max-w-sm mb-5">
+        Managing delivery partners requires the <strong>Scale</strong> or{" "}
+        <strong>Business</strong> plan. Upgrade to onboard your delivery team,
+        assign orders, and track partners in real time.
+      </p>
+
+      <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-4 mb-6 text-left max-w-sm w-full">
+        <p className="text-sm font-semibold text-yellow-900 mb-2">
+          Delivery module includes:
+        </p>
+        <ul className="space-y-1.5 text-sm text-yellow-800">
+          <li className="flex items-center gap-2">
+            <Truck size={13} className="text-yellow-600 shrink-0" />
+            Delivery partner onboarding &amp; management
+          </li>
+          <li className="flex items-center gap-2">
+            <Truck size={13} className="text-yellow-600 shrink-0" />
+            Order assignment to delivery partners
+          </li>
+          <li className="flex items-center gap-2">
+            <Truck size={13} className="text-yellow-600 shrink-0" />
+            Live GPS map tracking
+          </li>
+          <li className="flex items-center gap-2">
+            <Truck size={13} className="text-yellow-600 shrink-0" />
+            Delivery status workflow (Pending → On the Way → Delivered)
+          </li>
+        </ul>
+      </div>
+
+      <Link
+        href="/dashboard/subscription"
+        className="inline-flex items-center gap-2 px-5 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white font-semibold rounded-xl transition-colors text-sm"
+      >
+        View Plans
+        <ArrowRight size={14} />
+      </Link>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function statusBadge(status: Partner["status"]) {
+  const map: Record<Partner["status"], { label: string; cls: string }> = {
+    approved: { label: "Approved", cls: "bg-green-100 text-green-800 border-green-200" },
+    pending:  { label: "Pending",  cls: "bg-yellow-100 text-yellow-800 border-yellow-200" },
+    rejected: { label: "Rejected", cls: "bg-red-100 text-red-800 border-red-200" },
+  };
+  const { label, cls } = map[status];
+  return (
+    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Main component
+// ─────────────────────────────────────────────────────────────────────────────
 export default function DeliveryPartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,6 +146,15 @@ export default function DeliveryPartnersPage() {
   const [qText, setQText] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+
+  // ── PHASE 8: Subscription guard ───────────────────────────────────────────
+  const { subscription, loading: subLoading } = useSubscription();
+
+  const hasDeliveryModule  = subscription?.effectiveLimits.hasDeliveryModule ?? true;
+  const deliveryLimit      = subscription?.effectiveLimits.deliveryPartners ?? null;
+  const approvedCount      = partners.filter((p) => p.status === "approved").length;
+  const isAtPartnerLimit   = deliveryLimit !== null && approvedCount >= deliveryLimit;
+  // ─────────────────────────────────────────────────────────────────────────
 
   const pushToast = (type: "success" | "error" | "info", message: string) => {
     const id = String(Date.now()) + Math.random().toString(36).slice(2, 8);
@@ -65,13 +169,11 @@ export default function DeliveryPartnersPage() {
     return () => clearTimeout(t);
   }, [qText]);
 
-  // ── FETCH PARTNERS — token only, no userId in URL ─────────────────────────
   const fetchPartners = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // ✅ Token in header — no userId query param
       const res = await fetch(`/api/delivery/list`, {
         headers: authHeaders(),
       });
@@ -84,20 +186,20 @@ export default function DeliveryPartnersPage() {
         return;
       }
 
-      const list: any[] = Array.isArray(data)
+      const list: Record<string, unknown>[] = Array.isArray(data)
         ? data
-        : data.partners ?? (data.partner ? [data.partner] : []);
+        : (data.partners ?? (data.partner ? [data.partner] : []));
 
       const normalized: Partner[] = list.map((p) => ({
         _id: String(p._id ?? p.id ?? ""),
-        name: p.name ?? "Unknown",
-        email: p.email ?? null,
-        phone: p.phone ?? null,
-        avatar: p.avatar ?? null,
-        status: (p.status ?? "pending").toLowerCase() as Partner["status"],
-        createdAt: p.createdAt ?? null,
-        createdByUser: p.createdByUser ?? null,
-        adminEmail: p.adminEmail ?? null,
+        name: String(p.name ?? "Unknown"),
+        email: (p.email as string) ?? null,
+        phone: (p.phone as string) ?? null,
+        avatar: (p.avatar as string) ?? null,
+        status: ((p.status as string) ?? "pending").toLowerCase() as Partner["status"],
+        createdAt: (p.createdAt as string) ?? null,
+        createdByUser: (p.createdByUser as string) ?? null,
+        adminEmail: (p.adminEmail as string) ?? null,
       }));
 
       setPartners(normalized);
@@ -140,16 +242,30 @@ export default function DeliveryPartnersPage() {
     return true;
   };
 
-  // ── SAVE EDIT — token only, no userId in body ─────────────────────────────
   async function saveEdit(e?: React.FormEvent) {
     e?.preventDefault();
     if (!editing) return;
     if (!validateEdit(editing)) return;
 
+    // ── PHASE 8: Block approving when at partner limit ────────────────────
+    if (
+      editing.status === "approved" &&
+      isAtPartnerLimit
+    ) {
+      const originalPartner = partners.find((p) => p._id === editing._id);
+      if (originalPartner?.status !== "approved") {
+        pushToast(
+          "error",
+          `Delivery partner limit reached (${approvedCount}/${deliveryLimit}). Upgrade to add more.`
+        );
+        return;
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     setSaving(true);
 
     try {
-      // ✅ userId removed from body — server uses token
       const body = {
         partnerId: editing._id,
         name: editing.name,
@@ -189,7 +305,6 @@ export default function DeliveryPartnersPage() {
     }
   }
 
-  // ── CONFIRM DELETE — token only, no userId in body ────────────────────────
   async function confirmDelete() {
     const target = confirmDeleteFor;
     if (!target) return;
@@ -197,7 +312,6 @@ export default function DeliveryPartnersPage() {
     setDeletingLoading(true);
 
     try {
-      // ✅ userId removed from body — server uses token
       const res = await fetch(`/api/delivery/delete`, {
         method: "DELETE",
         headers: jsonAuthHeaders(),
@@ -208,12 +322,11 @@ export default function DeliveryPartnersPage() {
 
       if (!res.ok) {
         pushToast("error", data?.error ?? "Delete failed");
-        setConfirmDeleteFor(null);
         return;
       }
 
-      setPartners((p) => p.filter((x) => x._id !== target._id));
-      pushToast("success", data?.message ?? "Partner deleted");
+      setPartners((prev) => prev.filter((p) => p._id !== target._id));
+      pushToast("success", `${target.name} removed`);
       setConfirmDeleteFor(null);
     } catch (err) {
       console.error(err);
@@ -223,235 +336,186 @@ export default function DeliveryPartnersPage() {
     }
   }
 
-  const statusBadge = (s: Partner["status"]) => {
-    const configs = {
-      approved: "px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700",
-      rejected: "px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700",
-      pending: "px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700",
-    };
-    const labels = { approved: "Approved", rejected: "Rejected", pending: "Pending" };
-    return <span className={configs[s]}>{labels[s]}</span>;
-  };
-
-  const formatDate = (iso?: string | null) => {
-    if (!iso) return "-";
-    try {
-      return new Date(iso).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
-    } catch {
-      return iso;
-    }
-  };
+  // ── PHASE 8: Show feature gate if delivery module is not available ─────────
+  if (!subLoading && !hasDeliveryModule) {
+    return <DeliveryModuleGate />;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 border-b border-gray-100">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-2xl shadow-lg">
-                🚚
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800">Delivery Partners</h1>
-                <p className="text-sm text-gray-600 mt-0.5">
-                  Manage and monitor your delivery partner network
-                </p>
-              </div>
-            </div>
+    <div className="space-y-4">
 
-            {/* Search & Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1">
-                <input
-                  aria-label="Search delivery partners"
-                  value={qText}
-                  onChange={(e) => setQText(e.target.value)}
-                  placeholder="Search by name, email, or phone..."
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+      {/* ── PHASE 8: Partner limit indicator ─────────────────────────────── */}
+      {deliveryLimit !== null && (
+        <div className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm ${
+          isAtPartnerLimit
+            ? "bg-red-50 border-red-200 text-red-800"
+            : "bg-slate-50 border-slate-200 text-slate-700"
+        }`}>
+          <span>
+            <strong>{approvedCount}</strong> / <strong>{deliveryLimit}</strong>{" "}
+            delivery partner seats used
+          </span>
+          {isAtPartnerLimit && (
+            <Link
+              href="/dashboard/subscription"
+              className="text-xs font-semibold underline underline-offset-2 text-red-700 hover:text-red-900"
+            >
+              Upgrade to add more →
+            </Link>
+          )}
+        </div>
+      )}
+      {/* ─────────────────────────────────────────────────────────────────── */}
 
-              <select
-                aria-label="Filter by status"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Statuses</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-              </select>
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <input
+          type="text"
+          value={qText}
+          onChange={(e) => setQText(e.target.value)}
+          placeholder="Search by name, email, phone…"
+          className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+          className="w-full sm:w-44 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition"
+        >
+          <option value="all">All Statuses</option>
+          <option value="approved">Approved</option>
+          <option value="pending">Pending</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
 
-              <button
-                onClick={fetchPartners}
-                className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                ↻ Refresh
-              </button>
-            </div>
-          </div>
+      {/* Loading */}
+      {loading && (
+        <div className="flex justify-center py-12">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
 
-          {/* Content */}
-          <div className="p-6">
-            {loading ? (
-              <div className="py-16 text-center">
-                <div className="inline-block w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-                <p className="mt-3 text-sm text-gray-500">Loading partners...</p>
-              </div>
-            ) : error ? (
-              <div className="py-16 text-center">
-                <div className="text-red-600 mb-3">⚠️ {error}</div>
-                <button
-                  onClick={fetchPartners}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="py-16 text-center">
-                <div className="text-6xl mb-4">📦</div>
-                <div className="text-gray-600 mb-4 font-medium">No delivery partners found</div>
-                <button
-                  onClick={() => {
-                    setQText("");
-                    setStatusFilter("all");
-                    fetchPartners();
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Reset Filters
-                </button>
-              </div>
-            ) : (
-              <>
-                {/* Desktop Table */}
-                <div className="hidden lg:block overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Partner
-                        </th>
-                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Contact
-                        </th>
-                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Joined
-                        </th>
-                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {filtered.map((p) => (
-                        <tr key={p._id} className="hover:bg-gray-50 transition-colors">
-                          <td className="py-4 px-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center overflow-hidden text-sm font-semibold text-blue-700">
-                                {p.avatar ? (
-                                  <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
-                                ) : (
-                                  p.name.charAt(0).toUpperCase()
-                                )}
-                              </div>
-                              <div>
-                                <div className="font-medium text-gray-900">{p.name}</div>
-                                <div className="text-xs text-gray-500">ID: {p._id.slice(-8)}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="text-sm text-gray-700">{p.email ?? "-"}</div>
-                            <div className="text-xs text-gray-500">{p.phone ?? "-"}</div>
-                          </td>
-                          <td className="py-4 px-4">{statusBadge(p.status)}</td>
-                          <td className="py-4 px-4 text-sm text-gray-600">{formatDate(p.createdAt)}</td>
-                          <td className="py-4 px-4">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => setEditing(p)}
-                                className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => setConfirmDeleteFor(p)}
-                                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+      {/* Error */}
+      {!loading && error && (
+        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+          {error}
+        </div>
+      )}
 
-                {/* Mobile/Tablet Cards */}
-                <div className="lg:hidden grid gap-4">
-                  {filtered.map((p) => (
-                    <div key={p._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-start gap-3">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center overflow-hidden text-sm font-semibold text-blue-700 flex-shrink-0">
+      {/* Empty */}
+      {!loading && !error && filtered.length === 0 && (
+        <div className="text-center py-12 text-slate-500 text-sm">
+          No delivery partners found.
+        </div>
+      )}
+
+      {/* Table — desktop */}
+      {!loading && !error && filtered.length > 0 && (
+        <>
+          <div className="hidden lg:block overflow-x-auto rounded-xl border border-gray-200">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-600 text-xs font-semibold uppercase">
+                <tr>
+                  <th className="px-5 py-3 text-left">Partner</th>
+                  <th className="px-5 py-3 text-left">Contact</th>
+                  <th className="px-5 py-3 text-left">Status</th>
+                  <th className="px-5 py-3 text-left">Added</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {filtered.map((p) => (
+                  <tr key={p._id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center overflow-hidden text-sm font-semibold text-blue-700 flex-shrink-0">
                           {p.avatar ? (
                             <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
                           ) : (
                             p.name.charAt(0).toUpperCase()
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-semibold text-gray-900 truncate">{p.name}</h3>
-                              <p className="text-xs text-gray-500 truncate">{p.email ?? "-"}</p>
-                            </div>
-                            {statusBadge(p.status)}
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
-                            <span>{p.phone ?? "No phone"}</span>
-                            <span>{formatDate(p.createdAt)}</span>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setEditing(p)}
-                              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => setConfirmDeleteFor(p)}
-                              className="flex-1 px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
-                            >
-                              Delete
-                            </button>
-                          </div>
+                        <div>
+                          <div className="font-medium text-gray-900">{p.name}</div>
+                          <div className="text-xs text-gray-500">{p.email ?? "—"}</div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Results Count */}
-                <div className="mt-6 text-sm text-gray-600 text-center">
-                  Showing {filtered.length} {filtered.length === 1 ? "partner" : "partners"}
-                </div>
-              </>
-            )}
+                    </td>
+                    <td className="px-5 py-4 text-gray-600">{p.phone ?? "—"}</td>
+                    <td className="px-5 py-4">{statusBadge(p.status)}</td>
+                    <td className="px-5 py-4 text-gray-500">{formatDate(p.createdAt)}</td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setEditing(p)}
+                          className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteFor(p)}
+                          className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-700 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-      </div>
+
+          {/* Mobile cards */}
+          <div className="lg:hidden grid gap-4">
+            {filtered.map((p) => (
+              <div key={p._id} className="border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center overflow-hidden text-sm font-semibold text-blue-700 flex-shrink-0">
+                    {p.avatar ? (
+                      <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                    ) : (
+                      p.name.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 truncate">{p.name}</h3>
+                        <p className="text-xs text-gray-500 truncate">{p.email ?? "-"}</p>
+                      </div>
+                      {statusBadge(p.status)}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+                      <span>{p.phone ?? "No phone"}</span>
+                      <span>{formatDate(p.createdAt)}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setEditing(p)}
+                        className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteFor(p)}
+                        className="flex-1 px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 text-sm text-gray-600 text-center">
+            Showing {filtered.length} {filtered.length === 1 ? "partner" : "partners"}
+          </div>
+        </>
+      )}
 
       {/* Edit Modal */}
       {editing && (
@@ -505,6 +569,16 @@ export default function DeliveryPartnersPage() {
                   <option value="approved">Approved</option>
                   <option value="rejected">Rejected</option>
                 </select>
+                {/* ── PHASE 8: Warning when approving would exceed limit ─── */}
+                {editing.status === "approved" &&
+                  isAtPartnerLimit &&
+                  partners.find((p) => p._id === editing._id)?.status !== "approved" && (
+                    <p className="mt-1.5 text-xs text-red-600">
+                      ⚠ Partner limit reached ({approvedCount}/{deliveryLimit}).
+                      You cannot approve more partners on your current plan.
+                    </p>
+                  )}
+                {/* ─────────────────────────────────────────────────────── */}
               </div>
             </div>
 

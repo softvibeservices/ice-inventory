@@ -9,6 +9,7 @@ import LowStockAlerts from "./LowStockAlerts";
 import MostPopularProducts from "./MostPopularProducts";
 import CustomerOverview from "./CustomerOverview";
 import DeliveryPartnerOverview from "./DeliveryPartnerOverview";
+import PlanLimitWarning from "../components/PlanLimitWarning";
 import {
   Truck,
   StickyNote,
@@ -21,6 +22,7 @@ import {
 import type { Order, Product, Customer } from "./types";
 import toast, { Toaster } from "react-hot-toast";
 import { StickyNotesPanel } from "./sticky-notes";
+import { useSubscription } from "@/hooks/useSubscription";
 
 type TabType =
   | "delivery"
@@ -45,6 +47,10 @@ export default function DashboardPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+
+  // ── PHASE 8: Subscription data for limit warnings ─────────────────────────
+  const { subscription } = useSubscription();
+  // ─────────────────────────────────────────────────────────────────────────
 
   // ========= INIT USER =========
   useEffect(() => {
@@ -86,9 +92,10 @@ export default function DashboardPage() {
       setProducts(Array.isArray(prodData) ? prodData : []);
       setCustomers(Array.isArray(custData) ? custData : []);
       setOrders(Array.isArray(ordersData) ? ordersData : []);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load dashboard data";
       console.error(err);
-      toast.error(err?.message || "Failed to load dashboard data");
+      toast.error(msg);
     } finally {
       setLoadingOrders(false);
       setLoadingProducts(false);
@@ -209,6 +216,22 @@ export default function DashboardPage() {
     }
   };
 
+  // ========= DERIVE LIMIT WARNING DATA ─────────────────────────────────────
+  //  Compute the values PlanLimitWarning needs from the live subscription data.
+  //  Using server-side counts (subscription.usage) keeps these accurate.
+  const invoicesUsed = subscription
+    ? (subscription.planId === "free_trial"
+        ? subscription.usage.invoicesUsedTotal
+        : subscription.usage.invoicesUsedThisMonth)
+    : null;
+
+  const invoicesLimit = subscription
+    ? (subscription.planId === "free_trial"
+        ? subscription.effectiveLimits.invoicesTotal
+        : subscription.effectiveLimits.invoicesPerMonth)
+    : null;
+  // ─────────────────────────────────────────────────────────────────────────
+
   // ========= RENDER =========
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -216,6 +239,21 @@ export default function DashboardPage() {
 
       <main className="flex-grow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+          {/* ── PHASE 8: Plan limit warning at top of dashboard ───────────── */}
+          {subscription && (
+            <PlanLimitWarning
+              invoicesUsed={invoicesUsed}
+              invoicesLimit={invoicesLimit}
+              customersCount={subscription.usage.customersCount}
+              customersLimit={subscription.effectiveLimits.customers}
+              productsCount={subscription.usage.productsCount}
+              productsLimit={subscription.effectiveLimits.products}
+              planId={subscription.planId}
+            />
+          )}
+          {/* ─────────────────────────────────────────────────────────────── */}
+
           {/* Tab Navigation */}
           <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
             <div className="flex flex-wrap gap-2 sm:gap-3">
