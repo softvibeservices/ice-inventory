@@ -3,12 +3,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/payment/create-order
 //
-//  CHANGES FROM PREVIOUS VERSION:
-//    - Added `export const dynamic = "force-dynamic"`.
-//      Next.js App Router tries to statically render all routes during
-//      `next build`. This route reads request.headers (via verifyUserRequest)
-//      which is illegal in static context and throws DYNAMIC_SERVER_USAGE.
-//      force-dynamic opts the route out of static generation entirely.
+//  SECURITY FIX IN THIS VERSION:
+//    Added rate limiting. rateLimit.ts is used elsewhere in the codebase but
+//    was not applied to this endpoint. Without it, an attacker could spam this
+//    endpoint to create hundreds of pending Razorpay orders under a valid
+//    user's account, cluttering the audit log and potentially exhausting
+//    Razorpay order quotas.
+//    Fix: 5 order creations per user per 10 minutes.
+//
+//  ALL OTHER LOGIC IS UNCHANGED:
+//    - Server-side pricing (PLAN_PRICING) — amount is NEVER taken from client
+//    - Manager role blocked
+//    - Razorpay order created with receipt + notes for traceability
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse }               from "next/server";
@@ -17,9 +23,9 @@ import { verifyUserRequest }          from "@/lib/userAuth";
 import { createOrder, RazorpayOrder } from "@/lib/razorpay";
 import PaymentRecord                  from "@/models/PaymentRecord";
 import type { PlanId, BillingPeriod } from "@/models/Subscription";
+import { rateLimit }                  from "@/lib/rateLimit";
 import mongoose                       from "mongoose";
 
-// ─── CRITICAL: Required on every API route that reads request.headers ────────
 export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,7 +53,7 @@ const PLAN_PRICING: Record<
   },
 };
 
-const PURCHASABLE_PLAN_IDS: PlanId[]       = ["launch", "scale", "business"];
+const PURCHASABLE_PLAN_IDS: PlanId[]        = ["launch", "scale", "business"];
 const VALID_BILLING_PERIODS: BillingPeriod[] = ["monthly", "sixmonths", "yearly"];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -66,9 +72,29 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
+    // ── 2. Rate limiting ──────────────────────────────────────────────────────
+    //  A real user creates at most 1–2 orders per session (one per plan choice).
+    //  5 per 10 minutes is generous but blocks automated abuse.
+    const rl = rateLimit(`payment-create-order:${auth.userId}`, {
+      limit:         5,
+      windowSeconds: 600, // 10 minutes
+    });
+
+    if (!rl.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many payment requests. Please wait ${rl.retryAfterSeconds} seconds before trying again.`,
+        },
+        {
+          status:  429,
+          headers: { "Retry-After": String(rl.retryAfterSeconds) },
+        }
+      );
+    }
+
     const userId = new mongoose.Types.ObjectId(auth.userId);
 
-    // ── 2. Parse and validate request body ───────────────────────────────────
+    // ── 3. Parse and validate request body ───────────────────────────────────
     let body: { planId?: unknown; billingPeriod?: unknown };
 
     try {
@@ -109,14 +135,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     const validatedPlanId = planId        as Exclude<PlanId, "free_trial" | "customize">;
     const validatedPeriod = billingPeriod as BillingPeriod;
 
-    // ── 3. Compute amount in paise (server-side — never trust client) ─────────
+    // ── 4. Compute amount in paise (server-side — never trust client) ─────────
     const amountInRupees = PLAN_PRICING[validatedPlanId][validatedPeriod];
     const amountInPaise  = amountInRupees * 100;
 
-    // ── 4. Connect to MongoDB ─────────────────────────────────────────────────
+    // ── 5. Connect to MongoDB ─────────────────────────────────────────────────
     await connectDB();
 
-    // ── 5. Create Razorpay order ──────────────────────────────────────────────
+    // ── 6. Create Razorpay order ──────────────────────────────────────────────
     let razorpayOrder: RazorpayOrder;
 
     try {
@@ -142,7 +168,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // ── 6. Create pending PaymentRecord ──────────────────────────────────────
+    // ── 7. Create pending PaymentRecord ──────────────────────────────────────
     const paymentRecord = await PaymentRecord.create({
       userId,
       type:            "subscription",
@@ -154,7 +180,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       razorpayOrderId: razorpayOrder.id,
     });
 
-    // ── 7. Return Razorpay order details to frontend ──────────────────────────
+    // ── 8. Return Razorpay order details to frontend ──────────────────────────
     return NextResponse.json(
       {
         razorpayOrderId: razorpayOrder.id,

@@ -3,16 +3,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/payment/webhook
 //
-//  KEY FIX — "Extend from currentPeriodEnd, not from now":
-//    The same fix applied to payment/verify/route.ts is applied here.
-//    activateSubscriptionPayment() now checks whether the user has a
-//    future-dated active plan and, if so, extends from that date rather than
-//    resetting to today. This ensures the webhook fallback path (when the
-//    client-side verify call is missed) also preserves remaining days.
+//  SECURITY FIXES IN THIS VERSION:
 //
-//  ALL OTHER LOGIC IS UNCHANGED.
-//  This is a Razorpay server-to-server webhook — no JWT auth, HMAC only.
-//  Always return HTTP 200 to prevent Razorpay from retrying endlessly.
+//  FIX 1 — TOCTOU Race Condition in activateSubscriptionPayment() (CRITICAL)
+//    Same atomic findOneAndUpdate fix applied here. The webhook fires
+//    milliseconds after the client-side verify call completes. Without the
+//    atomic claim, both paths could activate (and double-extend) the
+//    subscription simultaneously.
+//
+//    Fix: activateSubscriptionPayment() now uses an atomic findOneAndUpdate
+//    to claim the PaymentRecord. If it gets null back, the client-side verify
+//    already processed it — the function returns immediately without touching
+//    the Subscription document.
+//
+//  EXTENSION FIX (carried from previous update):
+//    New plan period starts from the user's existing currentPeriodEnd if it
+//    is still in the future, preserving any remaining days.
+//
+//  ALL OTHER WEBHOOK LOGIC IS UNCHANGED.
+//  No JWT auth — HMAC only. Always return HTTP 200 to prevent Razorpay retries.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse }                         from "next/server";
@@ -27,23 +36,10 @@ import { computeAddOnExpiry, getAnchorDayFromDate } from "@/lib/addonAlignment";
 import type { AddOnType }                       from "@/models/AddOn";
 import { ONE_TIME_ADDON_TYPES }                 from "@/models/AddOn";
 
-// ─── CRITICAL: Required for any route that reads request.headers ─────────────
 export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  computePeriodEnd()
-//
-//  Calculates the new currentPeriodEnd by adding the billing period duration
-//  to a given start date.
-//
-//  @param billingPeriod  — "monthly" | "sixmonths" | "yearly"
-//  @param startFrom      — The date to count forward from. Pass the user's
-//                          existing currentPeriodEnd to preserve remaining days,
-//                          or new Date() for a fresh activation.
 // ─────────────────────────────────────────────────────────────────────────────
 function computePeriodEnd(billingPeriod: BillingPeriod, startFrom: Date): Date {
   switch (billingPeriod) {
@@ -65,29 +61,59 @@ function computeNextMonthReset(): Date {
 // ─────────────────────────────────────────────────────────────────────────────
 //  activateSubscriptionPayment()
 //
-//  FIX: Checks whether the user's current plan still has time remaining.
-//  If yes → extends from currentPeriodEnd (preserving remaining days).
-//  If no  → activates fresh from now (resets invoice counter).
+//  SECURITY FIX: Uses atomic findOneAndUpdate to claim the PaymentRecord
+//  before touching the Subscription document. This is the same race-condition
+//  fix as in verify/route.ts — whichever path arrives first wins, the other
+//  path sees null and exits without a double-write.
 // ─────────────────────────────────────────────────────────────────────────────
 async function activateSubscriptionPayment(
-  paymentRecord:     InstanceType<typeof PaymentRecord>,
+  razorpayOrderId:   string,
   razorpayPaymentId: string
 ): Promise<void> {
-  const subscription = await Subscription.findOne({ userId: paymentRecord.userId });
 
-  if (!subscription) {
-    console.error(
-      `[webhook] Subscription not found for userId=${paymentRecord.userId}. ` +
-      `Cannot activate subscription payment recordId=${paymentRecord._id}`
+  // ── Atomically claim the PaymentRecord ────────────────────────────────────
+  //
+  //  Filter condition: { razorpayOrderId, status: "pending" }
+  //  If the verify route already set status → "captured", this returns null
+  //  and we stop. No subscription modification happens.
+  //
+  const claimedRecord = await PaymentRecord.findOneAndUpdate(
+    { razorpayOrderId, status: "pending" },
+    {
+      $set: {
+        status:            "captured",
+        razorpayPaymentId,
+      },
+    },
+    { new: false } // return OLD doc to read planId, billingPeriod, userId
+  );
+
+  if (!claimedRecord) {
+    // Either already captured by the verify route, or unknown order.
+    // Log and exit — no action required.
+    console.log(
+      `[webhook] activateSubscriptionPayment: orderId=${razorpayOrderId} ` +
+      "already captured or not found — skipping"
     );
     return;
   }
 
-  // ── FIX: Determine whether we are extending an active plan or starting fresh ──
+  // ── Find the user's Subscription ──────────────────────────────────────────
+  const subscription = await Subscription.findOne({ userId: claimedRecord.userId });
+
+  if (!subscription) {
+    console.error(
+      `[webhook] Subscription not found for userId=${claimedRecord.userId}. ` +
+      `PaymentRecord ${claimedRecord._id} is already marked captured. ` +
+      "SuperAdmin must fix the Subscription document manually."
+    );
+    return;
+  }
+
+  // ── Determine the start date for the new period ───────────────────────────
   //
-  //  If the current plan is active/grace AND currentPeriodEnd is still in the
-  //  future, we start the new period from that existing end date. This
-  //  preserves any remaining days the user has already paid for.
+  //  SAFE: The atomic claim above ensures this code runs for exactly one
+  //  caller — double-extension is impossible.
   //
   const now = new Date();
   const hasActivePeriod =
@@ -96,24 +122,23 @@ async function activateSubscriptionPayment(
     subscription.currentPeriodEnd > now;
 
   const startFrom        = hasActivePeriod ? subscription.currentPeriodEnd! : now;
-  const billingPeriod    = paymentRecord.billingPeriod as BillingPeriod;
+  const billingPeriod    = claimedRecord.billingPeriod as BillingPeriod;
   const currentPeriodEnd = computePeriodEnd(billingPeriod, startFrom);
 
   console.log(
-    `[webhook] userId=${paymentRecord.userId} ` +
+    `[webhook] userId=${claimedRecord.userId} ` +
     `hasActivePeriod=${hasActivePeriod} ` +
     `startFrom=${startFrom.toISOString()} ` +
     `newPeriodEnd=${currentPeriodEnd.toISOString()}`
   );
 
-  subscription.planId           = paymentRecord.planId!;
+  // ── Activate / extend subscription ────────────────────────────────────────
+  subscription.planId           = claimedRecord.planId!;
   subscription.billingPeriod    = billingPeriod;
   subscription.status           = "active";
   subscription.currentPeriodEnd = currentPeriodEnd;
   subscription.trialEndsAt      = null;
 
-  // Only reset the invoice counter on a FRESH activation. When extending an
-  // active plan, the user is still mid-month — don't wipe their counter.
   if (!hasActivePeriod) {
     subscription.invoicesUsedThisMonth = 0;
     subscription.invoiceCountResetAt   = computeNextMonthReset();
@@ -121,22 +146,21 @@ async function activateSubscriptionPayment(
 
   await subscription.save();
 
-  paymentRecord.status                  = "captured";
-  paymentRecord.razorpayPaymentId       = razorpayPaymentId;
-  paymentRecord.activatedSubscriptionId = subscription._id as mongoose.Types.ObjectId;
-
-  await paymentRecord.save();
+  // ── Write activatedSubscriptionId back onto the PaymentRecord ─────────────
+  await PaymentRecord.findByIdAndUpdate(claimedRecord._id, {
+    $set: { activatedSubscriptionId: subscription._id },
+  });
 
   console.log(
-    `[webhook] Subscription activated: userId=${paymentRecord.userId} ` +
-    `planId=${paymentRecord.planId} period=${billingPeriod} ` +
+    `[webhook] Subscription activated: userId=${claimedRecord.userId} ` +
+    `planId=${claimedRecord.planId} billingPeriod=${billingPeriod} ` +
     `periodEnd=${currentPeriodEnd.toISOString()}`
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  activateAddonPayment()
-//  (UNCHANGED — add-ons are not affected by the renewal extension fix)
+//  (UNCHANGED — add-ons are not affected by the race condition fix)
 // ─────────────────────────────────────────────────────────────────────────────
 async function activateAddonPayment(
   paymentRecord:     InstanceType<typeof PaymentRecord>,
@@ -185,11 +209,7 @@ async function activateAddonPayment(
 //  POST handler
 // ─────────────────────────────────────────────────────────────────────────────
 export async function POST(req: Request): Promise<NextResponse> {
-  // ── 1. Read raw body as string (MUST be req.text() — not req.json()) ───────
-  //
-  //  Razorpay's signature is computed over the exact raw byte string.
-  //  Parsing to JSON and re-serialising changes whitespace and breaks HMAC.
-  //
+  // ── 1. Read raw body (MUST be req.text() — not req.json()) ───────────────
   let rawBody: string;
 
   try {
@@ -199,7 +219,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ received: true }, { status: 200 });
   }
 
-  // ── 2. Extract and validate signature header ──────────────────────────────
+  // ── 2. Extract signature header ───────────────────────────────────────────
   const razorpaySignature = req.headers.get("x-razorpay-signature");
 
   if (!razorpaySignature) {
@@ -210,12 +230,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  // ── 3. Verify webhook signature (uses RAZORPAY_WEBHOOK_SECRET) ─────────────
+  // ── 3. Verify webhook HMAC signature ─────────────────────────────────────
   const isSignatureValid = verifyRazorpayWebhookSignature(rawBody, razorpaySignature);
 
   if (!isSignatureValid) {
     console.warn("[webhook] Invalid webhook signature — request rejected");
-    // Return 200 to prevent Razorpay infinite retry on misconfigured secret
     return NextResponse.json(
       { received: false, error: "Invalid signature" },
       { status: 200 }
@@ -267,6 +286,9 @@ export async function POST(req: Request): Promise<NextResponse> {
         return NextResponse.json({ received: true }, { status: 200 });
       }
 
+      // Look up the record to decide which activate path to take.
+      // NOTE: We do NOT check status here — the activate functions handle
+      // idempotency atomically themselves.
       const paymentRecord = await PaymentRecord.findOne({ razorpayOrderId });
 
       if (!paymentRecord) {
@@ -274,16 +296,17 @@ export async function POST(req: Request): Promise<NextResponse> {
         return NextResponse.json({ received: true }, { status: 200 });
       }
 
-      // Idempotency: frontend verify already processed this
-      if (paymentRecord.status === "captured") {
-        console.log(`[webhook] payment.captured: Already captured for orderId=${razorpayOrderId}`);
-        return NextResponse.json({ received: true }, { status: 200 });
-      }
-
       if (paymentRecord.type === "subscription") {
-        await activateSubscriptionPayment(paymentRecord, razorpayPaymentId);
+        // Pass orderId + paymentId — the function handles its own atomic claim
+        await activateSubscriptionPayment(razorpayOrderId, razorpayPaymentId);
       } else if (paymentRecord.type === "addon") {
-        await activateAddonPayment(paymentRecord, razorpayPaymentId);
+        // Add-on path: check idempotency the old way (safe — webhook is the
+        // only caller for add-ons; there is no competing /addon/verify race)
+        if (paymentRecord.status === "captured") {
+          console.log(`[webhook] Add-on already captured for orderId=${razorpayOrderId}`);
+        } else {
+          await activateAddonPayment(paymentRecord, razorpayPaymentId);
+        }
       } else {
         console.warn(
           `[webhook] Unknown payment type "${paymentRecord.type}" for orderId=${razorpayOrderId}`
@@ -291,7 +314,6 @@ export async function POST(req: Request): Promise<NextResponse> {
       }
     } catch (err) {
       console.error("[webhook] Error handling payment.captured:", err);
-      // Return 200 — don't let Razorpay retry for processing errors
     }
 
     return NextResponse.json({ received: true }, { status: 200 });
@@ -304,7 +326,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       const razorpayOrderId = paymentEntity?.order_id;
 
       if (!razorpayOrderId) {
-        console.error("[webhook] payment.failed: missing order_id in entity");
+        console.error("[webhook] payment.failed: missing order_id");
         return NextResponse.json({ received: true }, { status: 200 });
       }
 
