@@ -3,12 +3,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/payment/webhook
 //
-//  CHANGES FROM PREVIOUS VERSION:
-//    - Added `export const dynamic = "force-dynamic"`.
-//      This route reads req.headers.get("x-razorpay-signature") AND
-//      req.text() — both are dynamic operations. Next.js throws
-//      DYNAMIC_SERVER_USAGE for both during the static build phase.
-//      force-dynamic prevents this entirely.
+//  KEY FIX — "Extend from currentPeriodEnd, not from now":
+//    The same fix applied to payment/verify/route.ts is applied here.
+//    activateSubscriptionPayment() now checks whether the user has a
+//    future-dated active plan and, if so, extends from that date rather than
+//    resetting to today. This ensures the webhook fallback path (when the
+//    client-side verify call is missed) also preserves remaining days.
 //
 //  ALL OTHER LOGIC IS UNCHANGED.
 //  This is a Razorpay server-to-server webhook — no JWT auth, HMAC only.
@@ -28,24 +28,29 @@ import type { AddOnType }                       from "@/models/AddOn";
 import { ONE_TIME_ADDON_TYPES }                 from "@/models/AddOn";
 
 // ─── CRITICAL: Required for any route that reads request.headers ─────────────
-//
-//  Extra important for the webhook route because it ALSO reads request.url
-//  and request body at runtime. Without force-dynamic, both operations throw
-//  DYNAMIC_SERVER_USAGE during `next build`.
-//
 export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function computeCurrentPeriodEnd(billingPeriod: BillingPeriod): Date {
-  const now = new Date();
+// ─────────────────────────────────────────────────────────────────────────────
+//  computePeriodEnd()
+//
+//  Calculates the new currentPeriodEnd by adding the billing period duration
+//  to a given start date.
+//
+//  @param billingPeriod  — "monthly" | "sixmonths" | "yearly"
+//  @param startFrom      — The date to count forward from. Pass the user's
+//                          existing currentPeriodEnd to preserve remaining days,
+//                          or new Date() for a fresh activation.
+// ─────────────────────────────────────────────────────────────────────────────
+function computePeriodEnd(billingPeriod: BillingPeriod, startFrom: Date): Date {
   switch (billingPeriod) {
-    case "monthly":   return new Date(now.getTime() + 30  * 24 * 60 * 60 * 1000);
-    case "sixmonths": return new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000);
-    case "yearly":    return new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-    default:          return new Date(now.getTime() + 30  * 24 * 60 * 60 * 1000);
+    case "monthly":   return new Date(startFrom.getTime() + 30  * 24 * 60 * 60 * 1000);
+    case "sixmonths": return new Date(startFrom.getTime() + 180 * 24 * 60 * 60 * 1000);
+    case "yearly":    return new Date(startFrom.getTime() + 365 * 24 * 60 * 60 * 1000);
+    default:          return new Date(startFrom.getTime() + 30  * 24 * 60 * 60 * 1000);
   }
 }
 
@@ -59,6 +64,10 @@ function computeNextMonthReset(): Date {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  activateSubscriptionPayment()
+//
+//  FIX: Checks whether the user's current plan still has time remaining.
+//  If yes → extends from currentPeriodEnd (preserving remaining days).
+//  If no  → activates fresh from now (resets invoice counter).
 // ─────────────────────────────────────────────────────────────────────────────
 async function activateSubscriptionPayment(
   paymentRecord:     InstanceType<typeof PaymentRecord>,
@@ -74,16 +83,41 @@ async function activateSubscriptionPayment(
     return;
   }
 
-  const billingPeriod    = paymentRecord.billingPeriod as BillingPeriod;
-  const currentPeriodEnd = computeCurrentPeriodEnd(billingPeriod);
+  // ── FIX: Determine whether we are extending an active plan or starting fresh ──
+  //
+  //  If the current plan is active/grace AND currentPeriodEnd is still in the
+  //  future, we start the new period from that existing end date. This
+  //  preserves any remaining days the user has already paid for.
+  //
+  const now = new Date();
+  const hasActivePeriod =
+    (subscription.status === "active" || subscription.status === "grace") &&
+    subscription.currentPeriodEnd !== null &&
+    subscription.currentPeriodEnd > now;
 
-  subscription.planId                = paymentRecord.planId!;
-  subscription.billingPeriod         = billingPeriod;
-  subscription.status                = "active";
-  subscription.currentPeriodEnd      = currentPeriodEnd;
-  subscription.trialEndsAt           = null;
-  subscription.invoicesUsedThisMonth = 0;
-  subscription.invoiceCountResetAt   = computeNextMonthReset();
+  const startFrom        = hasActivePeriod ? subscription.currentPeriodEnd! : now;
+  const billingPeriod    = paymentRecord.billingPeriod as BillingPeriod;
+  const currentPeriodEnd = computePeriodEnd(billingPeriod, startFrom);
+
+  console.log(
+    `[webhook] userId=${paymentRecord.userId} ` +
+    `hasActivePeriod=${hasActivePeriod} ` +
+    `startFrom=${startFrom.toISOString()} ` +
+    `newPeriodEnd=${currentPeriodEnd.toISOString()}`
+  );
+
+  subscription.planId           = paymentRecord.planId!;
+  subscription.billingPeriod    = billingPeriod;
+  subscription.status           = "active";
+  subscription.currentPeriodEnd = currentPeriodEnd;
+  subscription.trialEndsAt      = null;
+
+  // Only reset the invoice counter on a FRESH activation. When extending an
+  // active plan, the user is still mid-month — don't wipe their counter.
+  if (!hasActivePeriod) {
+    subscription.invoicesUsedThisMonth = 0;
+    subscription.invoiceCountResetAt   = computeNextMonthReset();
+  }
 
   await subscription.save();
 
@@ -95,12 +129,14 @@ async function activateSubscriptionPayment(
 
   console.log(
     `[webhook] Subscription activated: userId=${paymentRecord.userId} ` +
-    `planId=${paymentRecord.planId} period=${billingPeriod}`
+    `planId=${paymentRecord.planId} period=${billingPeriod} ` +
+    `periodEnd=${currentPeriodEnd.toISOString()}`
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  activateAddonPayment()
+//  (UNCHANGED — add-ons are not affected by the renewal extension fix)
 // ─────────────────────────────────────────────────────────────────────────────
 async function activateAddonPayment(
   paymentRecord:     InstanceType<typeof PaymentRecord>,

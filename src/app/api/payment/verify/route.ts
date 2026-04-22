@@ -3,11 +3,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/payment/verify
 //
-//  CHANGES FROM PREVIOUS VERSION:
-//    - Added `export const dynamic = "force-dynamic"`.
-//      Same reason as all other payment routes — request.headers is read
-//      inside verifyUserRequest() which Next.js cannot handle during the
-//      static build phase.
+//  KEY FIX — "Extend from currentPeriodEnd, not from now":
+//    Previously, computeCurrentPeriodEnd() always calculated the new period
+//    from new Date() (right now). This caused users who paid early (while their
+//    current plan still had remaining days) to lose those remaining days.
+//
+//    Now: if the user already has an active/grace subscription whose
+//    currentPeriodEnd is in the future, the new plan's period starts from
+//    that existing end date instead of today.
+//
+//    Additionally, when extending an active plan (not a fresh activation),
+//    we no longer reset invoicesUsedThisMonth or invoiceCountResetAt —
+//    the user is still mid-month and the counter keeps running normally.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse }            from "next/server";
@@ -23,15 +30,22 @@ import type { BillingPeriod }      from "@/models/Subscription";
 export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  computeCurrentPeriodEnd()
+//  computePeriodEnd()
+//
+//  Calculates the new currentPeriodEnd by adding the billing period duration
+//  to a given start date.
+//
+//  @param billingPeriod  — "monthly" | "sixmonths" | "yearly"
+//  @param startFrom      — The date to count forward from. Pass the user's
+//                          existing currentPeriodEnd to preserve remaining days,
+//                          or new Date() for a fresh activation.
 // ─────────────────────────────────────────────────────────────────────────────
-function computeCurrentPeriodEnd(billingPeriod: BillingPeriod): Date {
-  const now = new Date();
+function computePeriodEnd(billingPeriod: BillingPeriod, startFrom: Date): Date {
   switch (billingPeriod) {
-    case "monthly":   return new Date(now.getTime() + 30  * 24 * 60 * 60 * 1000);
-    case "sixmonths": return new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000);
-    case "yearly":    return new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-    default:          return new Date(now.getTime() + 30  * 24 * 60 * 60 * 1000);
+    case "monthly":   return new Date(startFrom.getTime() + 30  * 24 * 60 * 60 * 1000);
+    case "sixmonths": return new Date(startFrom.getTime() + 180 * 24 * 60 * 60 * 1000);
+    case "yearly":    return new Date(startFrom.getTime() + 365 * 24 * 60 * 60 * 1000);
+    default:          return new Date(startFrom.getTime() + 30  * 24 * 60 * 60 * 1000);
   }
 }
 
@@ -188,18 +202,54 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // ── 8. Compute period end ─────────────────────────────────────────────────
-    const billingPeriod    = paymentRecord.billingPeriod as BillingPeriod;
-    const currentPeriodEnd = computeCurrentPeriodEnd(billingPeriod);
+    // ── 8. Determine the start date for the new period ────────────────────────
+    //
+    //  FIX: If the user's current plan is still active (currentPeriodEnd is in
+    //  the future), the new plan should start from that existing end date so
+    //  the user does NOT lose their remaining days.
+    //
+    //  Scenarios:
+    //    A) User has 7 days left on their plan and pays early:
+    //       → startFrom = subscription.currentPeriodEnd  (7 days from now)
+    //       → New plan ends 7 days + billing period from now
+    //       → invoicesUsedThisMonth is NOT reset (still mid-month)
+    //
+    //    B) User's plan is expired / on grace / first-time activation:
+    //       → startFrom = new Date()  (right now)
+    //       → New plan ends billing period from now
+    //       → invoicesUsedThisMonth IS reset to 0 (fresh start)
+    //
+    const now = new Date();
+    const hasActivePeriod =
+      (subscription.status === "active" || subscription.status === "grace") &&
+      subscription.currentPeriodEnd !== null &&
+      subscription.currentPeriodEnd > now;
 
-    // ── 9. Activate subscription ──────────────────────────────────────────────
-    subscription.planId                = paymentRecord.planId!;
-    subscription.billingPeriod         = billingPeriod;
-    subscription.status                = "active";
-    subscription.currentPeriodEnd      = currentPeriodEnd;
-    subscription.trialEndsAt           = null;
-    subscription.invoicesUsedThisMonth = 0;
-    subscription.invoiceCountResetAt   = computeNextMonthReset();
+    const startFrom        = hasActivePeriod ? subscription.currentPeriodEnd! : now;
+    const billingPeriod    = paymentRecord.billingPeriod as BillingPeriod;
+    const currentPeriodEnd = computePeriodEnd(billingPeriod, startFrom);
+
+    console.log(
+      `[payment/verify] userId=${auth.userId} ` +
+      `hasActivePeriod=${hasActivePeriod} ` +
+      `startFrom=${startFrom.toISOString()} ` +
+      `newPeriodEnd=${currentPeriodEnd.toISOString()}`
+    );
+
+    // ── 9. Activate / extend subscription ────────────────────────────────────
+    subscription.planId           = paymentRecord.planId!;
+    subscription.billingPeriod    = billingPeriod;
+    subscription.status           = "active";
+    subscription.currentPeriodEnd = currentPeriodEnd;
+    subscription.trialEndsAt      = null;
+
+    // Only reset the invoice counter when this is a FRESH activation (expired
+    // or first-time). When extending an active plan, the monthly counter
+    // continues normally — the user is still within their current billing month.
+    if (!hasActivePeriod) {
+      subscription.invoicesUsedThisMonth = 0;
+      subscription.invoiceCountResetAt   = computeNextMonthReset();
+    }
 
     await subscription.save();
 
