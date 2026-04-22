@@ -1,5 +1,4 @@
 // ice-inventory\src\app\admin\users\page.tsx
-
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -13,7 +12,6 @@ import {
   RefreshCw,
   AlertTriangle,
   Users,
-  Download,
 } from "lucide-react";
 
 interface User {
@@ -68,6 +66,8 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: "#6b7280",
 };
 
+const TABLE_HEADERS = ["User", "Shop", "Plan", "Status", "Invoice Usage", "Registered", "Action"];
+
 export default function AdminUsersPage() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
@@ -116,7 +116,7 @@ export default function AdminUsersPage() {
       const data = await res.json();
       setUsers(data.users || []);
       setTotal(data.total || 0);
-    } catch (err) {
+    } catch {
       setError("Failed to load users");
     } finally {
       setLoading(false);
@@ -142,113 +142,103 @@ export default function AdminUsersPage() {
 
   const hasFilters = search || planFilter || statusFilter || dateFrom || dateTo;
 
+  const filterSelectCls = "bg-[#0d1117] border border-[#1e2530] rounded-lg px-3 py-2 text-[12.5px] text-gray-400 outline-none cursor-pointer focus:border-blue-500 focus:text-slate-200 transition-colors";
+
   return (
-    <div className="page">
+    <div className="flex flex-col gap-5">
       {/* Header */}
-      <div className="page-header">
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="page-title">Users</h1>
-          <p className="page-desc">
-            {total > 0 ? `${total} registered users` : "All registered admin users"}
+          <h1 className="text-[22px] font-bold text-slate-100 tracking-tight">Users</h1>
+          <p className="text-[13px] text-gray-500 mt-1">
+            {total > 0 ? `${total} registered users` : "All registered users"}
           </p>
         </div>
-        <button className="refresh-btn" onClick={fetchUsers} disabled={loading}>
-          <RefreshCw size={13} className={loading ? "spin" : ""} />
+        <button
+          onClick={fetchUsers}
+          disabled={loading}
+          className="flex items-center gap-1.5 bg-[#0d1117] border border-[#1e2530] text-gray-400 px-3.5 py-2 rounded-lg text-[13px] cursor-pointer hover:border-[#2d3748] hover:text-slate-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           Refresh
         </button>
       </div>
 
       {/* Filters */}
-      <div className="filters-bar">
-        <div className="search-wrap">
-          <Search size={14} className="search-icon" />
+      <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" />
           <input
             type="text"
             placeholder="Search by name or email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="search-input"
+            className="w-full bg-[#0d1117] border border-[#1e2530] rounded-lg py-2 pl-8 pr-3 text-[13px] text-slate-200 outline-none focus:border-blue-500 transition-colors placeholder:text-gray-600"
           />
         </div>
 
-        <div className="filter-group">
-          <Filter size={13} className="filter-icon" />
-          <select
-            value={planFilter}
-            onChange={(e) => { setPlanFilter(e.target.value); setPage(1); }}
-            className="filter-select"
-          >
-            {PLAN_OPTIONS.map((p) => (
-              <option key={p} value={p}>
-                {PLAN_LABELS[p] || p}
-              </option>
-            ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Filter size={13} className="text-gray-600" />
+          <select value={planFilter} onChange={(e) => { setPlanFilter(e.target.value); setPage(1); }} className={filterSelectCls}>
+            {PLAN_OPTIONS.map((p) => <option key={p} value={p}>{PLAN_LABELS[p] || p}</option>)}
           </select>
-
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-            className="filter-select"
-          >
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABELS[s] || s}
-              </option>
-            ))}
+          <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} className={filterSelectCls}>
+            {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
           </select>
-
           <input
             type="date"
             value={dateFrom}
             onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-            className="filter-date"
             title="Registered from"
+            className={filterSelectCls}
+            style={{ colorScheme: "dark" }}
           />
           <input
             type="date"
             value={dateTo}
             onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-            className="filter-date"
             title="Registered to"
+            className={filterSelectCls}
+            style={{ colorScheme: "dark" }}
           />
-
           {hasFilters && (
-            <button className="clear-btn" onClick={resetFilters}>
+            <button
+              onClick={resetFilters}
+              className="bg-transparent border border-gray-700 rounded-[7px] px-3 py-[7px] text-xs text-gray-500 cursor-pointer hover:border-red-500 hover:text-red-400 transition-all"
+            >
               Clear
             </button>
           )}
         </div>
       </div>
 
-      {/* Error */}
       {error && (
-        <div className="error-banner">
+        <div className="flex items-center gap-2 bg-red-500/[0.08] border border-red-500/20 text-red-300 px-3.5 py-2.5 rounded-lg text-[13px]">
           <AlertTriangle size={14} />
           {error}
         </div>
       )}
 
       {/* Table */}
-      <div className="table-card">
-        <div className="table-wrap">
-          <table className="data-table">
+      <div className="bg-[#0d1117] border border-[#1e2530] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th>User</th>
-                <th>Shop</th>
-                <th>Plan</th>
-                <th>Status</th>
-                <th>Invoice Usage</th>
-                <th>Registered</th>
-                <th>Action</th>
+                {TABLE_HEADERS.map((h) => (
+                  <th key={h} className="text-[11px] font-semibold text-gray-600 uppercase tracking-[0.05em] px-4 py-3 text-left border-b border-[#1a2232] bg-[#0a0f18] whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="loading-row">
-                    <div className="loading-inner">
-                      <div className="spinner-sm" />
+                  <td colSpan={7} className="py-10 text-center">
+                    <div className="flex items-center justify-center gap-2.5 text-gray-600 text-[13px]">
+                      <div className="w-4 h-4 border-2 border-[#1e2530] border-t-blue-500 rounded-full animate-spin" />
                       Loading...
                     </div>
                   </td>
@@ -256,12 +246,12 @@ export default function AdminUsersPage() {
               )}
               {!loading && users.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty-row">
-                    <div className="empty-inner">
+                  <td colSpan={7} className="py-12 text-center">
+                    <div className="flex flex-col items-center gap-2 text-gray-600 text-[13px]">
                       <Users size={24} />
                       <p>No users found</p>
                       {hasFilters && (
-                        <button className="clear-btn" onClick={resetFilters}>
+                        <button onClick={resetFilters} className="text-xs text-red-400 border border-red-500/30 px-3 py-1 rounded-md hover:bg-red-500/10 transition-all mt-1">
                           Clear filters
                         </button>
                       )}
@@ -269,124 +259,114 @@ export default function AdminUsersPage() {
                   </td>
                 </tr>
               )}
-              {!loading &&
-                users.map((user) => {
-                  const plan = user.subscription?.planId || "free_trial";
-                  const status = user.subscription?.status || "active";
-                  const used = user.subscription?.invoicesUsedThisMonth || 0;
-                  const limit = user.subscription?.effectiveLimit;
+              {!loading && users.map((user) => {
+                const plan = user.subscription?.planId || "free_trial";
+                const status = user.subscription?.status || "active";
+                const used = user.subscription?.invoicesUsedThisMonth || 0;
+                const lim = user.subscription?.effectiveLimit;
+                const usageRatio = lim ? used / lim : 0;
 
-                  return (
-                    <tr key={user._id}>
-                      <td>
-                        <div className="user-cell">
-                          <p className="user-name">{user.name || "—"}</p>
-                          <p className="user-email">{user.email}</p>
-                        </div>
-                      </td>
-                      <td className="shop-cell">{user.shopName || "—"}</td>
-                      <td>
-                        <span
-                          className="badge"
-                          style={{
-                            background: `${PLAN_COLORS[plan] || "#6b7280"}18`,
-                            color: PLAN_COLORS[plan] || "#6b7280",
-                          }}
-                        >
-                          {PLAN_LABELS[plan] || plan}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className="badge"
-                          style={{
-                            background: `${STATUS_COLORS[status] || "#6b7280"}18`,
-                            color: STATUS_COLORS[status] || "#6b7280",
-                          }}
-                        >
-                          {STATUS_LABELS[status] || status}
-                        </span>
-                      </td>
-                      <td className="usage-cell">
-                        {limit !== null ? (
-                          <div className="usage-wrap">
-                            <div className="usage-bar-bg">
-                              <div
-                                className="usage-bar-fill"
-                                style={{
-                                  width: `${Math.min((used / (limit || 1)) * 100, 100)}%`,
-                                  background:
-                                    used / (limit || 1) >= 0.9
-                                      ? "#ef4444"
-                                      : used / (limit || 1) >= 0.7
-                                      ? "#f59e0b"
-                                      : "#3b82f6",
-                                }}
-                              />
-                            </div>
-                            <span className="usage-text">
-                              {used} / {limit}
-                            </span>
+                return (
+                  <tr key={user._id} className="border-b border-[#111827] last:border-b-0 hover:bg-[#0f1623] transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        <p className="text-[13.5px] font-medium text-slate-300">{user.name || "—"}</p>
+                        <p className="text-[11.5px] text-gray-600">{user.email}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-[12.5px] text-gray-400 max-w-[150px] overflow-hidden text-ellipsis whitespace-nowrap">
+                      {user.shopName || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="text-[11px] font-semibold px-2 py-0.5 rounded-[5px] whitespace-nowrap"
+                        style={{
+                          background: `${PLAN_COLORS[plan] || "#6b7280"}18`,
+                          color: PLAN_COLORS[plan] || "#6b7280",
+                        }}
+                      >
+                        {PLAN_LABELS[plan] || plan}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="text-[11px] font-semibold px-2 py-0.5 rounded-[5px] whitespace-nowrap"
+                        style={{
+                          background: `${STATUS_COLORS[status] || "#6b7280"}18`,
+                          color: STATUS_COLORS[status] || "#6b7280",
+                        }}
+                      >
+                        {STATUS_LABELS[status] || status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {lim !== null ? (
+                        <div className="flex flex-col gap-1 min-w-[100px]">
+                          <div className="h-[3px] bg-[#1e2530] rounded-sm overflow-hidden">
+                            <div
+                              className="h-full rounded-sm transition-all"
+                              style={{
+                                width: `${Math.min(usageRatio * 100, 100)}%`,
+                                background: usageRatio >= 0.9 ? "#ef4444" : usageRatio >= 0.7 ? "#f59e0b" : "#3b82f6",
+                              }}
+                            />
                           </div>
-                        ) : (
-                          <span className="usage-text">{used} used</span>
-                        )}
-                      </td>
-                      <td className="date-cell">
-                        {new Date(user.createdAt).toLocaleDateString("en-IN", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </td>
-                      <td>
-                        <button
-                          className="view-btn"
-                          onClick={() =>
-                            router.push(`/admin/users/${user._id}`)
-                          }
-                        >
-                          <ExternalLink size={12} />
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                          <span className="text-[11.5px] text-gray-600">{used} / {lim}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[11.5px] text-gray-600">{used} used</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+                      {new Date(user.createdAt).toLocaleDateString("en-IN", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => router.push(`/admin/users/${user._id}`)}
+                        className="flex items-center gap-1.5 bg-blue-500/[0.08] border border-blue-500/20 text-blue-400 px-2.5 py-[5px] rounded-md text-xs cursor-pointer hover:bg-blue-500/[0.15] hover:border-blue-500/40 transition-all whitespace-nowrap"
+                      >
+                        <ExternalLink size={12} />
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
         {/* Pagination */}
         {total > limit && (
-          <div className="pagination">
-            <span className="page-info">
-              Showing {startItem}–{endItem} of {total} users
-            </span>
-            <div className="page-controls">
+          <div className="flex items-center justify-between px-[18px] py-3.5 border-t border-[#1a2232]">
+            <span className="text-[12.5px] text-gray-500">Showing {startItem}–{endItem} of {total} users</span>
+            <div className="flex items-center gap-1">
               <button
-                className="page-btn"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
+                className="w-[30px] h-[30px] flex items-center justify-center bg-transparent border border-[#1e2530] rounded-md text-gray-500 cursor-pointer hover:border-[#2d3748] hover:text-slate-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronLeft size={14} />
               </button>
-              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                const p = i + 1;
-                return (
-                  <button
-                    key={p}
-                    className={`page-num ${page === p ? "active" : ""}`}
-                    onClick={() => setPage(p)}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
+              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPage(p)}
+                  className={`w-[30px] h-[30px] flex items-center justify-center border rounded-md text-[12.5px] cursor-pointer transition-all ${
+                    page === p ? "bg-blue-500 border-blue-500 text-white" : "bg-transparent border-[#1e2530] text-gray-500 hover:border-[#2d3748] hover:text-slate-300"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
               <button
-                className="page-btn"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
+                className="w-[30px] h-[30px] flex items-center justify-center bg-transparent border border-[#1e2530] rounded-md text-gray-500 cursor-pointer hover:border-[#2d3748] hover:text-slate-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronRight size={14} />
               </button>
@@ -394,389 +374,6 @@ export default function AdminUsersPage() {
           </div>
         )}
       </div>
-
-      <style jsx>{`
-        .page {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .page-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-        }
-
-        .page-title {
-          font-size: 22px;
-          font-weight: 700;
-          color: #f1f5f9;
-          letter-spacing: -0.02em;
-        }
-
-        .page-desc {
-          font-size: 13px;
-          color: #6b7280;
-          margin-top: 3px;
-        }
-
-        .refresh-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          color: #9ca3af;
-          padding: 8px 14px;
-          border-radius: 8px;
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .refresh-btn:hover:not(:disabled) {
-          border-color: #2d3748;
-          color: #cbd5e1;
-        }
-
-        .refresh-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .filters-bar {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-
-        .search-wrap {
-          position: relative;
-          flex: 1;
-          min-width: 200px;
-          max-width: 320px;
-        }
-
-        .search-icon {
-          position: absolute;
-          left: 10px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #4b5563;
-          pointer-events: none;
-        }
-
-        .search-input {
-          width: 100%;
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          border-radius: 8px;
-          padding: 8px 12px 8px 32px;
-          font-size: 13px;
-          color: #e2e8f0;
-          outline: none;
-          transition: border-color 0.15s;
-        }
-
-        .search-input:focus {
-          border-color: #3b82f6;
-        }
-
-        .search-input::placeholder {
-          color: #4b5563;
-        }
-
-        .filter-group {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .filter-icon {
-          color: #4b5563;
-        }
-
-        .filter-select,
-        .filter-date {
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          border-radius: 8px;
-          padding: 8px 12px;
-          font-size: 12.5px;
-          color: #9ca3af;
-          outline: none;
-          cursor: pointer;
-          transition: border-color 0.15s;
-        }
-
-        .filter-select:focus,
-        .filter-date:focus {
-          border-color: #3b82f6;
-          color: #e2e8f0;
-        }
-
-        .filter-date {
-          color-scheme: dark;
-        }
-
-        .clear-btn {
-          background: transparent;
-          border: 1px solid #374151;
-          border-radius: 7px;
-          padding: 7px 12px;
-          font-size: 12px;
-          color: #6b7280;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .clear-btn:hover {
-          border-color: #ef4444;
-          color: #f87171;
-        }
-
-        .error-banner {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(239, 68, 68, 0.08);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          color: #fca5a5;
-          padding: 10px 14px;
-          border-radius: 8px;
-          font-size: 13px;
-        }
-
-        .table-card {
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          border-radius: 12px;
-          overflow: hidden;
-        }
-
-        .table-wrap {
-          overflow-x: auto;
-        }
-
-        .data-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-
-        .data-table th {
-          font-size: 11px;
-          font-weight: 600;
-          color: #4b5563;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          padding: 12px 16px;
-          text-align: left;
-          border-bottom: 1px solid #1a2232;
-          background: #0a0f18;
-          white-space: nowrap;
-        }
-
-        .data-table td {
-          padding: 12px 16px;
-          font-size: 13px;
-          color: #9ca3af;
-          border-bottom: 1px solid #111827;
-          vertical-align: middle;
-        }
-
-        .data-table tr:last-child td {
-          border-bottom: none;
-        }
-
-        .data-table tbody tr:hover td {
-          background: #0f1623;
-        }
-
-        .loading-row td {
-          padding: 40px !important;
-        }
-
-        .loading-inner {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          color: #4b5563;
-          font-size: 13px;
-        }
-
-        .spinner-sm {
-          width: 16px;
-          height: 16px;
-          border: 2px solid #1e2530;
-          border-top-color: #3b82f6;
-          border-radius: 50%;
-          animation: spin 0.7s linear infinite;
-        }
-
-        .empty-row td {
-          padding: 48px !important;
-        }
-
-        .empty-inner {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 8px;
-          color: #4b5563;
-          font-size: 13px;
-        }
-
-        @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-
-        :global(.spin) {
-          animation: spin 0.7s linear infinite;
-        }
-
-        .user-cell {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .user-name {
-          font-size: 13.5px;
-          font-weight: 500;
-          color: #cbd5e1;
-        }
-
-        .user-email {
-          font-size: 11.5px;
-          color: #6b7280;
-        }
-
-        .shop-cell {
-          font-size: 12.5px;
-          color: #9ca3af;
-          max-width: 150px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .badge {
-          font-size: 11px;
-          font-weight: 600;
-          padding: 3px 8px;
-          border-radius: 5px;
-          white-space: nowrap;
-        }
-
-        .usage-wrap {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          min-width: 100px;
-        }
-
-        .usage-bar-bg {
-          height: 3px;
-          background: #1e2530;
-          border-radius: 2px;
-          overflow: hidden;
-        }
-
-        .usage-bar-fill {
-          height: 100%;
-          border-radius: 2px;
-          transition: width 0.3s ease;
-        }
-
-        .usage-text {
-          font-size: 11.5px;
-          color: #6b7280;
-        }
-
-        .date-cell {
-          font-size: 12px;
-          color: #6b7280;
-          white-space: nowrap;
-        }
-
-        .view-btn {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          background: rgba(59, 130, 246, 0.08);
-          border: 1px solid rgba(59, 130, 246, 0.2);
-          color: #60a5fa;
-          padding: 5px 10px;
-          border-radius: 6px;
-          font-size: 12px;
-          cursor: pointer;
-          transition: all 0.15s;
-          white-space: nowrap;
-        }
-
-        .view-btn:hover {
-          background: rgba(59, 130, 246, 0.15);
-          border-color: rgba(59, 130, 246, 0.4);
-        }
-
-        .pagination {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 18px;
-          border-top: 1px solid #1a2232;
-        }
-
-        .page-info {
-          font-size: 12.5px;
-          color: #6b7280;
-        }
-
-        .page-controls {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .page-btn,
-        .page-num {
-          width: 30px;
-          height: 30px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: transparent;
-          border: 1px solid #1e2530;
-          border-radius: 6px;
-          font-size: 12.5px;
-          color: #6b7280;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .page-btn:hover:not(:disabled),
-        .page-num:hover {
-          border-color: #2d3748;
-          color: #cbd5e1;
-        }
-
-        .page-btn:disabled {
-          opacity: 0.3;
-          cursor: not-allowed;
-        }
-
-        .page-num.active {
-          background: #3b82f6;
-          border-color: #3b82f6;
-          color: white;
-        }
-      `}</style>
     </div>
   );
 }

@@ -1,9 +1,5 @@
 
-
-// ice-inventory\src\app\admin\addons\page.tsx
-
-
-
+// src/app/admin/addons/page.tsx
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -134,17 +130,13 @@ export default function AdminAddonsPage() {
         ...(activeOnly && { isActive: "true" }),
         ...(debouncedSearch && { userSearch: debouncedSearch }),
         ...(expiryFilter === "7days" && {
-          expiryBefore: new Date(
-            now.getTime() + 7 * 24 * 60 * 60 * 1000
-          )
+          expiryBefore: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
             .toISOString()
             .split("T")[0],
           expiryAfter: now.toISOString().split("T")[0],
         }),
         ...(expiryFilter === "30days" && {
-          expiryBefore: new Date(
-            now.getTime() + 30 * 24 * 60 * 60 * 1000
-          )
+          expiryBefore: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
             .toISOString()
             .split("T")[0],
           expiryAfter: now.toISOString().split("T")[0],
@@ -160,7 +152,7 @@ export default function AdminAddonsPage() {
       const data = await res.json();
       setAddons(data.addons || []);
       setTotal(data.total || 0);
-    } catch (err) {
+    } catch {
       setError("Failed to load add-ons");
     } finally {
       setLoading(false);
@@ -246,60 +238,95 @@ export default function AdminAddonsPage() {
       setGrantForm({ userEmail: "", addonType: ADDON_TYPES[0], quantity: "1" });
       fetchAddons();
     } catch (err: unknown) {
-      setGrantError(err instanceof Error ? err.message : "Failed to grant add-on");
+      setGrantError(
+        err instanceof Error ? err.message : "Failed to grant add-on"
+      );
     } finally {
       setGrantLoading(false);
     }
   };
 
+  const TABLE_HEADERS = [
+    "User", "Type", "Qty", "Status",
+    "Anchor Day", "Expires", "Created", "Source", "Actions",
+  ];
+
   return (
-    <div className="page">
-      {/* Header */}
-      <div className="page-header">
+    <div className="flex flex-col gap-5">
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between">
         <div>
-          <h1 className="page-title">Add-ons</h1>
-          <p className="page-desc">
+          <h1 className="text-[22px] font-bold text-slate-100 tracking-tight">
+            Add-ons
+          </h1>
+          <p className="text-[13px] text-gray-500 mt-1">
             {total > 0 ? `${total} add-on records` : "Manage add-ons across all users"}
           </p>
         </div>
-        <div className="header-actions">
-          <button className="grant-toggle-btn" onClick={() => setGrantOpen((o) => !o)}>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setGrantOpen((o) => !o)}
+            className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 px-3.5 py-2 rounded-lg text-[13px] cursor-pointer hover:bg-emerald-500/[0.18] transition-all"
+          >
             <Plus size={14} />
             Grant Add-on
           </button>
-          <button className="refresh-btn" onClick={fetchAddons} disabled={loading}>
-            <RefreshCw size={13} className={loading ? "spin" : ""} />
+
+          <button
+            onClick={fetchAddons}
+            disabled={loading}
+            className="flex items-center gap-1.5 bg-[#0d1117] border border-[#1e2530] text-gray-400 px-3.5 py-2 rounded-lg text-[13px] cursor-pointer hover:border-[#2d3748] hover:text-slate-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
         </div>
       </div>
 
-      {/* Grant form panel */}
+      {/* ── Grant Panel ── */}
       {grantOpen && (
-        <div className="grant-panel">
-          <div className="grant-header">
-            <h3>Grant Add-on Manually</h3>
-            <button className="close-btn" onClick={() => setGrantOpen(false)}>
+        <div className="bg-[#0d1117] border border-emerald-500/20 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#1a2232]">
+            <h3 className="text-sm font-semibold text-emerald-400">
+              Grant Add-on Manually
+            </h3>
+            <button
+              onClick={() => setGrantOpen(false)}
+              className="text-gray-600 hover:text-gray-400 transition-colors p-0.5 cursor-pointer"
+            >
               <X size={14} />
             </button>
           </div>
-          <div className="grant-body">
-            <div className="grant-row">
-              <label className="grant-label">User Email</label>
+
+          <div className="px-5 py-4 flex flex-col gap-3">
+            {/* Email */}
+            <div className="flex items-center gap-3.5">
+              <label className="text-[12.5px] text-gray-500 font-medium w-[120px] shrink-0">
+                User Email
+              </label>
               <input
                 type="email"
                 placeholder="admin@example.com"
                 value={grantForm.userEmail}
-                onChange={(e) => setGrantForm((f) => ({ ...f, userEmail: e.target.value }))}
-                className="grant-input"
+                onChange={(e) =>
+                  setGrantForm((f) => ({ ...f, userEmail: e.target.value }))
+                }
+                className="flex-1 max-w-xs bg-[#111827] border border-[#1e2530] rounded-[7px] px-3 py-[7px] text-[13px] text-slate-200 outline-none focus:border-emerald-500 transition-colors"
               />
             </div>
-            <div className="grant-row">
-              <label className="grant-label">Add-on Type</label>
+
+            {/* Type */}
+            <div className="flex items-center gap-3.5">
+              <label className="text-[12.5px] text-gray-500 font-medium w-[120px] shrink-0">
+                Add-on Type
+              </label>
               <select
                 value={grantForm.addonType}
-                onChange={(e) => setGrantForm((f) => ({ ...f, addonType: e.target.value }))}
-                className="grant-select"
+                onChange={(e) =>
+                  setGrantForm((f) => ({ ...f, addonType: e.target.value }))
+                }
+                className="flex-1 max-w-xs bg-[#111827] border border-[#1e2530] rounded-[7px] px-3 py-[7px] text-[13px] text-slate-200 outline-none focus:border-emerald-500 transition-colors"
               >
                 {ADDON_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -308,29 +335,41 @@ export default function AdminAddonsPage() {
                 ))}
               </select>
             </div>
-            <div className="grant-row">
-              <label className="grant-label">Quantity</label>
+
+            {/* Quantity */}
+            <div className="flex items-center gap-3.5">
+              <label className="text-[12.5px] text-gray-500 font-medium w-[120px] shrink-0">
+                Quantity
+              </label>
               <input
                 type="number"
                 min="1"
                 value={grantForm.quantity}
-                onChange={(e) => setGrantForm((f) => ({ ...f, quantity: e.target.value }))}
-                className="grant-input"
-                style={{ width: "100px" }}
+                onChange={(e) =>
+                  setGrantForm((f) => ({ ...f, quantity: e.target.value }))
+                }
+                className="w-24 bg-[#111827] border border-[#1e2530] rounded-[7px] px-3 py-[7px] text-[13px] text-slate-200 outline-none focus:border-emerald-500 transition-colors"
               />
             </div>
-            {grantError && <p className="grant-error">{grantError}</p>}
-            <div className="grant-actions">
+
+            {grantError && (
+              <p className="text-xs text-red-400">{grantError}</p>
+            )}
+
+            <div className="flex gap-2 mt-1">
               <button
-                className="confirm-btn"
                 onClick={handleGrant}
                 disabled={grantLoading || !grantForm.userEmail}
+                className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 px-3.5 py-[7px] rounded-[7px] text-[13px] cursor-pointer hover:bg-emerald-500/[0.18] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {grantLoading ? "Granting..." : "Confirm Grant"}
               </button>
               <button
-                className="cancel-btn"
-                onClick={() => { setGrantOpen(false); setGrantError(""); }}
+                onClick={() => {
+                  setGrantOpen(false);
+                  setGrantError("");
+                }}
+                className="bg-gray-500/[0.08] border border-gray-500/20 text-gray-400 px-3.5 py-[7px] rounded-[7px] text-[13px] cursor-pointer hover:bg-gray-500/[0.15] transition-all"
               >
                 Cancel
               </button>
@@ -339,25 +378,33 @@ export default function AdminAddonsPage() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="filters-bar">
-        <div className="search-wrap">
-          <Search size={13} className="search-icon" />
+      {/* ── Filters ── */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Search */}
+        <div className="relative">
+          <Search
+            size={13}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none"
+          />
           <input
             type="text"
             placeholder="Search user..."
             value={userSearch}
             onChange={(e) => setUserSearch(e.target.value)}
-            className="search-input"
+            className="bg-[#0d1117] border border-[#1e2530] rounded-lg py-[7px] pl-8 pr-3 text-[12.5px] text-slate-200 outline-none w-44 focus:border-blue-500 transition-colors placeholder:text-gray-600"
           />
         </div>
 
-        <Filter size={13} style={{ color: "#4b5563" }} />
+        <Filter size={13} className="text-gray-600" />
 
+        {/* Type filter */}
         <select
           value={typeFilter}
-          onChange={(e) => { setTypeFilter(e.target.value); setPage(1); }}
-          className="filter-select"
+          onChange={(e) => {
+            setTypeFilter(e.target.value);
+            setPage(1);
+          }}
+          className="bg-[#0d1117] border border-[#1e2530] rounded-lg px-3 py-[7px] text-[12.5px] text-gray-400 outline-none cursor-pointer focus:border-blue-500 focus:text-slate-200 transition-colors"
         >
           <option value="">All Types</option>
           {ADDON_TYPES.map((t) => (
@@ -367,20 +414,28 @@ export default function AdminAddonsPage() {
           ))}
         </select>
 
-        <label className="toggle-label">
+        {/* Active only */}
+        <label className="flex items-center gap-1.5 text-[12.5px] text-gray-500 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={activeOnly}
-            onChange={(e) => { setActiveOnly(e.target.checked); setPage(1); }}
-            className="toggle-check"
+            onChange={(e) => {
+              setActiveOnly(e.target.checked);
+              setPage(1);
+            }}
+            className="accent-blue-500 w-3.5 h-3.5 cursor-pointer"
           />
           Active only
         </label>
 
+        {/* Expiry filter */}
         <select
           value={expiryFilter}
-          onChange={(e) => { setExpiryFilter(e.target.value as "" | "7days" | "30days"); setPage(1); }}
-          className="filter-select"
+          onChange={(e) => {
+            setExpiryFilter(e.target.value as "" | "7days" | "30days");
+            setPage(1);
+          }}
+          className="bg-[#0d1117] border border-[#1e2530] rounded-lg px-3 py-[7px] text-[12.5px] text-gray-400 outline-none cursor-pointer focus:border-blue-500 focus:text-slate-200 transition-colors"
         >
           <option value="">Any expiry</option>
           <option value="7days">Expiring in 7 days</option>
@@ -389,7 +444,6 @@ export default function AdminAddonsPage() {
 
         {(typeFilter || !activeOnly || expiryFilter || userSearch) && (
           <button
-            className="clear-btn"
             onClick={() => {
               setTypeFilter("");
               setActiveOnly(true);
@@ -397,52 +451,56 @@ export default function AdminAddonsPage() {
               setUserSearch("");
               setPage(1);
             }}
+            className="bg-transparent border border-gray-700 rounded-[7px] px-3 py-[7px] text-xs text-gray-500 cursor-pointer hover:border-red-500 hover:text-red-400 transition-all"
           >
             Clear
           </button>
         )}
       </div>
 
+      {/* ── Error Banner ── */}
       {error && (
-        <div className="error-banner">
+        <div className="flex items-center gap-2 bg-red-500/[0.08] border border-red-500/20 text-red-300 px-3.5 py-2.5 rounded-lg text-[13px]">
           <AlertTriangle size={14} />
           {error}
         </div>
       )}
 
-      {/* Table */}
-      <div className="table-card">
-        <div className="table-wrap">
-          <table className="data-table">
+      {/* ── Table Card ── */}
+      <div className="bg-[#0d1117] border border-[#1e2530] rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
             <thead>
               <tr>
-                <th>User</th>
-                <th>Type</th>
-                <th>Qty</th>
-                <th>Status</th>
-                <th>Anchor Day</th>
-                <th>Expires</th>
-                <th>Created</th>
-                <th>Source</th>
-                <th>Actions</th>
+                {TABLE_HEADERS.map((h) => (
+                  <th
+                    key={h}
+                    className="text-[11px] font-semibold text-gray-600 uppercase tracking-[0.05em] px-3.5 py-[11px] text-left border-b border-[#1a2232] bg-[#0a0f18] whitespace-nowrap"
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
+
             <tbody>
+              {/* Loading */}
               {loading && (
                 <tr>
-                  <td colSpan={9} className="loading-row">
-                    <div className="loading-inner">
-                      <div className="spinner-sm" />
+                  <td colSpan={9} className="py-10 text-center">
+                    <div className="flex items-center justify-center gap-2.5 text-gray-600 text-[13px]">
+                      <div className="w-4 h-4 border-2 border-[#1e2530] border-t-blue-500 rounded-full animate-spin" />
                       Loading...
                     </div>
                   </td>
                 </tr>
               )}
 
+              {/* Empty */}
               {!loading && addons.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="empty-row">
-                    <div className="empty-inner">
+                  <td colSpan={9} className="py-10 text-center">
+                    <div className="flex flex-col items-center justify-center gap-2.5 text-gray-600 text-[13px]">
                       <Package size={22} />
                       <p>No add-ons found</p>
                     </div>
@@ -450,33 +508,52 @@ export default function AdminAddonsPage() {
                 </tr>
               )}
 
+              {/* Rows */}
               {!loading &&
                 addons.map((a) => {
                   const expiring = isExpiringSoon(a.expiresAt);
                   const expired = isExpired(a.expiresAt);
+
                   return (
-                    <tr key={a._id}>
-                      <td>
-                        <div className="user-cell">
-                          <p className="user-name">{a.userName || "—"}</p>
-                          <p className="user-email">{a.userEmail}</p>
+                    <tr
+                      key={a._id}
+                      className="border-b border-[#111827] last:border-b-0 hover:bg-[#0f1623] transition-colors"
+                    >
+                      {/* User */}
+                      <td className="px-3.5 py-[11px]">
+                        <div className="flex flex-col gap-0.5">
+                          <p className="text-[13px] font-medium text-slate-300">
+                            {a.userName || "—"}
+                          </p>
+                          <p className="text-[11.5px] text-gray-600">
+                            {a.userEmail}
+                          </p>
                         </div>
                       </td>
-                      <td>
+
+                      {/* Type badge */}
+                      <td className="px-3.5 py-[11px]">
                         <span
-                          className="addon-badge"
+                          className="text-[11px] font-semibold px-2 py-0.5 rounded-[5px] whitespace-nowrap"
                           style={{
                             background: `${ADDON_COLORS[a.addonType] || "#6b7280"}18`,
                             color: ADDON_COLORS[a.addonType] || "#9ca3af",
                           }}
                         >
-                          {ADDON_LABELS[a.addonType] || a.addonType.replace(/_/g, " ")}
+                          {ADDON_LABELS[a.addonType] ||
+                            a.addonType.replace(/_/g, " ")}
                         </span>
                       </td>
-                      <td className="qty-cell">×{a.quantity}</td>
-                      <td>
+
+                      {/* Qty */}
+                      <td className="px-3.5 py-[11px] text-[13px] font-bold text-slate-300">
+                        ×{a.quantity}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-3.5 py-[11px]">
                         <span
-                          className="status-badge"
+                          className="text-[11px] font-semibold px-[7px] py-[2px] rounded-[4px]"
                           style={{
                             background: a.isActive
                               ? "rgba(16,185,129,0.1)"
@@ -487,34 +564,48 @@ export default function AdminAddonsPage() {
                           {a.isActive ? "Active" : "Inactive"}
                         </span>
                       </td>
-                      <td className="anchor-cell">Day {a.billingAnchorDay}</td>
-                      <td>
+
+                      {/* Anchor Day */}
+                      <td className="px-3.5 py-[11px] text-xs text-gray-600">
+                        Day {a.billingAnchorDay}
+                      </td>
+
+                      {/* Expires */}
+                      <td className="px-3.5 py-[11px]">
                         {extendId === a._id ? (
-                          <div className="extend-inline">
+                          <div className="flex items-center gap-1.5">
                             <input
                               type="date"
                               value={extendDate}
                               onChange={(e) => setExtendDate(e.target.value)}
-                              className="extend-date"
+                              className="bg-[#111827] border border-blue-500 rounded-[6px] px-2 py-1 text-[11.5px] text-slate-200 outline-none w-32"
+                              style={{ colorScheme: "dark" }}
                             />
                             <button
-                              className="extend-confirm"
                               onClick={() => handleExtend(a._id)}
                               disabled={extendLoading || !extendDate}
+                              className="bg-blue-500/10 border border-blue-500/30 text-blue-400 px-2.5 py-1 rounded-[5px] text-xs cursor-pointer hover:bg-blue-500/[0.18] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               {extendLoading ? "..." : "Set"}
                             </button>
                             <button
-                              className="extend-cancel"
-                              onClick={() => { setExtendId(null); setExtendDate(""); }}
+                              onClick={() => {
+                                setExtendId(null);
+                                setExtendDate("");
+                              }}
+                              className="text-gray-600 hover:text-gray-400 cursor-pointer flex items-center p-0.5"
                             >
                               <X size={11} />
                             </button>
                           </div>
                         ) : (
                           <span
-                            className={`date-cell ${
-                              expired ? "expired-date" : expiring ? "expiring-date" : ""
+                            className={`text-xs whitespace-nowrap ${
+                              expired
+                                ? "text-red-500"
+                                : expiring
+                                ? "text-orange-400 font-semibold"
+                                : "text-gray-600"
                             }`}
                           >
                             {formatDate(a.expiresAt)}
@@ -522,10 +613,16 @@ export default function AdminAddonsPage() {
                           </span>
                         )}
                       </td>
-                      <td className="date-cell">{formatDate(a.createdAt)}</td>
-                      <td>
+
+                      {/* Created */}
+                      <td className="px-3.5 py-[11px] text-xs text-gray-600 whitespace-nowrap">
+                        {formatDate(a.createdAt)}
+                      </td>
+
+                      {/* Source */}
+                      <td className="px-3.5 py-[11px]">
                         <span
-                          className="source-badge"
+                          className="text-[11px] font-semibold px-[7px] py-[2px] rounded-[4px] whitespace-nowrap"
                           style={{
                             background: a.manuallyGranted
                               ? "rgba(236,72,153,0.1)"
@@ -536,35 +633,41 @@ export default function AdminAddonsPage() {
                           {a.manuallyGranted ? "Manual" : "Payment"}
                         </span>
                       </td>
-                      <td>
-                        <div className="action-group">
+
+                      {/* Actions */}
+                      <td className="px-3.5 py-[11px]">
+                        <div className="flex items-center gap-1.5">
                           {a.isActive && (
                             <>
                               <button
-                                className="extend-btn"
                                 onClick={() => {
                                   setExtendId(a._id);
                                   setExtendDate(
-                                    new Date(a.expiresAt).toISOString().split("T")[0]
+                                    new Date(a.expiresAt)
+                                      .toISOString()
+                                      .split("T")[0]
                                   );
                                 }}
                                 title="Extend expiry"
+                                className="w-7 h-7 flex items-center justify-center rounded-[6px] bg-blue-500/[0.08] border border-blue-500/20 text-blue-400 hover:bg-blue-500/[0.15] transition-all cursor-pointer"
                               >
                                 <CalendarClock size={13} />
                               </button>
                               <button
-                                className="deactivate-btn"
                                 onClick={() => handleDeactivate(a._id)}
                                 title="Deactivate"
+                                className="w-7 h-7 flex items-center justify-center rounded-[6px] bg-red-500/[0.08] border border-red-500/20 text-red-400 hover:bg-red-500/[0.15] transition-all cursor-pointer"
                               >
                                 <Trash2 size={13} />
                               </button>
                             </>
                           )}
                           <button
-                            className="view-btn"
-                            onClick={() => router.push(`/admin/users/${a.userId}`)}
+                            onClick={() =>
+                              router.push(`/admin/users/${a.userId}`)
+                            }
                             title="View user"
+                            className="w-7 h-7 flex items-center justify-center rounded-[6px] bg-gray-500/[0.08] border border-gray-500/20 text-gray-400 hover:bg-gray-500/[0.15] hover:text-slate-300 transition-all cursor-pointer"
                           >
                             <ExternalLink size={12} />
                           </button>
@@ -577,33 +680,43 @@ export default function AdminAddonsPage() {
           </table>
         </div>
 
-        {/* Pagination */}
+        {/* ── Pagination ── */}
         {total > limit && (
-          <div className="pagination">
-            <span className="page-info">
+          <div className="flex items-center justify-between px-[18px] py-3.5 border-t border-[#1a2232]">
+            <span className="text-[12.5px] text-gray-500">
               Showing {startItem}–{endItem} of {total}
             </span>
-            <div className="page-controls">
+
+            <div className="flex items-center gap-1">
               <button
-                className="page-btn"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
+                className="w-[30px] h-[30px] flex items-center justify-center bg-transparent border border-[#1e2530] rounded-[6px] text-[12.5px] text-gray-500 cursor-pointer hover:border-[#2d3748] hover:text-slate-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronLeft size={14} />
               </button>
-              {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
+
+              {Array.from(
+                { length: Math.min(totalPages, 7) },
+                (_, i) => i + 1
+              ).map((p) => (
                 <button
                   key={p}
-                  className={`page-num ${page === p ? "active" : ""}`}
                   onClick={() => setPage(p)}
+                  className={`w-[30px] h-[30px] flex items-center justify-center border rounded-[6px] text-[12.5px] cursor-pointer transition-all ${
+                    page === p
+                      ? "bg-blue-500 border-blue-500 text-white"
+                      : "bg-transparent border-[#1e2530] text-gray-500 hover:border-[#2d3748] hover:text-slate-300"
+                  }`}
                 >
                   {p}
                 </button>
               ))}
+
               <button
-                className="page-btn"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
+                className="w-[30px] h-[30px] flex items-center justify-center bg-transparent border border-[#1e2530] rounded-[6px] text-[12.5px] text-gray-500 cursor-pointer hover:border-[#2d3748] hover:text-slate-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronRight size={14} />
               </button>
@@ -611,616 +724,6 @@ export default function AdminAddonsPage() {
           </div>
         )}
       </div>
-
-      <style jsx>{`
-        .page {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .page-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-        }
-
-        .page-title {
-          font-size: 22px;
-          font-weight: 700;
-          color: #f1f5f9;
-          letter-spacing: -0.02em;
-        }
-
-        .page-desc {
-          font-size: 13px;
-          color: #6b7280;
-          margin-top: 3px;
-        }
-
-        .header-actions {
-          display: flex;
-          gap: 8px;
-          align-items: center;
-        }
-
-        .grant-toggle-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: rgba(16, 185, 129, 0.1);
-          border: 1px solid rgba(16, 185, 129, 0.25);
-          color: #34d399;
-          padding: 8px 14px;
-          border-radius: 8px;
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .grant-toggle-btn:hover {
-          background: rgba(16, 185, 129, 0.18);
-        }
-
-        .refresh-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          color: #9ca3af;
-          padding: 8px 14px;
-          border-radius: 8px;
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .refresh-btn:hover:not(:disabled) {
-          border-color: #2d3748;
-          color: #cbd5e1;
-        }
-
-        .refresh-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        :global(.spin) {
-          animation: spin 0.7s linear infinite;
-        }
-
-        @keyframes spin {
-          to {
-            transform: rotate(360deg);
-          }
-        }
-
-        /* Grant Panel */
-        .grant-panel {
-          background: #0d1117;
-          border: 1px solid rgba(16, 185, 129, 0.2);
-          border-radius: 12px;
-          overflow: hidden;
-        }
-
-        .grant-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 20px;
-          border-bottom: 1px solid #1a2232;
-        }
-
-        .grant-header h3 {
-          font-size: 14px;
-          font-weight: 600;
-          color: #34d399;
-        }
-
-        .close-btn {
-          background: transparent;
-          border: none;
-          color: #4b5563;
-          cursor: pointer;
-          padding: 3px;
-          display: flex;
-          align-items: center;
-          transition: color 0.15s;
-        }
-
-        .close-btn:hover {
-          color: #9ca3af;
-        }
-
-        .grant-body {
-          padding: 16px 20px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .grant-row {
-          display: flex;
-          align-items: center;
-          gap: 14px;
-        }
-
-        .grant-label {
-          font-size: 12.5px;
-          color: #6b7280;
-          font-weight: 500;
-          width: 120px;
-          flex-shrink: 0;
-        }
-
-        .grant-input,
-        .grant-select {
-          flex: 1;
-          background: #111827;
-          border: 1px solid #1e2530;
-          border-radius: 7px;
-          padding: 7px 11px;
-          font-size: 13px;
-          color: #e2e8f0;
-          outline: none;
-          transition: border-color 0.15s;
-          max-width: 320px;
-        }
-
-        .grant-input:focus,
-        .grant-select:focus {
-          border-color: #10b981;
-        }
-
-        .grant-error {
-          font-size: 12px;
-          color: #f87171;
-        }
-
-        .grant-actions {
-          display: flex;
-          gap: 8px;
-          margin-top: 4px;
-        }
-
-        .confirm-btn {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          background: rgba(16, 185, 129, 0.1);
-          border: 1px solid rgba(16, 185, 129, 0.25);
-          color: #34d399;
-          padding: 7px 14px;
-          border-radius: 7px;
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .confirm-btn:hover:not(:disabled) {
-          background: rgba(16, 185, 129, 0.18);
-        }
-
-        .confirm-btn:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-
-        .cancel-btn {
-          background: rgba(107, 114, 128, 0.08);
-          border: 1px solid rgba(107, 114, 128, 0.2);
-          color: #9ca3af;
-          padding: 7px 14px;
-          border-radius: 7px;
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .cancel-btn:hover {
-          background: rgba(107, 114, 128, 0.15);
-        }
-
-        /* Filters */
-        .filters-bar {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .search-wrap {
-          position: relative;
-        }
-
-        .search-icon {
-          position: absolute;
-          left: 9px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: #4b5563;
-          pointer-events: none;
-        }
-
-        .search-input {
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          border-radius: 8px;
-          padding: 7px 11px 7px 30px;
-          font-size: 12.5px;
-          color: #e2e8f0;
-          outline: none;
-          width: 180px;
-          transition: border-color 0.15s;
-        }
-
-        .search-input:focus {
-          border-color: #3b82f6;
-        }
-
-        .search-input::placeholder {
-          color: #4b5563;
-        }
-
-        .filter-select {
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          border-radius: 8px;
-          padding: 7px 11px;
-          font-size: 12.5px;
-          color: #9ca3af;
-          outline: none;
-          cursor: pointer;
-          transition: border-color 0.15s;
-        }
-
-        .filter-select:focus {
-          border-color: #3b82f6;
-          color: #e2e8f0;
-        }
-
-        .toggle-label {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 12.5px;
-          color: #6b7280;
-          cursor: pointer;
-          user-select: none;
-        }
-
-        .toggle-check {
-          accent-color: #3b82f6;
-          width: 14px;
-          height: 14px;
-          cursor: pointer;
-        }
-
-        .clear-btn {
-          background: transparent;
-          border: 1px solid #374151;
-          border-radius: 7px;
-          padding: 7px 12px;
-          font-size: 12px;
-          color: #6b7280;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .clear-btn:hover {
-          border-color: #ef4444;
-          color: #f87171;
-        }
-
-        .error-banner {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(239, 68, 68, 0.08);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          color: #fca5a5;
-          padding: 10px 14px;
-          border-radius: 8px;
-          font-size: 13px;
-        }
-
-        /* Table */
-        .table-card {
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          border-radius: 12px;
-          overflow: hidden;
-        }
-
-        .table-wrap {
-          overflow-x: auto;
-        }
-
-        .data-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-
-        .data-table th {
-          font-size: 11px;
-          font-weight: 600;
-          color: #4b5563;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          padding: 11px 13px;
-          text-align: left;
-          border-bottom: 1px solid #1a2232;
-          background: #0a0f18;
-          white-space: nowrap;
-        }
-
-        .data-table td {
-          padding: 11px 13px;
-          font-size: 13px;
-          color: #9ca3af;
-          border-bottom: 1px solid #111827;
-          vertical-align: middle;
-        }
-
-        .data-table tr:last-child td {
-          border-bottom: none;
-        }
-
-        .data-table tbody tr:hover td {
-          background: #0f1623;
-        }
-
-        .loading-row td,
-        .empty-row td {
-          padding: 40px !important;
-          text-align: center;
-        }
-
-        .loading-inner,
-        .empty-inner {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          color: #4b5563;
-          font-size: 13px;
-        }
-
-        .empty-inner {
-          flex-direction: column;
-        }
-
-        .spinner-sm {
-          width: 16px;
-          height: 16px;
-          border: 2px solid #1e2530;
-          border-top-color: #3b82f6;
-          border-radius: 50%;
-          animation: spin 0.7s linear infinite;
-        }
-
-        .user-cell {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .user-name {
-          font-size: 13px;
-          font-weight: 500;
-          color: #cbd5e1;
-        }
-
-        .user-email {
-          font-size: 11.5px;
-          color: #6b7280;
-        }
-
-        .addon-badge {
-          font-size: 11px;
-          font-weight: 600;
-          padding: 3px 8px;
-          border-radius: 5px;
-          white-space: nowrap;
-        }
-
-        .qty-cell {
-          font-weight: 700;
-          color: #cbd5e1;
-          font-size: 13px;
-        }
-
-        .status-badge {
-          font-size: 11px;
-          font-weight: 600;
-          padding: 2px 7px;
-          border-radius: 4px;
-        }
-
-        .anchor-cell {
-          font-size: 12px;
-          color: #6b7280;
-        }
-
-        .date-cell {
-          font-size: 12px;
-          color: #6b7280;
-          white-space: nowrap;
-        }
-
-        .expired-date {
-          color: #ef4444 !important;
-        }
-
-        .expiring-date {
-          color: #f97316 !important;
-          font-weight: 600;
-        }
-
-        .extend-inline {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-
-        .extend-date {
-          background: #111827;
-          border: 1px solid #3b82f6;
-          border-radius: 6px;
-          padding: 4px 7px;
-          font-size: 11.5px;
-          color: #e2e8f0;
-          outline: none;
-          color-scheme: dark;
-          width: 130px;
-        }
-
-        .extend-confirm {
-          background: rgba(59, 130, 246, 0.1);
-          border: 1px solid rgba(59, 130, 246, 0.3);
-          color: #60a5fa;
-          padding: 4px 9px;
-          border-radius: 5px;
-          font-size: 12px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .extend-confirm:hover:not(:disabled) {
-          background: rgba(59, 130, 246, 0.18);
-        }
-
-        .extend-confirm:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
-        }
-
-        .extend-cancel {
-          background: transparent;
-          border: none;
-          color: #4b5563;
-          cursor: pointer;
-          padding: 3px;
-          display: flex;
-          align-items: center;
-        }
-
-        .extend-cancel:hover {
-          color: #9ca3af;
-        }
-
-        .source-badge {
-          font-size: 11px;
-          font-weight: 600;
-          padding: 2px 7px;
-          border-radius: 4px;
-          white-space: nowrap;
-        }
-
-        .action-group {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-
-        .extend-btn,
-        .deactivate-btn,
-        .view-btn {
-          width: 28px;
-          height: 28px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 6px;
-          cursor: pointer;
-          transition: all 0.15s;
-          flex-shrink: 0;
-        }
-
-        .extend-btn {
-          background: rgba(59, 130, 246, 0.08);
-          border: 1px solid rgba(59, 130, 246, 0.2);
-          color: #60a5fa;
-        }
-
-        .extend-btn:hover {
-          background: rgba(59, 130, 246, 0.15);
-        }
-
-        .deactivate-btn {
-          background: rgba(239, 68, 68, 0.08);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          color: #f87171;
-        }
-
-        .deactivate-btn:hover {
-          background: rgba(239, 68, 68, 0.15);
-        }
-
-        .view-btn {
-          background: rgba(107, 114, 128, 0.08);
-          border: 1px solid rgba(107, 114, 128, 0.2);
-          color: #9ca3af;
-        }
-
-        .view-btn:hover {
-          background: rgba(107, 114, 128, 0.15);
-          color: #cbd5e1;
-        }
-
-        .pagination {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 14px 18px;
-          border-top: 1px solid #1a2232;
-        }
-
-        .page-info {
-          font-size: 12.5px;
-          color: #6b7280;
-        }
-
-        .page-controls {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        .page-btn,
-        .page-num {
-          width: 30px;
-          height: 30px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: transparent;
-          border: 1px solid #1e2530;
-          border-radius: 6px;
-          font-size: 12.5px;
-          color: #6b7280;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .page-btn:hover:not(:disabled),
-        .page-num:hover {
-          border-color: #2d3748;
-          color: #cbd5e1;
-        }
-
-        .page-btn:disabled {
-          opacity: 0.3;
-          cursor: not-allowed;
-        }
-
-        .page-num.active {
-          background: #3b82f6;
-          border-color: #3b82f6;
-          color: white;
-        }
-      `}</style>
     </div>
   );
 }

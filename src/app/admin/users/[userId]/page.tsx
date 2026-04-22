@@ -1,197 +1,118 @@
 // ice-inventory\src\app\admin\users\[userId]\page.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft,
-  User,
-  Store,
-  Phone,
-  Mail,
-  Calendar,
-  CheckCircle,
-  XCircle,
-  Edit3,
-  Save,
-  X,
-  Plus,
-  Trash2,
-  Clock,
-  CreditCard,
-  Package,
-  AlertTriangle,
-  RefreshCw,
-  Copy,
-  Check,
+  ArrowLeft, User, Store, Phone, Mail, Calendar, CheckCircle, XCircle,
+  Edit3, Save, X, Plus, Trash2, Clock, CreditCard, Package, AlertTriangle,
+  RefreshCw, Copy, Check,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface UserDetail {
-  _id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  shopName?: string;
-  shopAddress?: string;
-  isVerified: boolean;
-  createdAt: string;
-  lastLogin?: string;
+  _id: string; name: string; email: string; phone?: string;
+  shopName?: string; shopAddress?: string; isVerified: boolean;
+  createdAt: string; lastLogin?: string;
 }
 
 interface Subscription {
-  _id: string;
-  planId: string;
-  billingPeriod: string;
-  status: string;
-  startDate: string;
-  currentPeriodEnd?: string;
-  trialEndsAt?: string;
-  invoicesUsedThisMonth: number;
-  invoicesUsedTotal: number;
+  _id: string; planId: string; billingPeriod: string; status: string;
+  startDate: string; currentPeriodEnd?: string; trialEndsAt?: string;
+  invoicesUsedThisMonth: number; invoicesUsedTotal: number;
   invoiceCountResetAt: string;
   customLimits?: {
-    maxInvoicesPerMonth?: number;
-    maxCustomers?: number;
-    maxProducts?: number;
-    maxManagers?: number;
-    maxDeliveryPartners?: number;
-    hasDeliveryModule?: boolean;
-    hasLiveTracking?: boolean;
-    hasAdvancedReports?: boolean;
+    maxInvoicesPerMonth?: number; maxCustomers?: number; maxProducts?: number;
+    maxManagers?: number; maxDeliveryPartners?: number;
+    hasDeliveryModule?: boolean; hasLiveTracking?: boolean; hasAdvancedReports?: boolean;
   };
 }
 
 interface AddOn {
-  _id: string;
-  addonType: string;
-  quantity: number;
-  expiresAt: string;
-  isActive: boolean;
-  createdAt: string;
-  manuallyGranted?: boolean;
+  _id: string; addonType: string; quantity: number; expiresAt: string;
+  isActive: boolean; createdAt: string; manuallyGranted?: boolean;
 }
 
 interface PaymentRecord {
-  _id: string;
-  type: string;
-  planId?: string;
-  billingPeriod?: string;
-  addonType?: string;
-  amount: number;
-  status: string;
-  razorpayOrderId?: string;
-  razorpayPaymentId?: string;
-  createdAt: string;
+  _id: string; type: string; planId?: string; billingPeriod?: string;
+  addonType?: string; amount: number; status: string;
+  razorpayOrderId?: string; razorpayPaymentId?: string; createdAt: string;
 }
 
 interface SubEditForm {
-  planId: string;
-  billingPeriod: string;
-  status: string;
-  currentPeriodEnd: string;
+  planId: string; billingPeriod: string; status: string; currentPeriodEnd: string;
   customLimits: {
-    maxInvoicesPerMonth: string;
-    maxCustomers: string;
-    maxProducts: string;
-    maxManagers: string;
-    maxDeliveryPartners: string;
-    hasDeliveryModule: boolean;
-    hasLiveTracking: boolean;
-    hasAdvancedReports: boolean;
+    maxInvoicesPerMonth: string; maxCustomers: string; maxProducts: string;
+    maxManagers: string; maxDeliveryPartners: string;
+    hasDeliveryModule: boolean; hasLiveTracking: boolean; hasAdvancedReports: boolean;
   };
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PLAN_COLORS: Record<string, string> = {
-  free_trial: "#f59e0b",
-  launch: "#3b82f6",
-  scale: "#8b5cf6",
-  business: "#10b981",
-  customize: "#ec4899",
+  free_trial: "#f59e0b", launch: "#3b82f6", scale: "#8b5cf6",
+  business: "#10b981", customize: "#ec4899",
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  active: "#10b981",
-  expired: "#ef4444",
-  grace: "#f97316",
-  cancelled: "#6b7280",
-  pending: "#f59e0b",
-  captured: "#10b981",
-  failed: "#ef4444",
-  refunded: "#6b7280",
+  active: "#10b981", expired: "#ef4444", grace: "#f97316", cancelled: "#6b7280",
+  pending: "#f59e0b", captured: "#10b981", failed: "#ef4444", refunded: "#6b7280",
 };
 
 const PLAN_OPTIONS = ["free_trial", "launch", "scale", "business", "customize"];
 const BILLING_OPTIONS = ["monthly", "sixmonths", "yearly"];
 const STATUS_OPTIONS = ["active", "expired", "grace", "cancelled"];
 const ADDON_TYPES = [
-  "extra_100_invoices",
-  "extra_250_invoices",
-  "extra_500_invoices",
-  "extra_5_customers",
-  "extra_10_customers",
-  "extra_20_customers",
+  "extra_100_invoices", "extra_250_invoices", "extra_500_invoices",
+  "extra_5_customers", "extra_10_customers", "extra_20_customers",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(d?: string) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function formatINR(paise: number) {
   return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
+    style: "currency", currency: "INR", maximumFractionDigits: 0,
   }).format(paise / 100);
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
 function CopyableText({ text }: { text?: string }) {
   const [copied, setCopied] = useState(false);
-  if (!text) return <span className="muted">—</span>;
-
+  if (!text) return <span className="text-gray-700">—</span>;
   const copy = () => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
-
   return (
-    <span className="copyable" onClick={copy} title="Click to copy">
+    <span
+      onClick={copy}
+      title="Click to copy"
+      className="inline-flex items-center gap-1 cursor-pointer font-mono text-[11.5px] text-gray-400 hover:text-slate-300 transition-colors"
+    >
       {text.length > 20 ? text.slice(0, 20) + "…" : text}
-      {copied ? (
-        <Check size={11} color="#10b981" />
-      ) : (
-        <Copy size={11} color="#4b5563" />
-      )}
-      <style jsx>{`
-        .copyable {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          cursor: pointer;
-          font-family: "JetBrains Mono", monospace;
-          font-size: 11.5px;
-          color: #9ca3af;
-        }
-        .copyable:hover {
-          color: #cbd5e1;
-        }
-        .muted {
-          color: #4b5563;
-        }
-      `}</style>
+      {copied ? <Check size={11} color="#10b981" /> : <Copy size={11} color="#4b5563" />}
     </span>
+  );
+}
+
+function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-2.5 px-5 py-3 border-b border-[#111827]">
+      <div className="text-gray-700 mt-0.5 shrink-0"><Icon size={13} /></div>
+      <div className="flex flex-col gap-0.5">
+        <p className="text-[11px] text-gray-600 font-semibold uppercase tracking-[0.04em]">{label}</p>
+        <p className="text-[13.5px] text-slate-300 break-words">{value}</p>
+      </div>
+    </div>
   );
 }
 
@@ -219,23 +140,14 @@ export default function UserDetailPage() {
     status: "active",
     currentPeriodEnd: "",
     customLimits: {
-      maxInvoicesPerMonth: "",
-      maxCustomers: "",
-      maxProducts: "",
-      maxManagers: "",
-      maxDeliveryPartners: "",
-      hasDeliveryModule: false,
-      hasLiveTracking: false,
-      hasAdvancedReports: false,
+      maxInvoicesPerMonth: "", maxCustomers: "", maxProducts: "",
+      maxManagers: "", maxDeliveryPartners: "",
+      hasDeliveryModule: false, hasLiveTracking: false, hasAdvancedReports: false,
     },
   });
 
   const [grantForm, setGrantForm] = useState({
-    addonType: ADDON_TYPES[0],
-    quantity: "1",
-    open: false,
-    loading: false,
-    error: "",
+    addonType: ADDON_TYPES[0], quantity: "1", open: false, loading: false, error: "",
   });
 
   // ─── Fetch ──────────────────────────────────────────────────────────────────
@@ -256,40 +168,33 @@ export default function UserDetailPage() {
       setAddOns(data.addOns || []);
       setPayments(data.payments || []);
 
-      // Pre-fill edit form
       if (data.subscription) {
         const sub = data.subscription;
         setEditForm({
           planId: sub.planId,
           billingPeriod: sub.billingPeriod || "monthly",
           status: sub.status,
-          currentPeriodEnd: sub.currentPeriodEnd
-            ? new Date(sub.currentPeriodEnd).toISOString().split("T")[0]
-            : "",
+          currentPeriodEnd: sub.currentPeriodEnd ? new Date(sub.currentPeriodEnd).toISOString().split("T")[0] : "",
           customLimits: {
-            maxInvoicesPerMonth:
-              sub.customLimits?.maxInvoicesPerMonth?.toString() || "",
+            maxInvoicesPerMonth: sub.customLimits?.maxInvoicesPerMonth?.toString() || "",
             maxCustomers: sub.customLimits?.maxCustomers?.toString() || "",
             maxProducts: sub.customLimits?.maxProducts?.toString() || "",
             maxManagers: sub.customLimits?.maxManagers?.toString() || "",
-            maxDeliveryPartners:
-              sub.customLimits?.maxDeliveryPartners?.toString() || "",
+            maxDeliveryPartners: sub.customLimits?.maxDeliveryPartners?.toString() || "",
             hasDeliveryModule: sub.customLimits?.hasDeliveryModule || false,
             hasLiveTracking: sub.customLimits?.hasLiveTracking || false,
             hasAdvancedReports: sub.customLimits?.hasAdvancedReports || false,
           },
         });
       }
-    } catch (err) {
+    } catch {
       setError("Failed to load user details");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchUser();
-  }, [userId]);
+  useEffect(() => { fetchUser(); }, [userId]);
 
   // ─── Save Subscription ───────────────────────────────────────────────────────
 
@@ -299,31 +204,18 @@ export default function UserDetailPage() {
     setSaveSuccess("");
     try {
       const token = localStorage.getItem("token");
-
       const body: Record<string, unknown> = {
         planId: editForm.planId,
         billingPeriod: editForm.billingPeriod,
         status: editForm.status,
-        ...(editForm.currentPeriodEnd && {
-          currentPeriodEnd: editForm.currentPeriodEnd,
-        }),
+        ...(editForm.currentPeriodEnd && { currentPeriodEnd: editForm.currentPeriodEnd }),
         ...(editForm.planId === "customize" && {
           customLimits: {
-            maxInvoicesPerMonth: editForm.customLimits.maxInvoicesPerMonth
-              ? parseInt(editForm.customLimits.maxInvoicesPerMonth)
-              : undefined,
-            maxCustomers: editForm.customLimits.maxCustomers
-              ? parseInt(editForm.customLimits.maxCustomers)
-              : undefined,
-            maxProducts: editForm.customLimits.maxProducts
-              ? parseInt(editForm.customLimits.maxProducts)
-              : undefined,
-            maxManagers: editForm.customLimits.maxManagers
-              ? parseInt(editForm.customLimits.maxManagers)
-              : undefined,
-            maxDeliveryPartners: editForm.customLimits.maxDeliveryPartners
-              ? parseInt(editForm.customLimits.maxDeliveryPartners)
-              : undefined,
+            maxInvoicesPerMonth: editForm.customLimits.maxInvoicesPerMonth ? parseInt(editForm.customLimits.maxInvoicesPerMonth) : undefined,
+            maxCustomers: editForm.customLimits.maxCustomers ? parseInt(editForm.customLimits.maxCustomers) : undefined,
+            maxProducts: editForm.customLimits.maxProducts ? parseInt(editForm.customLimits.maxProducts) : undefined,
+            maxManagers: editForm.customLimits.maxManagers ? parseInt(editForm.customLimits.maxManagers) : undefined,
+            maxDeliveryPartners: editForm.customLimits.maxDeliveryPartners ? parseInt(editForm.customLimits.maxDeliveryPartners) : undefined,
             hasDeliveryModule: editForm.customLimits.hasDeliveryModule,
             hasLiveTracking: editForm.customLimits.hasLiveTracking,
             hasAdvancedReports: editForm.customLimits.hasAdvancedReports,
@@ -333,10 +225,7 @@ export default function UserDetailPage() {
 
       const res = await fetch(`/api/admin/users/${userId}`, {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 
@@ -356,38 +245,28 @@ export default function UserDetailPage() {
     }
   };
 
-  // ─── Deactivate AddOn ─────────────────────────────────────────────────────
-
   const handleDeactivateAddOn = async (addOnId: string) => {
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`/api/admin/addons`, {
+      const res = await fetch("/api/admin/addons", {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ addOnId, isActive: false }),
       });
       if (!res.ok) throw new Error("Failed to deactivate");
       fetchUser();
-    } catch (err) {
+    } catch {
       alert("Failed to deactivate add-on");
     }
   };
-
-  // ─── Grant AddOn ──────────────────────────────────────────────────────────
 
   const handleGrantAddOn = async () => {
     setGrantForm((f) => ({ ...f, loading: true, error: "" }));
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`/api/admin/addons`, {
+      const res = await fetch("/api/admin/addons", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           userId,
           addonType: grantForm.addonType,
@@ -395,89 +274,54 @@ export default function UserDetailPage() {
           manuallyGranted: true,
         }),
       });
-
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to grant add-on");
       }
-
       setGrantForm((f) => ({ ...f, open: false, loading: false }));
       fetchUser();
     } catch (err: unknown) {
       setGrantForm((f) => ({
-        ...f,
-        loading: false,
+        ...f, loading: false,
         error: err instanceof Error ? err.message : "Failed to grant add-on",
       }));
     }
   };
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // ─── Shared class strings ─────────────────────────────────────────────────
+
+  const cardCls = "bg-[#0d1117] border border-[#1e2530] rounded-xl overflow-hidden";
+  const cardHeaderCls = "flex items-center gap-2 px-5 py-4 border-b border-[#1a2232]";
+  const formSelectCls = "flex-1 bg-[#111827] border border-[#1e2530] rounded-[7px] px-3 py-[7px] text-[13px] text-slate-200 outline-none focus:border-blue-500 transition-colors";
+  const formInputCls = "flex-1 bg-[#111827] border border-[#1e2530] rounded-[7px] px-3 py-[7px] text-[13px] text-slate-200 outline-none focus:border-blue-500 transition-colors";
+  const editBtnCls = "flex items-center gap-1.5 bg-blue-500/[0.08] border border-blue-500/20 text-blue-400 px-[11px] py-[5px] rounded-[7px] text-[12.5px] cursor-pointer hover:bg-blue-500/[0.15] transition-all";
+  const saveBtnCls = "flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 px-[11px] py-[5px] rounded-[7px] text-[12.5px] cursor-pointer hover:bg-emerald-500/[0.18] transition-all disabled:opacity-50 disabled:cursor-not-allowed";
+  const cancelBtnCls = "flex items-center gap-1.5 bg-gray-500/10 border border-gray-500/20 text-gray-400 px-[11px] py-[5px] rounded-[7px] text-[12.5px] cursor-pointer hover:bg-gray-500/[0.18] transition-all";
+  const thCls = "text-[11px] font-semibold text-gray-600 uppercase tracking-[0.05em] px-4 py-[10px] text-left border-b border-[#1a2232] bg-[#0a0f18] whitespace-nowrap";
+  const tdCls = "px-4 py-[10px] text-[13px] text-gray-400 border-b border-[#111827] align-middle";
+
+  // ─── Render: loading ──────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <div className="page-loading">
-        <div className="spinner" />
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-3 text-gray-600 text-[13px]">
+        <div className="w-6 h-6 border-2 border-[#1e2530] border-t-blue-500 rounded-full animate-spin" />
         <p>Loading user details...</p>
-        <style jsx>{`
-          .page-loading {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 60vh;
-            gap: 12px;
-            color: #4b5563;
-            font-size: 13px;
-          }
-          .spinner {
-            width: 24px;
-            height: 24px;
-            border: 2px solid #1e2530;
-            border-top-color: #3b82f6;
-            border-radius: 50%;
-            animation: spin 0.7s linear infinite;
-          }
-          @keyframes spin {
-            to {
-              transform: rotate(360deg);
-            }
-          }
-        `}</style>
       </div>
     );
   }
 
   if (error || !user) {
     return (
-      <div className="page-error">
-        <AlertTriangle size={20} color="#ef4444" />
+      <div className="flex flex-col items-center justify-center h-[60vh] gap-3 text-red-400 text-[14px]">
+        <AlertTriangle size={20} />
         <p>{error || "User not found"}</p>
-        <button className="back-btn" onClick={() => router.push("/admin/users")}>
+        <button
+          onClick={() => router.push("/admin/users")}
+          className="bg-[#0d1117] border border-[#1e2530] text-gray-400 px-4 py-2 rounded-lg cursor-pointer text-[13px] mt-2 hover:border-[#2d3748] transition-colors"
+        >
           ← Back to Users
         </button>
-        <style jsx>{`
-          .page-error {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 60vh;
-            gap: 12px;
-            color: #ef4444;
-            font-size: 14px;
-          }
-          .back-btn {
-            background: #0d1117;
-            border: 1px solid #1e2530;
-            color: #9ca3af;
-            padding: 8px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 13px;
-            margin-top: 8px;
-          }
-        `}</style>
       </div>
     );
   }
@@ -485,50 +329,50 @@ export default function UserDetailPage() {
   const plan = subscription?.planId || "free_trial";
 
   return (
-    <div className="page">
+    <div className="flex flex-col gap-5">
       {/* Header */}
-      <div className="page-header">
-        <button className="back-link" onClick={() => router.push("/admin/users")}>
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => router.push("/admin/users")}
+          className="flex items-center gap-1.5 bg-transparent border-none text-gray-500 text-[13px] cursor-pointer py-1.5 hover:text-slate-300 transition-colors"
+        >
           <ArrowLeft size={14} />
           Users
         </button>
         <button
-          className="refresh-btn"
           onClick={fetchUser}
+          className="flex items-center gap-1.5 bg-[#0d1117] border border-[#1e2530] text-gray-400 px-3.5 py-[7px] rounded-lg text-[12.5px] cursor-pointer hover:border-[#2d3748] hover:text-slate-300 transition-all"
         >
           <RefreshCw size={13} />
           Refresh
         </button>
       </div>
 
-      {/* Success / Error banners */}
+      {/* Banners */}
       {saveSuccess && (
-        <div className="success-banner">
-          <CheckCircle size={14} />
-          {saveSuccess}
+        <div className="flex items-center gap-2 bg-emerald-500/[0.08] border border-emerald-500/20 text-emerald-400 px-3.5 py-2.5 rounded-lg text-[13px]">
+          <CheckCircle size={14} />{saveSuccess}
         </div>
       )}
       {saveError && (
-        <div className="error-banner">
-          <AlertTriangle size={14} />
-          {saveError}
+        <div className="flex items-center gap-2 bg-red-500/[0.08] border border-red-500/20 text-red-300 px-3.5 py-2.5 rounded-lg text-[13px]">
+          <AlertTriangle size={14} />{saveError}
         </div>
       )}
 
-      {/* User Info Card */}
-      <div className="card">
-        <div className="card-header">
-          <User size={15} className="card-icon" />
-          <h2 className="card-title">User Information</h2>
-          <div className="user-verified">
-            {user.isVerified ? (
-              <><CheckCircle size={13} color="#10b981" /> Verified</>
-            ) : (
-              <><XCircle size={13} color="#ef4444" /> Unverified</>
-            )}
+      {/* ── User Info Card ── */}
+      <div className={cardCls}>
+        <div className={cardHeaderCls}>
+          <User size={15} className="text-blue-500" />
+          <h2 className="text-[14px] font-semibold text-slate-300 flex-1">User Information</h2>
+          <div className="flex items-center gap-1 text-xs text-gray-400">
+            {user.isVerified
+              ? <><CheckCircle size={13} color="#10b981" /> Verified</>
+              : <><XCircle size={13} color="#ef4444" /> Unverified</>
+            }
           </div>
         </div>
-        <div className="info-grid">
+        <div className="grid grid-cols-3 max-[1100px]:grid-cols-2">
           <InfoRow icon={User} label="Full Name" value={user.name || "—"} />
           <InfoRow icon={Mail} label="Email" value={user.email} />
           <InfoRow icon={Phone} label="Phone" value={user.phone || "—"} />
@@ -539,34 +383,24 @@ export default function UserDetailPage() {
         </div>
       </div>
 
-      {/* Subscription Card */}
-      <div className="card">
-        <div className="card-header">
-          <CreditCard size={15} className="card-icon" />
-          <h2 className="card-title">Subscription</h2>
-          <div className="card-actions">
+      {/* ── Subscription Card ── */}
+      <div className={cardCls}>
+        <div className={cardHeaderCls}>
+          <CreditCard size={15} className="text-blue-500" />
+          <h2 className="text-[14px] font-semibold text-slate-300 flex-1">Subscription</h2>
+          <div className="flex gap-2">
             {!editMode && (
-              <button className="edit-btn" onClick={() => setEditMode(true)}>
-                <Edit3 size={13} />
-                Edit
+              <button className={editBtnCls} onClick={() => setEditMode(true)}>
+                <Edit3 size={13} />Edit
               </button>
             )}
             {editMode && (
               <>
-                <button
-                  className="save-btn"
-                  onClick={handleSaveSubscription}
-                  disabled={saving}
-                >
-                  <Save size={13} />
-                  {saving ? "Saving..." : "Save"}
+                <button className={saveBtnCls} onClick={handleSaveSubscription} disabled={saving}>
+                  <Save size={13} />{saving ? "Saving..." : "Save"}
                 </button>
-                <button
-                  className="cancel-btn"
-                  onClick={() => { setEditMode(false); setSaveError(""); }}
-                >
-                  <X size={13} />
-                  Cancel
+                <button className={cancelBtnCls} onClick={() => { setEditMode(false); setSaveError(""); }}>
+                  <X size={13} />Cancel
                 </button>
               </>
             )}
@@ -574,13 +408,13 @@ export default function UserDetailPage() {
         </div>
 
         {!subscription ? (
-          <p className="no-data">No subscription found for this user.</p>
+          <p className="px-5 py-6 text-gray-600 text-[13px] italic">No subscription found for this user.</p>
         ) : !editMode ? (
           /* Read-only view */
-          <div className="sub-view">
-            <div className="sub-top">
+          <div className="px-5 py-4 flex flex-col gap-4">
+            <div className="flex gap-2 flex-wrap">
               <span
-                className="plan-pill"
+                className="text-[11px] font-bold px-2.5 py-1 rounded-md border tracking-[0.05em]"
                 style={{
                   background: `${PLAN_COLORS[plan] || "#6b7280"}18`,
                   color: PLAN_COLORS[plan] || "#6b7280",
@@ -590,7 +424,7 @@ export default function UserDetailPage() {
                 {plan.replace("_", " ").toUpperCase()}
               </span>
               <span
-                className="status-pill"
+                className="text-[11px] font-semibold px-2.5 py-1 rounded-md"
                 style={{
                   background: `${STATUS_COLORS[subscription.status] || "#6b7280"}18`,
                   color: STATUS_COLORS[subscription.status] || "#6b7280",
@@ -598,39 +432,27 @@ export default function UserDetailPage() {
               >
                 {subscription.status}
               </span>
-              <span className="period-pill">{subscription.billingPeriod}</span>
+              <span className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-gray-500/10 text-gray-400 capitalize">
+                {subscription.billingPeriod}
+              </span>
             </div>
-            <div className="info-grid">
+            <div className="grid grid-cols-3 max-[1100px]:grid-cols-2 -mx-5">
               <InfoRow icon={Calendar} label="Start Date" value={formatDate(subscription.startDate)} />
-              <InfoRow
-                icon={Calendar}
-                label="Period End"
-                value={subscription.currentPeriodEnd ? formatDate(subscription.currentPeriodEnd) : "No expiry (free trial)"}
-              />
-              {subscription.trialEndsAt && (
-                <InfoRow icon={Clock} label="Trial Ends" value={formatDate(subscription.trialEndsAt)} />
-              )}
-              <InfoRow icon={Calendar} label="Invoice Reset Date" value={formatDate(subscription.invoiceCountResetAt)} />
-              <InfoRow
-                icon={CreditCard}
-                label="Invoices This Month"
-                value={`${subscription.invoicesUsedThisMonth} used`}
-              />
-              <InfoRow
-                icon={CreditCard}
-                label="Invoices Total"
-                value={`${subscription.invoicesUsedTotal} used`}
-              />
+              <InfoRow icon={Calendar} label="Period End" value={subscription.currentPeriodEnd ? formatDate(subscription.currentPeriodEnd) : "No expiry"} />
+              {subscription.trialEndsAt && <InfoRow icon={Clock} label="Trial Ends" value={formatDate(subscription.trialEndsAt)} />}
+              <InfoRow icon={Calendar} label="Invoice Reset" value={formatDate(subscription.invoiceCountResetAt)} />
+              <InfoRow icon={CreditCard} label="Invoices This Month" value={`${subscription.invoicesUsedThisMonth} used`} />
+              <InfoRow icon={CreditCard} label="Invoices Total" value={`${subscription.invoicesUsedTotal} used`} />
             </div>
 
             {subscription.planId === "customize" && subscription.customLimits && (
-              <div className="custom-limits">
-                <p className="sub-section-label">Custom Limits</p>
-                <div className="limits-grid">
+              <div className="border-t border-[#1a2232] pt-4">
+                <p className="text-[11px] font-bold text-gray-600 uppercase tracking-[0.06em] mb-3">Custom Limits</p>
+                <div className="grid grid-cols-4 max-[1100px]:grid-cols-2 gap-2">
                   {Object.entries(subscription.customLimits).map(([key, val]) => (
-                    <div className="limit-item" key={key}>
-                      <span className="limit-key">{key}</span>
-                      <span className="limit-val">
+                    <div key={key} className="bg-[#111827] rounded-md px-3 py-2 flex flex-col gap-0.5">
+                      <span className="text-[10px] text-gray-600 font-semibold uppercase tracking-[0.04em]">{key}</span>
+                      <span className="text-[14px] font-semibold text-slate-300">
                         {typeof val === "boolean" ? (val ? "✓" : "✗") : val?.toString() || "—"}
                       </span>
                     </div>
@@ -641,110 +463,61 @@ export default function UserDetailPage() {
           </div>
         ) : (
           /* Edit form */
-          <div className="edit-form">
-            <div className="form-row">
-              <label className="form-label">Plan</label>
-              <select
-                className="form-select"
-                value={editForm.planId}
-                onChange={(e) => setEditForm((f) => ({ ...f, planId: e.target.value }))}
-              >
-                {PLAN_OPTIONS.map((p) => (
-                  <option key={p} value={p}>
-                    {p.replace("_", " ")}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-row">
-              <label className="form-label">Billing Period</label>
-              <select
-                className="form-select"
-                value={editForm.billingPeriod}
-                onChange={(e) => setEditForm((f) => ({ ...f, billingPeriod: e.target.value }))}
-              >
-                {BILLING_OPTIONS.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-row">
-              <label className="form-label">Status</label>
-              <select
-                className="form-select"
-                value={editForm.status}
-                onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-row">
-              <label className="form-label">Extend Period End</label>
+          <div className="px-5 py-5 flex flex-col gap-3">
+            {[
+              { label: "Plan", key: "planId", options: PLAN_OPTIONS },
+              { label: "Billing Period", key: "billingPeriod", options: BILLING_OPTIONS },
+              { label: "Status", key: "status", options: STATUS_OPTIONS },
+            ].map(({ label, key, options }) => (
+              <div key={key} className="flex items-center gap-3">
+                <label className="text-[12.5px] text-gray-500 font-medium w-40 shrink-0">{label}</label>
+                <select
+                  className={formSelectCls}
+                  value={editForm[key as keyof SubEditForm] as string}
+                  onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
+                >
+                  {options.map((o) => <option key={o} value={o}>{o.replace("_", " ")}</option>)}
+                </select>
+              </div>
+            ))}
+            <div className="flex items-center gap-3">
+              <label className="text-[12.5px] text-gray-500 font-medium w-40 shrink-0">Extend Period End</label>
               <input
                 type="date"
-                className="form-input"
+                className={formInputCls}
                 value={editForm.currentPeriodEnd}
                 onChange={(e) => setEditForm((f) => ({ ...f, currentPeriodEnd: e.target.value }))}
+                style={{ colorScheme: "dark" }}
               />
             </div>
 
             {editForm.planId === "customize" && (
-              <div className="custom-section">
-                <p className="sub-section-label">Custom Limits</p>
-                <div className="form-grid">
-                  {(
-                    [
-                      ["maxInvoicesPerMonth", "Max Invoices/Month"],
-                      ["maxCustomers", "Max Customers"],
-                      ["maxProducts", "Max Products"],
-                      ["maxManagers", "Max Managers"],
-                      ["maxDeliveryPartners", "Max Delivery Partners"],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <div className="form-row" key={key}>
-                      <label className="form-label">{label}</label>
+              <div className="border-t border-[#1a2232] pt-4 mt-2">
+                <p className="text-[11px] font-bold text-gray-600 uppercase tracking-[0.06em] mb-3">Custom Limits</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["maxInvoicesPerMonth","maxCustomers","maxProducts","maxManagers","maxDeliveryPartners"] as const).map((key) => (
+                    <div key={key} className="flex items-center gap-3">
+                      <label className="text-[12.5px] text-gray-500 font-medium w-40 shrink-0 capitalize">
+                        {key.replace(/([A-Z])/g, " $1").replace("max", "Max ")}
+                      </label>
                       <input
                         type="number"
-                        className="form-input"
-                        value={editForm.customLimits[key as keyof typeof editForm.customLimits] as string}
-                        onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            customLimits: { ...f.customLimits, [key]: e.target.value },
-                          }))
-                        }
+                        className={formInputCls}
+                        value={editForm.customLimits[key]}
+                        onChange={(e) => setEditForm((f) => ({ ...f, customLimits: { ...f.customLimits, [key]: e.target.value } }))}
                       />
                     </div>
                   ))}
-
-                  {(
-                    [
-                      ["hasDeliveryModule", "Delivery Module"],
-                      ["hasLiveTracking", "Live Tracking"],
-                      ["hasAdvancedReports", "Advanced Reports"],
-                    ] as const
-                  ).map(([key, label]) => (
-                    <div className="form-row form-check" key={key}>
-                      <label className="form-label">{label}</label>
+                  {(["hasDeliveryModule","hasLiveTracking","hasAdvancedReports"] as const).map((key) => (
+                    <div key={key} className="flex items-center gap-3">
+                      <label className="text-[12.5px] text-gray-500 font-medium w-40 shrink-0 capitalize">
+                        {key.replace(/([A-Z])/g, " $1").replace("has", "").trim()}
+                      </label>
                       <input
                         type="checkbox"
-                        className="form-checkbox"
-                        checked={editForm.customLimits[key as keyof typeof editForm.customLimits] as boolean}
-                        onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            customLimits: { ...f.customLimits, [key]: e.target.checked },
-                          }))
-                        }
+                        className="w-4 h-4 accent-blue-500 cursor-pointer"
+                        checked={editForm.customLimits[key]}
+                        onChange={(e) => setEditForm((f) => ({ ...f, customLimits: { ...f.customLimits, [key]: e.target.checked } }))}
                       />
                     </div>
                   ))}
@@ -755,109 +528,84 @@ export default function UserDetailPage() {
         )}
       </div>
 
-      {/* Add-ons Card */}
-      <div className="card">
-        <div className="card-header">
-          <Package size={15} className="card-icon" />
-          <h2 className="card-title">Active Add-ons</h2>
-          <button
-            className="edit-btn"
-            onClick={() => setGrantForm((f) => ({ ...f, open: !f.open }))}
-          >
-            <Plus size={13} />
-            Grant Add-on
+      {/* ── Add-ons Card ── */}
+      <div className={cardCls}>
+        <div className={cardHeaderCls}>
+          <Package size={15} className="text-blue-500" />
+          <h2 className="text-[14px] font-semibold text-slate-300 flex-1">Active Add-ons</h2>
+          <button className={editBtnCls} onClick={() => setGrantForm((f) => ({ ...f, open: !f.open }))}>
+            <Plus size={13} />Grant Add-on
           </button>
         </div>
 
-        {/* Grant form */}
         {grantForm.open && (
-          <div className="grant-form">
-            <div className="grant-row">
+          <div className="px-5 py-3.5 border-b border-[#1a2232] bg-[#0a0f18] flex flex-col gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <select
-                className="form-select"
+                className="bg-[#111827] border border-[#1e2530] rounded-[7px] px-3 py-[7px] text-[13px] text-slate-200 outline-none focus:border-blue-500 transition-colors"
                 value={grantForm.addonType}
                 onChange={(e) => setGrantForm((f) => ({ ...f, addonType: e.target.value }))}
               >
-                {ADDON_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t.replace(/_/g, " ")}
-                  </option>
-                ))}
+                {ADDON_TYPES.map((t) => <option key={t} value={t}>{t.replace(/_/g, " ")}</option>)}
               </select>
               <input
                 type="number"
-                className="form-input"
+                className="w-20 bg-[#111827] border border-[#1e2530] rounded-[7px] px-3 py-[7px] text-[13px] text-slate-200 outline-none focus:border-blue-500 transition-colors"
                 placeholder="Qty"
                 value={grantForm.quantity}
                 min="1"
                 onChange={(e) => setGrantForm((f) => ({ ...f, quantity: e.target.value }))}
-                style={{ width: "80px" }}
               />
-              <button
-                className="save-btn"
-                onClick={handleGrantAddOn}
-                disabled={grantForm.loading}
-              >
+              <button className={saveBtnCls} onClick={handleGrantAddOn} disabled={grantForm.loading}>
                 {grantForm.loading ? "Granting..." : "Confirm Grant"}
               </button>
-              <button
-                className="cancel-btn"
-                onClick={() => setGrantForm((f) => ({ ...f, open: false, error: "" }))}
-              >
+              <button className={cancelBtnCls} onClick={() => setGrantForm((f) => ({ ...f, open: false, error: "" }))}>
                 Cancel
               </button>
             </div>
-            {grantForm.error && (
-              <p className="grant-error">{grantForm.error}</p>
-            )}
+            {grantForm.error && <p className="text-xs text-red-400">{grantForm.error}</p>}
           </div>
         )}
 
         {addOns.length === 0 ? (
-          <p className="no-data">No add-ons for this user.</p>
+          <p className="px-5 py-6 text-gray-600 text-[13px] italic">No add-ons for this user.</p>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  <th>Type</th>
-                  <th>Qty</th>
-                  <th>Expires</th>
-                  <th>Status</th>
-                  <th>Source</th>
-                  <th>Action</th>
+                  {["Type", "Qty", "Expires", "Status", "Source", "Action"].map((h) => (
+                    <th key={h} className={thCls}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {addOns.map((a) => (
-                  <tr key={a._id}>
-                    <td className="addon-type">{a.addonType.replace(/_/g, " ")}</td>
-                    <td>{a.quantity}</td>
-                    <td className="date-cell">{formatDate(a.expiresAt)}</td>
-                    <td>
-                      <span
-                        className="badge"
+                  <tr key={a._id} className="border-b border-[#111827] last:border-b-0 hover:bg-[#0f1623] transition-colors">
+                    <td className={`${tdCls} text-[12.5px] text-slate-300 capitalize`}>{a.addonType.replace(/_/g, " ")}</td>
+                    <td className={tdCls}>{a.quantity}</td>
+                    <td className={`${tdCls} text-xs text-gray-600 whitespace-nowrap`}>{formatDate(a.expiresAt)}</td>
+                    <td className={tdCls}>
+                      <span className="text-[11px] font-semibold px-[7px] py-[2px] rounded-[4px]"
                         style={{
                           background: a.isActive ? "rgba(16,185,129,0.1)" : "rgba(107,114,128,0.1)",
                           color: a.isActive ? "#34d399" : "#9ca3af",
-                        }}
-                      >
+                        }}>
                         {a.isActive ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td>
-                      <span className="source-badge">
+                    <td className={tdCls}>
+                      <span className="text-[11px] text-gray-600 bg-gray-500/10 px-[7px] py-[2px] rounded-[4px]">
                         {a.manuallyGranted ? "Manual" : "Payment"}
                       </span>
                     </td>
-                    <td>
+                    <td className={tdCls}>
                       {a.isActive && (
                         <button
-                          className="deactivate-btn"
                           onClick={() => handleDeactivateAddOn(a._id)}
+                          className="flex items-center gap-1.5 bg-red-500/[0.08] border border-red-500/20 text-red-400 px-2.5 py-1 rounded-[5px] text-[11.5px] cursor-pointer hover:bg-red-500/[0.15] transition-all whitespace-nowrap"
                         >
-                          <Trash2 size={12} />
-                          Deactivate
+                          <Trash2 size={12} />Deactivate
                         </button>
                       )}
                     </td>
@@ -869,60 +617,50 @@ export default function UserDetailPage() {
         )}
       </div>
 
-      {/* Payment History Card */}
-      <div className="card">
-        <div className="card-header">
-          <CreditCard size={15} className="card-icon" />
-          <h2 className="card-title">Payment History</h2>
+      {/* ── Payment History Card ── */}
+      <div className={cardCls}>
+        <div className={cardHeaderCls}>
+          <CreditCard size={15} className="text-blue-500" />
+          <h2 className="text-[14px] font-semibold text-slate-300 flex-1">Payment History</h2>
         </div>
 
         {payments.length === 0 ? (
-          <p className="no-data">No payments found for this user.</p>
+          <p className="px-5 py-6 text-gray-600 text-[13px] italic">No payments found for this user.</p>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Type</th>
-                  <th>Details</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Order ID</th>
-                  <th>Payment ID</th>
+                  {["Date", "Type", "Details", "Amount", "Status", "Order ID", "Payment ID"].map((h) => (
+                    <th key={h} className={thCls}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {payments.map((p) => (
-                  <tr key={p._id}>
-                    <td className="date-cell">{formatDate(p.createdAt)}</td>
-                    <td>
-                      <span className="type-badge">{p.type}</span>
+                  <tr key={p._id} className="border-b border-[#111827] last:border-b-0 hover:bg-[#0f1623] transition-colors">
+                    <td className={`${tdCls} text-xs text-gray-600 whitespace-nowrap`}>{formatDate(p.createdAt)}</td>
+                    <td className={tdCls}>
+                      <span className="text-[11px] font-semibold px-[7px] py-[2px] rounded-[4px] bg-blue-500/10 text-blue-400 capitalize">
+                        {p.type}
+                      </span>
                     </td>
-                    <td className="details-cell">
+                    <td className={`${tdCls} text-[12.5px] text-slate-300`}>
                       {p.planId || p.addonType || "—"}
-                      {p.billingPeriod && (
-                        <span className="period-tag"> · {p.billingPeriod}</span>
-                      )}
+                      {p.billingPeriod && <span className="text-[11.5px] text-gray-600"> · {p.billingPeriod}</span>}
                     </td>
-                    <td className="amount-cell">{formatINR(p.amount)}</td>
-                    <td>
-                      <span
-                        className="badge"
+                    <td className={`${tdCls} font-semibold text-emerald-400`}>{formatINR(p.amount)}</td>
+                    <td className={tdCls}>
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-[5px] whitespace-nowrap"
                         style={{
                           background: `${STATUS_COLORS[p.status] || "#6b7280"}18`,
-                          color: STATUS_COLORS[p.status] || "#6b7280",
-                        }}
-                      >
+                          color: STATUS_COLORS[p.status] || "#9ca3af",
+                        }}>
                         {p.status}
                       </span>
                     </td>
-                    <td>
-                      <CopyableText text={p.razorpayOrderId} />
-                    </td>
-                    <td>
-                      <CopyableText text={p.razorpayPaymentId} />
-                    </td>
+                    <td className={tdCls}><CopyableText text={p.razorpayOrderId} /></td>
+                    <td className={tdCls}><CopyableText text={p.razorpayPaymentId} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -930,538 +668,6 @@ export default function UserDetailPage() {
           </div>
         )}
       </div>
-
-      {/* ─── Styles ─────────────────────────────────────────────────────────── */}
-      <style jsx>{`
-        .page {
-          display: flex;
-          flex-direction: column;
-          gap: 20px;
-        }
-
-        .page-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-
-        .back-link {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: transparent;
-          border: none;
-          color: #6b7280;
-          font-size: 13px;
-          cursor: pointer;
-          padding: 6px 0;
-          transition: color 0.15s;
-        }
-
-        .back-link:hover {
-          color: #cbd5e1;
-        }
-
-        .refresh-btn {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          color: #9ca3af;
-          padding: 7px 13px;
-          border-radius: 8px;
-          font-size: 12.5px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .refresh-btn:hover {
-          border-color: #2d3748;
-          color: #cbd5e1;
-        }
-
-        .success-banner {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(16, 185, 129, 0.08);
-          border: 1px solid rgba(16, 185, 129, 0.2);
-          color: #34d399;
-          padding: 10px 14px;
-          border-radius: 8px;
-          font-size: 13px;
-        }
-
-        .error-banner {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(239, 68, 68, 0.08);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          color: #fca5a5;
-          padding: 10px 14px;
-          border-radius: 8px;
-          font-size: 13px;
-        }
-
-        .card {
-          background: #0d1117;
-          border: 1px solid #1e2530;
-          border-radius: 12px;
-          overflow: hidden;
-        }
-
-        .card-header {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 16px 20px;
-          border-bottom: 1px solid #1a2232;
-        }
-
-        .card-icon {
-          color: #3b82f6;
-        }
-
-        .card-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: #cbd5e1;
-          flex: 1;
-        }
-
-        .card-actions {
-          display: flex;
-          gap: 8px;
-        }
-
-        .user-verified {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          font-size: 12px;
-          color: #9ca3af;
-          margin-left: auto;
-        }
-
-        .info-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 0;
-          padding: 4px 0;
-        }
-
-        .no-data {
-          padding: 24px 20px;
-          color: #4b5563;
-          font-size: 13px;
-          font-style: italic;
-        }
-
-        .sub-view {
-          padding: 16px 20px;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-
-        .sub-top {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .plan-pill {
-          font-size: 11px;
-          font-weight: 700;
-          padding: 4px 10px;
-          border-radius: 6px;
-          border: 1px solid transparent;
-          letter-spacing: 0.05em;
-        }
-
-        .status-pill,
-        .period-pill {
-          font-size: 11px;
-          font-weight: 600;
-          padding: 4px 10px;
-          border-radius: 6px;
-          background: rgba(107, 114, 128, 0.1);
-          color: #9ca3af;
-          text-transform: capitalize;
-        }
-
-        .sub-section-label {
-          font-size: 11px;
-          font-weight: 700;
-          color: #4b5563;
-          text-transform: uppercase;
-          letter-spacing: 0.06em;
-          margin-bottom: 10px;
-        }
-
-        .custom-limits {
-          border-top: 1px solid #1a2232;
-          padding-top: 14px;
-          margin-top: 4px;
-        }
-
-        .limits-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 8px;
-        }
-
-        .limit-item {
-          background: #111827;
-          border-radius: 6px;
-          padding: 8px 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .limit-key {
-          font-size: 10px;
-          color: #4b5563;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-        }
-
-        .limit-val {
-          font-size: 14px;
-          font-weight: 600;
-          color: #cbd5e1;
-        }
-
-        .edit-form {
-          padding: 20px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .custom-section {
-          border-top: 1px solid #1a2232;
-          padding-top: 16px;
-          margin-top: 4px;
-        }
-
-        .form-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 10px;
-        }
-
-        .form-row {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .form-check {
-          justify-content: flex-start;
-        }
-
-        .form-label {
-          font-size: 12.5px;
-          color: #6b7280;
-          font-weight: 500;
-          width: 160px;
-          flex-shrink: 0;
-        }
-
-        .form-select,
-        .form-input {
-          flex: 1;
-          background: #111827;
-          border: 1px solid #1e2530;
-          border-radius: 7px;
-          padding: 7px 11px;
-          font-size: 13px;
-          color: #e2e8f0;
-          outline: none;
-          transition: border-color 0.15s;
-        }
-
-        .form-select:focus,
-        .form-input:focus {
-          border-color: #3b82f6;
-        }
-
-        .form-input[type="date"] {
-          color-scheme: dark;
-        }
-
-        .form-checkbox {
-          width: 16px;
-          height: 16px;
-          accent-color: #3b82f6;
-          cursor: pointer;
-        }
-
-        .edit-btn {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          background: rgba(59, 130, 246, 0.08);
-          border: 1px solid rgba(59, 130, 246, 0.2);
-          color: #60a5fa;
-          padding: 5px 11px;
-          border-radius: 7px;
-          font-size: 12.5px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .edit-btn:hover {
-          background: rgba(59, 130, 246, 0.15);
-        }
-
-        .save-btn {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          background: rgba(16, 185, 129, 0.1);
-          border: 1px solid rgba(16, 185, 129, 0.25);
-          color: #34d399;
-          padding: 5px 11px;
-          border-radius: 7px;
-          font-size: 12.5px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .save-btn:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .save-btn:hover:not(:disabled) {
-          background: rgba(16, 185, 129, 0.18);
-        }
-
-        .cancel-btn {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          background: rgba(107, 114, 128, 0.1);
-          border: 1px solid rgba(107, 114, 128, 0.2);
-          color: #9ca3af;
-          padding: 5px 11px;
-          border-radius: 7px;
-          font-size: 12.5px;
-          cursor: pointer;
-          transition: all 0.15s;
-        }
-
-        .cancel-btn:hover {
-          background: rgba(107, 114, 128, 0.18);
-        }
-
-        .grant-form {
-          padding: 14px 20px;
-          border-bottom: 1px solid #1a2232;
-          background: #0a0f18;
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .grant-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-
-        .grant-error {
-          font-size: 12px;
-          color: #f87171;
-        }
-
-        .table-wrap {
-          overflow-x: auto;
-        }
-
-        .data-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-
-        .data-table th {
-          font-size: 11px;
-          font-weight: 600;
-          color: #4b5563;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          padding: 10px 16px;
-          text-align: left;
-          border-bottom: 1px solid #1a2232;
-          background: #0a0f18;
-          white-space: nowrap;
-        }
-
-        .data-table td {
-          padding: 10px 16px;
-          font-size: 13px;
-          color: #9ca3af;
-          border-bottom: 1px solid #111827;
-          vertical-align: middle;
-        }
-
-        .data-table tr:last-child td {
-          border-bottom: none;
-        }
-
-        .data-table tbody tr:hover td {
-          background: #0f1623;
-        }
-
-        .badge {
-          font-size: 11px;
-          font-weight: 600;
-          padding: 2px 7px;
-          border-radius: 4px;
-          white-space: nowrap;
-        }
-
-        .addon-type {
-          font-size: 12.5px;
-          color: #cbd5e1;
-          text-transform: capitalize;
-        }
-
-        .source-badge {
-          font-size: 11px;
-          color: #6b7280;
-          background: rgba(107, 114, 128, 0.1);
-          padding: 2px 7px;
-          border-radius: 4px;
-        }
-
-        .deactivate-btn {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          background: rgba(239, 68, 68, 0.08);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          color: #f87171;
-          padding: 4px 9px;
-          border-radius: 5px;
-          font-size: 11.5px;
-          cursor: pointer;
-          transition: all 0.15s;
-          white-space: nowrap;
-        }
-
-        .deactivate-btn:hover {
-          background: rgba(239, 68, 68, 0.15);
-        }
-
-        .date-cell {
-          font-size: 12px;
-          color: #6b7280;
-          white-space: nowrap;
-        }
-
-        .type-badge {
-          font-size: 11px;
-          font-weight: 600;
-          padding: 2px 7px;
-          border-radius: 4px;
-          background: rgba(59, 130, 246, 0.1);
-          color: #60a5fa;
-          text-transform: capitalize;
-        }
-
-        .details-cell {
-          font-size: 12.5px;
-          color: #cbd5e1;
-        }
-
-        .period-tag {
-          color: #6b7280;
-          font-size: 11.5px;
-        }
-
-        .amount-cell {
-          font-weight: 600;
-          color: #10b981 !important;
-        }
-
-        @media (max-width: 1100px) {
-          .info-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-
-          .limits-grid {
-            grid-template-columns: repeat(2, 1fr);
-          }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// ─── Info Row Helper ──────────────────────────────────────────────────────────
-
-function InfoRow({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="info-row">
-      <div className="info-icon">
-        <Icon size={13} />
-      </div>
-      <div className="info-content">
-        <p className="info-label">{label}</p>
-        <p className="info-value">{value}</p>
-      </div>
-      <style jsx>{`
-        .info-row {
-          display: flex;
-          align-items: flex-start;
-          gap: 10px;
-          padding: 12px 20px;
-          border-bottom: 1px solid #111827;
-        }
-
-        .info-icon {
-          color: #374151;
-          margin-top: 2px;
-          flex-shrink: 0;
-        }
-
-        .info-content {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .info-label {
-          font-size: 11px;
-          color: #4b5563;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-        }
-
-        .info-value {
-          font-size: 13.5px;
-          color: #cbd5e1;
-          font-weight: 400;
-          word-break: break-word;
-        }
-      `}</style>
     </div>
   );
 }
