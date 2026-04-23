@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
-import { User, Lock, LogOut, Menu, X, Shield, Hash } from "lucide-react";
+import { User, Lock, LogOut, Menu, X, Shield, Hash, CreditCard } from "lucide-react";
 import DeliveryPartnersTable from "@/app/dashboard/profile/delivery-partners/page";
 import ManagerComponent from "@/app/dashboard/profile/ManagerComponent";
 import BasicInformationComponent from "./BasicInformationComponent";
@@ -15,6 +15,7 @@ import BankDetailsComponent from "./BankDetailsComponent";
 import ProductSettingsComponent from "./ProductSettingsComponent";
 import SerialNumberComponent from "./SerialNumberComponent";
 import ActiveSessionsComponent from "./ActiveSessionsComponent";
+import Link from "next/link";
 import type {
   ActiveTab,
   UserProfile,
@@ -219,8 +220,7 @@ export default function ProfilePage() {
   }
 
   // ─────────────────────────────────────────────
-  //  Sidebar nav items (shared between desktop + mobile)
-  //  Order: basic → billing → bank → product-settings → delivery → managers → sessions → password → serial → logout
+  //  Sidebar nav items
   // ─────────────────────────────────────────────
   const navItems: {
     tab: ActiveTab;
@@ -276,14 +276,20 @@ export default function ProfilePage() {
       icon: <Lock size={18} />,
       color: "bg-green-600",
     },
-    // ✅ Serial Bill Number placed just above Logout
     {
       tab: "serial",
       label: "Serial Bill Number",
       icon: <Hash size={18} />,
       color: "bg-gray-600",
     },
-    // ✅ Logout always last
+    // ── PHASE 6 ADDITION: Subscription tab ──────────────────────────────────
+    {
+      tab: "subscription",
+      label: "Subscription",
+      icon: <CreditCard size={18} />,
+      color: "bg-cyan-600",
+    },
+    // ────────────────────────────────────────────────────────────────────────
     {
       tab: "logout",
       label: "Logout",
@@ -516,7 +522,6 @@ export default function ProfilePage() {
               </div>
             )}
 
-            {/* ✅ Serial Bill Number tab — above Logout */}
             {activeTab === "serial" && (
               <div className="space-y-4 sm:space-y-6">
                 <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-gray-800">
@@ -525,6 +530,42 @@ export default function ProfilePage() {
                 <SerialNumberComponent userId={user._id} />
               </div>
             )}
+
+            {/* ── PHASE 6 ADDITION: Subscription tab ────────────────────────── */}
+            {activeTab === "subscription" && (
+              <div className="space-y-4 sm:space-y-6">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-gray-800">
+                    <CreditCard className="w-5 h-5 text-cyan-600" /> Subscription
+                  </h2>
+                </div>
+
+                <p className="text-sm text-gray-600">
+                  View your current plan, usage, and manage your subscription.
+                </p>
+
+                {/* Summary card + link to full page */}
+                <div className="border border-cyan-200 bg-cyan-50 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-cyan-900 mb-0.5">
+                      Full subscription management is available on a dedicated page.
+                    </p>
+                    <p className="text-xs text-cyan-700">
+                      View plan details, usage, active add-ons, payment history,
+                      and upgrade options.
+                    </p>
+                  </div>
+                  <Link
+                    href="/dashboard/subscription"
+                    className="shrink-0 flex items-center gap-2 px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-xl transition-colors"
+                  >
+                    <CreditCard size={15} />
+                    Manage Plan
+                  </Link>
+                </div>
+              </div>
+            )}
+            {/* ────────────────────────────────────────────────────────────────── */}
 
             {activeTab === "logout" && (
               <div className="space-y-4 sm:space-y-6">

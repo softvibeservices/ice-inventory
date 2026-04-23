@@ -1,11 +1,17 @@
 // src/app/dashboard/orders/page.tsx
-
+// PHASE 8 changes (all other logic is IDENTICAL to the original):
+//  1. Import useSubscription hook
+//  2. Add invoice usage display in the page header subtitle
+//  3. Add UpgradePromptModal state — shown when any mutation returns 403 upgradeRequired
+//  4. Import PlanLimitWarning and show it above the main card
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
+import PlanLimitWarning from "@/app/components/PlanLimitWarning";
+import UpgradePromptModal from "@/app/components/UpgradePromptModal";
 import toast from "react-hot-toast";
 import {
   ClipboardList,
@@ -21,6 +27,7 @@ import {
 import OrderList from "./OrderList";
 import OrderModals from "./OrderModals";
 import DiscardConfirmationModal from "./DiscardConfirmationModal";
+import { useSubscription } from "@/hooks/useSubscription";
 
 type QuantitySummary = Record<string, number>;
 type OrderStatus = "Unsettled" | "settled" | "Debt";
@@ -62,7 +69,7 @@ type Order = {
   deliveryNotes?: string;
   remarks?: string;
   createdAt?: string;
-  updatedAt?: string; // ✅ Included for last-edited display and sort
+  updatedAt?: string;
 };
 
 type Product = {
@@ -84,7 +91,6 @@ type SettleMethod = "Cash" | "Bank/UPI" | "Debt";
 type CashBankMethod = "Cash" | "Bank/UPI";
 type TabFilter = "Unsettled" | "Settled" | "Discarded" | "Debt";
 
-// ✅ Updated SortMode includes updated-desc and updated-asc
 type SortMode =
   | "date-desc"
   | "date-asc"
@@ -148,6 +154,23 @@ export default function OrdersPage() {
   const [debtOrders, setDebtOrders] = useState<Order[]>([]);
   const [discardedOrders, setDiscardedOrders] = useState<Order[]>([]);
 
+  // ── PHASE 8: Subscription data ────────────────────────────────────────────
+  const { subscription } = useSubscription();
+  const [upgradeModal, setUpgradeModal] = useState(false);
+
+  const invoicesUsed = subscription
+    ? (subscription.planId === "free_trial"
+        ? subscription.usage.invoicesUsedTotal
+        : subscription.usage.invoicesUsedThisMonth)
+    : null;
+
+  const invoicesLimit = subscription
+    ? (subscription.planId === "free_trial"
+        ? subscription.effectiveLimits.invoicesTotal
+        : subscription.effectiveLimits.invoicesPerMonth)
+    : null;
+  // ─────────────────────────────────────────────────────────────────────────
+
   const handleEditOrder = async (order: Order) => {
     try {
       sessionStorage.setItem(
@@ -159,7 +182,7 @@ export default function OrdersPage() {
         })
       );
       router.push("/dashboard/billing");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Error preparing order for edit:", err);
       toast.error("Failed to open bill for editing");
     }
@@ -183,15 +206,23 @@ export default function OrdersPage() {
       const data = await response.json();
 
       if (!response.ok) {
+        // ── PHASE 8: catch upgradeRequired on any PATCH ───────────────
+        if (response.status === 403 && data?.upgradeRequired) {
+          setUpgradeModal(true);
+          return;
+        }
+        // ─────────────────────────────────────────────────────────────
         toast.error(data.error || "Failed to update delivery status");
         return;
       }
 
       toast.success(`Delivery status changed to ${newStatus}`);
       await fetchOrders();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error changing delivery status:", error);
-      toast.error(error?.message || "Failed to update delivery status");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update delivery status"
+      );
     }
   };
 
@@ -257,9 +288,7 @@ export default function OrdersPage() {
         return;
       }
 
-      let packUnitVal:
-        | ReturnType<typeof parsePackUnit>
-        | undefined = undefined;
+      let packUnitVal: ReturnType<typeof parsePackUnit> | undefined = undefined;
 
       if (it.productId) {
         const prod = productsList.find((p) => p._id === it.productId);
@@ -329,19 +358,19 @@ export default function OrdersPage() {
           throw new Error(data?.error || "Failed to fetch products");
         }
 
-        let arr: any[] = [];
+        let arr: Record<string, unknown>[] = [];
         if (Array.isArray(data)) arr = data;
-        else if (Array.isArray((data as any).products))
-          arr = (data as any).products;
+        else if (Array.isArray((data as { products?: unknown[] }).products))
+          arr = (data as { products: Record<string, unknown>[] }).products;
         else
-          arr = Object.values(data)
+          arr = Object.values(data as Record<string, unknown[]>)
             .filter((v) => Array.isArray(v))
-            .flat();
+            .flat() as Record<string, unknown>[];
 
-        const mapped: Product[] = arr.map((p: any) => ({
+        const mapped: Product[] = arr.map((p) => ({
           _id: String(p._id),
-          name: p.name,
-          packUnit: p.packUnit,
+          name: p.name as string,
+          packUnit: p.packUnit as string | undefined,
         }));
 
         setProducts(mapped);
@@ -367,13 +396,13 @@ export default function OrdersPage() {
         }
 
         const arr: CustomerLite[] = Array.isArray(data)
-          ? data.map((c: any) => ({
+          ? data.map((c: Record<string, unknown>) => ({
               _id: String(c._id),
-              name: c.name,
-              shopName: c.shopName,
-              shopAddress: c.shopAddress,
-              area: c.area,
-              contacts: c.contacts,
+              name: c.name as string,
+              shopName: c.shopName as string,
+              shopAddress: c.shopAddress as string | undefined,
+              area: c.area as string | undefined,
+              contacts: c.contacts as string[] | undefined,
             }))
           : [];
 
@@ -437,9 +466,9 @@ export default function OrdersPage() {
       else if (tab === "Debt") setOrders(debt);
       else if (tab === "Discarded") setOrders(discarded);
       else setOrders(unsettled);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(err?.message || "Failed to load orders");
+      toast.error(err instanceof Error ? err.message : "Failed to load orders");
     } finally {
       setLoading(false);
     }
@@ -511,9 +540,9 @@ export default function OrdersPage() {
 
       setOrders(computed);
       toast.success("Orders refreshed");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(err?.message || "Failed to refresh orders");
+      toast.error(err instanceof Error ? err.message : "Failed to refresh orders");
     } finally {
       setLoading(false);
     }
@@ -548,9 +577,11 @@ export default function OrdersPage() {
       );
       setDiscardOrderToConfirm(null);
       await fetchOrders();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error discarding order:", error);
-      toast.error(error?.message || "Failed to discard order");
+      toast.error(
+        error instanceof Error ? error.message : "Failed to discard order"
+      );
     }
   };
 
@@ -602,9 +633,9 @@ export default function OrdersPage() {
       setOrders((prev) => prev.filter((o) => o._id !== settleOrder._id));
       closeSettleModal();
       await fetchOrders();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(err?.message || "Failed to settle order");
+      toast.error(err instanceof Error ? err.message : "Failed to settle order");
     }
   };
 
@@ -663,9 +694,11 @@ export default function OrdersPage() {
 
       closeDebtSettleModal();
       await fetchOrders();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      toast.error(err?.message || "Failed to settle debt order");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to settle debt order"
+      );
     }
   };
 
@@ -727,6 +760,17 @@ export default function OrdersPage() {
 
       <main className="flex-grow">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+
+          {/* ── PHASE 8: Invoice limit warning above the main card ────────── */}
+          {subscription && (
+            <PlanLimitWarning
+              invoicesUsed={invoicesUsed}
+              invoicesLimit={invoicesLimit}
+              planId={subscription.planId}
+            />
+          )}
+          {/* ─────────────────────────────────────────────────────────────── */}
+
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             {/* Header */}
             <div className="px-4 sm:px-5 lg:px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
@@ -740,10 +784,17 @@ export default function OrdersPage() {
                       <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
                         Order Management
                       </h1>
+                      {/* ── PHASE 8: Invoice usage in subtitle ── */}
                       <p className="text-sm text-slate-600 mt-0.5">
-                        Manage settlement, delivery and discarded order flow in
-                        one place.
+                        {invoicesUsed !== null && invoicesLimit !== null
+                          ? `${invoicesUsed} / ${invoicesLimit} ${
+                              subscription?.planId === "free_trial"
+                                ? "trial invoices used"
+                                : "invoices this month"
+                            }`
+                          : "Manage settlement, delivery and discarded order flow in one place."}
                       </p>
+                      {/* ─────────────────────────────────────────── */}
                     </div>
                   </div>
                 </div>
@@ -845,7 +896,7 @@ export default function OrdersPage() {
                     />
                   </div>
 
-                  {/* Sort — ✅ includes new Last Edited options */}
+                  {/* Sort */}
                   <div className="relative w-full sm:min-w-[240px]">
                     <SlidersHorizontal className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <select
@@ -954,6 +1005,17 @@ export default function OrdersPage() {
         onConfirm={handleConfirmDiscard}
         onCancel={() => setDiscardOrderToConfirm(null)}
       />
+
+      {/* ── PHASE 8: Upgrade prompt modal ─────────────────────────────────── */}
+      <UpgradePromptModal
+        open={upgradeModal}
+        onClose={() => setUpgradeModal(false)}
+        resource="invoice"
+        used={invoicesUsed ?? undefined}
+        limit={invoicesLimit}
+        currentPlanId={subscription?.planId}
+      />
+      {/* ─────────────────────────────────────────────────────────────────── */}
     </div>
   );
 }

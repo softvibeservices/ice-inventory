@@ -7,10 +7,18 @@ import Order from "@/models/Order";
 import Product from "@/models/Product";
 import Customer from "@/models/Customer";
 import { verifyUserRequest } from "@/lib/userAuth";
-import {
-  checkInvoiceLimit,
-  incrementInvoiceCount,
-} from "@/lib/subscriptionGuard";
+
+// ── BUG FIX (Bug 2): Replace the two-step check+increment pattern with the
+//    atomic version to eliminate the TOCTOU race condition.
+//    The old flow was:
+//      1. checkInvoiceLimit()     ← reads counter
+//      2. ~10ms of order creation~
+//      3. incrementInvoiceCount() ← increments counter
+//    Two concurrent requests could both pass step 1 with the same stale
+//    counter, then both increment — consuming 2 slots with only 1 remaining.
+//    atomicCheckAndIncrementInvoice() does the read AND increment in a single
+//    conditional MongoDB findOneAndUpdate, making it race-condition proof.
+import { atomicCheckAndIncrementInvoice } from "@/lib/subscriptionGuard";
 
 function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
   if (!id) return undefined;
@@ -24,11 +32,12 @@ export async function POST(req: NextRequest) {
 
   await connectDB();
 
-  // ─── PHASE 3: Invoice limit guard ────────────────────────────────────────
-  // Orders created here generate invoices (they decrement stock and create
-  // a settlement trail). Apply the same invoice limit as POST /api/bills.
-  // checkInvoiceLimit() calls lazyResetInvoiceCountIfNeeded() internally.
-  const invoiceCheck = await checkInvoiceLimit(auth.userId);
+  // ─── BUG FIX (Bug 2 + Bug 3): Atomic invoice limit guard ─────────────────
+  // atomicCheckAndIncrementInvoice() does the check AND the increment in one
+  // atomic DB operation. If allowed=true, the counter has already been
+  // incremented — do NOT call incrementInvoiceCount() anywhere after this.
+  // Also accepts "grace" subscription status (Bug 3 fix).
+  const invoiceCheck = await atomicCheckAndIncrementInvoice(auth.userId);
   if (!invoiceCheck.allowed) {
     return NextResponse.json(
       {
@@ -43,6 +52,8 @@ export async function POST(req: NextRequest) {
       { status: 403 }
     );
   }
+  // ── If we reach here, the counter has already been incremented atomically.
+  // ── DO NOT call incrementInvoiceCount() anywhere below.
   // ─────────────────────────────────────────────────────────────────────────
 
   try {
@@ -161,10 +172,10 @@ export async function POST(req: NextRequest) {
       session.endSession();
     }
 
-    // ─── PHASE 3: Increment invoice counter after successful creation ─────────
-    // Called AFTER the transaction to ensure we only count successful orders.
-    await incrementInvoiceCount(auth.userId);
-    // ─────────────────────────────────────────────────────────────────────────
+    // ── IMPORTANT: Do NOT call incrementInvoiceCount() here.
+    // ── The counter was already atomically incremented by
+    // ── atomicCheckAndIncrementInvoice() at the top of this handler.
+    // ── Calling it again would double-count the invoice.
 
     return NextResponse.json({ success: true, order }, { status: 201 });
   } catch (err: any) {

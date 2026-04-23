@@ -1,8 +1,10 @@
 "use client";
-  // src/app/components/PricingSection.tsx
+// src/app/components/PricingSection.tsx
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { X, Loader2, Mail, ArrowRight, UserPlus } from "lucide-react";
 
 type Period = "monthly" | "sixmonths" | "yearly";
 type PlanKey = "launch" | "scale" | "business";
@@ -172,6 +174,9 @@ const FAQS = [
   },
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  FAQItem
+// ─────────────────────────────────────────────────────────────────────────────
 function FAQItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
 
@@ -206,6 +211,9 @@ function FAQItem({ q, a }: { q: string; a: string }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  CHECK icon (shared)
+// ─────────────────────────────────────────────────────────────────────────────
 const CHECK = (
   <svg
     className="w-4 h-4 text-cyan-600 shrink-0 mt-0.5"
@@ -228,8 +236,218 @@ function formatPrice(value: number) {
   return new Intl.NumberFormat("en-IN").format(value);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  EmailCheckModal
+//
+//  Shown when a non-logged-in visitor clicks a paid plan CTA.
+//  Checks whether their email is registered:
+//    registered   → redirect to /login (they can log in and then upgrade)
+//    unregistered → redirect to /register
+// ─────────────────────────────────────────────────────────────────────────────
+interface EmailCheckModalProps {
+  open: boolean;
+  planName: string;
+  onClose: () => void;
+}
+
+function EmailCheckModal({ open, planName, onClose }: EmailCheckModalProps) {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus input when modal opens
+  useEffect(() => {
+    if (open) {
+      setEmail("");
+      setError("");
+      setTimeout(() => inputRef.current?.focus(), 80);
+    }
+  }, [open]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [open, onClose]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) {
+      setError("Please enter your email address.");
+      return;
+    }
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(trimmed)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed }),
+      });
+
+      const data = await res.json();
+
+      if (data.exists) {
+        // Registered user → go to login, dashboard/subscription as redirect target
+        router.push(
+          `/login?redirect=/dashboard/subscription&email=${encodeURIComponent(trimmed)}`
+        );
+      } else {
+        // Not registered → go to register
+        router.push(`/register?email=${encodeURIComponent(trimmed)}`);
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[9000] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header strip */}
+        <div className="bg-gray-900 px-6 pt-5 pb-4">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            aria-label="Close"
+          >
+            <X size={16} className="text-white/70" />
+          </button>
+          <p className="text-[11px] font-mono uppercase tracking-widest text-cyan-400 mb-1">
+            Getting started
+          </p>
+          <h2 className="text-lg font-bold text-white">{planName} Plan</h2>
+          <p className="text-sm text-gray-400 mt-1">
+            Enter your registered email to continue
+          </p>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5">
+          <form onSubmit={handleSubmit} noValidate>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Email address
+            </label>
+            <div className="relative">
+              <Mail
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+              />
+              <input
+                ref={inputRef}
+                type="email"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError("");
+                }}
+                placeholder="you@example.com"
+                className={`w-full pl-9 pr-4 py-2.5 text-sm border rounded-xl outline-none transition-all ${
+                  error
+                    ? "border-red-400 focus:ring-2 focus:ring-red-200"
+                    : "border-gray-300 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                }`}
+                autoComplete="email"
+              />
+            </div>
+
+            {error && (
+              <p className="text-xs text-red-600 mt-1.5">{error}</p>
+            )}
+
+            <p className="text-xs text-gray-400 mt-2 leading-5">
+              If you already have an account you&apos;ll be taken to login.
+              New here? We&apos;ll take you to registration.
+            </p>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 mt-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                <>
+                  Continue
+                  <ArrowRight size={15} />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 my-4">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-xs text-gray-400">or</span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+
+          {/* New user shortcut */}
+          <Link
+            href="/register"
+            onClick={onClose}
+            className="w-full flex items-center justify-center gap-2 py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors"
+          >
+            <UserPlus size={15} />
+            Create a new account
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Main PricingSection component  (OLD UI + NEW functionality)
+// ─────────────────────────────────────────────────────────────────────────────
 export default function PricingSection() {
+  const router = useRouter();
   const [period, setPeriod] = useState<Period>("monthly");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Modal state
+  const [modal, setModal] = useState<{ open: boolean; planName: string }>({
+    open: false,
+    planName: "",
+  });
+
+  // Detect logged-in state from localStorage token
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem("token");
+      setIsLoggedIn(!!token);
+    } catch {
+      setIsLoggedIn(false);
+    }
+  }, []);
 
   const currentPlans = useMemo(() => {
     return Object.entries(plans).map(([key, value]) => ({
@@ -239,14 +457,32 @@ export default function PricingSection() {
     }));
   }, [period]);
 
+  // ── Paid plan CTA handler ─────────────────────────────────────────────────
+  function handlePaidPlanClick(planName: string) {
+    if (isLoggedIn) {
+      // Already logged in → go straight to subscription management page
+      router.push("/dashboard/subscription");
+    } else {
+      // Not logged in → show email check modal
+      setModal({ open: true, planName });
+    }
+  }
+
   return (
     <section
       id="pricing"
       aria-labelledby="pricing-heading"
       className="py-24 sm:py-32 bg-white scroll-mt-24"
     >
+      {/* Email check modal (new functionality) */}
+      <EmailCheckModal
+        open={modal.open}
+        planName={modal.planName}
+        onClose={() => setModal({ open: false, planName: "" })}
+      />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* ───────────────── HEADER ───────────────── */}
+        {/* ───────────────── HEADER (old UI) ───────────────── */}
         <div className="max-w-3xl mb-12">
           <p className="text-[11px] font-mono uppercase tracking-[0.22em] text-cyan-600 mb-3">
             Pricing
@@ -266,7 +502,7 @@ export default function PricingSection() {
           </p>
         </div>
 
-        {/* ───────────────── BILLING TOGGLE ───────────────── */}
+        {/* ───────────────── BILLING TOGGLE (old UI) ───────────────── */}
         <div className="flex flex-wrap items-center gap-4 mb-10">
           <div
             className="inline-flex items-center bg-gray-100 rounded-xl p-1"
@@ -303,9 +539,9 @@ export default function PricingSection() {
           </p>
         </div>
 
-        {/* ───────────────── PLANS GRID ───────────────── */}
+        {/* ───────────────── PLANS GRID (old UI — 4 columns) ───────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-          {/* FREE TRIAL */}
+          {/* FREE TRIAL — always a plain Link, no auth required */}
           <article className="flex flex-col border border-gray-200 rounded-3xl p-6 sm:p-7 bg-gray-50">
             <div className="mb-5">
               <div className="text-xs font-semibold text-gray-500 uppercase tracking-[0.18em] mb-2">
@@ -341,7 +577,7 @@ export default function PricingSection() {
             </Link>
           </article>
 
-          {/* PAID PLANS */}
+          {/* PAID PLANS — CTA uses handlePaidPlanClick (new functionality) */}
           {currentPlans.map((plan) => (
             <article
               key={plan.key}
@@ -403,21 +639,26 @@ export default function PricingSection() {
                 ))}
               </ul>
 
-              <Link
-                href="/register"
+              {/*
+               * OLD UI shape (full-width button at the bottom of the card)
+               * NEW functionality: calls handlePaidPlanClick instead of navigating directly
+               */}
+              <button
+                type="button"
+                onClick={() => handlePaidPlanClick(plan.name)}
                 className={`block w-full text-center py-3 text-sm font-semibold rounded-xl transition-colors ${
                   plan.highlight
                     ? "bg-cyan-600 hover:bg-cyan-700 text-white"
                     : "bg-gray-900 hover:bg-gray-800 text-white"
                 }`}
               >
-                {plan.cta}
-              </Link>
+                {isLoggedIn ? `Upgrade to ${plan.name}` : plan.cta}
+              </button>
             </article>
           ))}
         </div>
 
-     {/* ───────────────── CUSTOM PLAN ───────────────── */}
+        {/* ───────────────── CUSTOM PLAN (old UI) ───────────────── */}
         <div className="mb-16 flex flex-col lg:flex-row lg:items-center justify-between gap-5 border border-dashed border-gray-300 rounded-2xl px-6 sm:px-8 py-6 bg-gray-50">
           <div className="max-w-2xl">
             <h3 className="text-lg font-bold text-gray-900 mb-1">
@@ -438,7 +679,7 @@ export default function PricingSection() {
           </a>
         </div>
 
-        {/* ───────────────── ADD-ONS ───────────────── */}
+        {/* ───────────────── ADD-ONS (old UI) ───────────────── */}
         <div className="mb-16">
           <div className="max-w-3xl mb-8">
             <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">
@@ -474,7 +715,7 @@ export default function PricingSection() {
           </div>
         </div>
 
-        {/* ───────────────── FAQ ───────────────── */}
+        {/* ───────────────── FAQ (old UI) ───────────────── */}
         <div className="max-w-4xl">
           <div className="mb-8">
             <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">

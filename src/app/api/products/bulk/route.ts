@@ -6,6 +6,9 @@ import { connectDB } from "@/lib/mongodb";
 import Product from "@/models/Product";
 import { verifyUserRequest } from "@/lib/userAuth";
 
+// ── BUG FIX (Bug 1): Import checkProductLimit so bulk upload respects plan limits
+import { checkProductLimit } from "@/lib/subscriptionGuard";
+
 export async function POST(req: Request) {
   const auth = await verifyUserRequest(req);
   if (auth instanceof NextResponse) return auth;
@@ -22,6 +25,55 @@ export async function POST(req: Request) {
     }
 
     await connectDB();
+
+    // ─── BUG FIX (Bug 1): Bulk product limit guard ───────────────────────
+    // The single-product POST at /api/products correctly calls
+    // checkProductLimit, but bulk upload previously skipped this check
+    // entirely, allowing unlimited products to be imported regardless of
+    // the user's plan. This fix enforces the same limit for bulk uploads.
+    //
+    // We check BEFORE validating individual items so we fail fast if the
+    // batch would exceed the plan limit even if every item were valid.
+    const currentCount = await Product.countDocuments({
+      userId: new mongoose.Types.ObjectId(auth.userId),
+    });
+
+    const productCheck = await checkProductLimit(auth.userId, currentCount);
+
+    if (!productCheck.allowed) {
+      return NextResponse.json(
+        {
+          error:
+            productCheck.limit === 0
+              ? "Your subscription has expired. Please renew your plan to add products."
+              : `You have reached your product limit (${productCheck.used}/${productCheck.limit}). Upgrade your plan to add more products.`,
+          upgradeRequired: true,
+          used: productCheck.used,
+          limit: productCheck.limit,
+        },
+        { status: 403 }
+      );
+    }
+
+    // If the plan has a finite product limit, also check that this batch
+    // won't overshoot it. A user with 45/50 products should not be able
+    // to bulk-import 20 products at once.
+    if (productCheck.limit !== null) {
+      const remaining = productCheck.limit - currentCount;
+      if (products.length > remaining) {
+        return NextResponse.json(
+          {
+            error: `This batch would exceed your product limit. You can add ${remaining} more product(s) on your current plan (${currentCount}/${productCheck.limit} used).`,
+            upgradeRequired: true,
+            used: currentCount,
+            limit: productCheck.limit,
+            canAdd: remaining,
+          },
+          { status: 403 }
+        );
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     const validatedProducts = [];
     const errors = [];

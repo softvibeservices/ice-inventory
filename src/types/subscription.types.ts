@@ -46,12 +46,27 @@ export interface IActiveAddOnSummary {
 // ─────────────────────────────────────────────────────────────────────────────
 //  ISubscriptionUsage
 //
-//  Current usage counters extracted from the Subscription document.
+//  Current usage counters extracted from the Subscription document plus
+//  live DB counts for customers and products.
+//
+//  invoicesUsedThisMonth / invoicesUsedTotal are stored on the Subscription
+//  doc and incremented atomically on every invoice creation.
+//
+//  customersCount / productsCount are computed at request time via
+//  countDocuments() inside GET /api/subscription — they are NOT stored on
+//  the Subscription doc because they change with every create/delete action
+//  and keeping a separate counter in sync would require transactions on every
+//  customer/product mutation. A single indexed count query is cheap enough.
+//
 //  Shown in the frontend as progress bars (used / limit).
 // ─────────────────────────────────────────────────────────────────────────────
 export interface ISubscriptionUsage {
   invoicesUsedThisMonth: number;
   invoicesUsedTotal: number;
+  /** Live count of Customer documents belonging to this user. */
+  customersCount: number;
+  /** Live count of Product documents belonging to this user. */
+  productsCount: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
