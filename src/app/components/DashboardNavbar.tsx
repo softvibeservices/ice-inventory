@@ -21,6 +21,8 @@ import {
   X,
   Map,
   CreditCard,
+  ScrollText,
+  ChevronDown,
 } from "lucide-react";
 import SubscriptionBadge from "./SubscriptionBadge";
 
@@ -33,6 +35,7 @@ export default function DashboardNavbar() {
   const [userId, setUserId] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   /* ================= LOAD USER DATA ================= */
   useEffect(() => {
@@ -49,20 +52,33 @@ export default function DashboardNavbar() {
   }, []);
 
   /* ================= NAV LINKS ================= */
-  const navLinks = [
+  // Primary nav links shown directly in navbar (kept concise)
+  const primaryLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/products", label: "Products", icon: Package },
     { href: "/dashboard/stocks", label: "Stocks", icon: Boxes },
     { href: "/dashboard/customers", label: "Customers", icon: Users },
-    { href: "/dashboard/billing", label: "Billing", icon: FileText },
     { href: "/dashboard/orders", label: "Orders", icon: ClipboardList },
-    { href: "/dashboard/delivery/live-map", label: "Live Map", icon: Map },
-    ...(role === "manager"
-      ? []
-      : [
-          { href: "/dashboard/sales", label: "Sales", icon: BarChart3 },
-        ]),
+    { href: "/dashboard/billing", label: "Billing", icon: FileText },
   ];
+
+  // Secondary links shown in "More" dropdown (admin only on desktop, all on mobile)
+  const secondaryLinks = [
+    { href: "/dashboard/delivery/live-map", label: "Live Map", icon: Map },
+    ...(role !== "manager"
+      ? [
+          { href: "/dashboard/sales", label: "Sales", icon: BarChart3 },
+          {
+            href: "/dashboard/activity-logs",
+            label: "Activity Logs",
+            icon: ScrollText,
+          },
+        ]
+      : []),
+  ];
+
+  // All links combined for mobile menu
+  const allLinks = [...primaryLinks, ...secondaryLinks];
 
   /* ================= NOTIFICATIONS ================= */
   useEffect(() => {
@@ -85,8 +101,6 @@ export default function DashboardNavbar() {
     };
 
     fetchNotifications();
-
-    // Poll for updates every 15 MINUTES
     const interval = setInterval(fetchNotifications, 15 * 60 * 1000);
     return () => clearInterval(interval);
   }, [userId, role]);
@@ -101,12 +115,20 @@ export default function DashboardNavbar() {
     router.push("/login");
   };
 
+  /* ================= ACTIVE LINK CHECK ================= */
+  const isActive = (href: string) => {
+    if (href === "/dashboard") return pathname === "/dashboard";
+    return pathname.startsWith(href);
+  };
+
+  const isSecondaryActive = secondaryLinks.some((l) => isActive(l.href));
+
   return (
     <>
       {/* ================= LOGOUT CONFIRM ================= */}
       {showDialog && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
-          <div className="w-full max-w-sm rounded-xl bg-[#020617] border border-white/10 p-6 text-center shadow-xl">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl bg-[#020617] border border-white/10 p-6 text-center shadow-2xl">
             <h2 className="text-lg font-semibold text-cyan-400 mb-2">
               Confirm Logout
             </h2>
@@ -133,50 +155,96 @@ export default function DashboardNavbar() {
 
       {/* ================= NAVBAR ================= */}
       <header className="sticky top-0 z-50 bg-gradient-to-r from-[#020617] via-[#020b2c] to-[#031136] border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-4">
+        <div className="max-w-[1400px] mx-auto px-4 h-16 flex items-center gap-3">
 
           {/* LOGO */}
-          <Link href="/dashboard" className="flex items-center gap-3">
+          <Link href="/dashboard" className="flex items-center gap-2.5 flex-shrink-0">
             <Image
               src="/logo.png"
               alt="Logo"
-              width={36}
-              height={36}
+              width={34}
+              height={34}
               className="rounded-lg"
             />
-            <span className="hidden sm:block font-semibold text-white">
+            <span className="hidden sm:block font-semibold text-white text-sm whitespace-nowrap">
               IceCream Inventory
             </span>
           </Link>
 
-          {/* DESKTOP NAV */}
-          <nav className="hidden lg:flex items-center gap-2 ml-6">
-            {navLinks.map(({ href, label, icon: Icon }) => (
+          {/* DESKTOP NAV — PRIMARY LINKS */}
+          <nav className="hidden lg:flex items-center gap-1 ml-4 flex-1 min-w-0">
+            {primaryLinks.map(({ href, label, icon: Icon }) => (
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm transition whitespace-nowrap
                   ${
-                    pathname === href
+                    isActive(href)
                       ? "bg-cyan-500/20 text-cyan-400"
                       : "text-slate-300 hover:bg-white/10 hover:text-cyan-300"
                   }`}
               >
-                <Icon size={16} />
-                {label}
+                <Icon size={15} />
+                <span className="hidden xl:inline">{label}</span>
               </Link>
             ))}
+
+            {/* MORE DROPDOWN (secondary links) */}
+            {secondaryLinks.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setMoreOpen((v) => !v)}
+                  onBlur={() => setTimeout(() => setMoreOpen(false), 150)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm transition whitespace-nowrap
+                    ${
+                      isSecondaryActive
+                        ? "bg-cyan-500/20 text-cyan-400"
+                        : "text-slate-300 hover:bg-white/10 hover:text-cyan-300"
+                    }`}
+                >
+                  <span className="hidden xl:inline">More</span>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform ${moreOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                {moreOpen && (
+                  <div className="absolute left-0 top-full mt-1 w-44 bg-[#0a1628] border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                    {secondaryLinks.map(({ href, label, icon: Icon }) => (
+                      <Link
+                        key={href}
+                        href={href}
+                        className={`flex items-center gap-2.5 px-4 py-2.5 text-sm transition
+                          ${
+                            isActive(href)
+                              ? "bg-cyan-500/20 text-cyan-400"
+                              : "text-slate-300 hover:bg-white/10 hover:text-cyan-300"
+                          }`}
+                      >
+                        <Icon size={15} />
+                        {label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </nav>
 
-          {/* RIGHT */}
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          {/* RIGHT SIDE ACTIONS */}
+          <div className="ml-auto flex items-center gap-2">
 
-            {/* ── SUBSCRIPTION BADGE (Admin only, desktop) ── */}
-            {role !== "manager" && <SubscriptionBadge />}
+            {/* SUBSCRIPTION BADGE (Admin only) */}
+            {role !== "manager" && (
+              <div className="hidden sm:block">
+                <SubscriptionBadge />
+              </div>
+            )}
 
             {/* NOTIFICATION BELL (Admin only) */}
             {role !== "manager" && (
-              <Link href={requestsHref} className="relative group">
+              <Link href={requestsHref} className="relative group p-1">
                 <div className="relative">
                   <Bell
                     className={`transition ${
@@ -184,20 +252,19 @@ export default function DashboardNavbar() {
                         ? "text-red-400 hover:text-red-300"
                         : "text-slate-300 hover:text-cyan-400"
                     }`}
-                    size={22}
+                    size={20}
                   />
                   {pendingCount > 0 && (
                     <>
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full animate-ping opacity-75"></span>
-                      <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-lg border border-red-400">
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping opacity-75" />
+                      <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-bold px-1 py-0.5 rounded-full min-w-[16px] text-center shadow-lg border border-red-400 leading-none">
                         {pendingCount > 99 ? "99+" : pendingCount}
                       </span>
                     </>
                   )}
                 </div>
-
                 {pendingCount > 0 && (
-                  <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white text-xs px-3 py-1 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  <div className="absolute -bottom-9 left-1/2 -translate-x-1/2 bg-red-600 text-white text-xs px-2.5 py-1 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     {pendingCount} pending request{pendingCount > 1 ? "s" : ""}
                   </div>
                 )}
@@ -206,9 +273,9 @@ export default function DashboardNavbar() {
 
             {/* PROFILE (Admin only) */}
             {role !== "manager" && (
-              <Link href="/dashboard/profile">
+              <Link href="/dashboard/profile" className="p-1">
                 <UserCircle
-                  size={30}
+                  size={28}
                   className={`transition ${
                     pathname === "/dashboard/profile"
                       ? "text-cyan-400"
@@ -218,23 +285,24 @@ export default function DashboardNavbar() {
               </Link>
             )}
 
-            {/* LOGOUT BUTTON (Desktop - Manager only) */}
+            {/* LOGOUT (Manager — desktop) */}
             {role === "manager" && (
               <button
                 onClick={() => setShowDialog(true)}
-                className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
+                className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
               >
-                <LogOut size={18} />
+                <LogOut size={16} />
                 <span className="hidden xl:inline">Logout</span>
               </button>
             )}
 
-            {/* MOBILE MENU BUTTON */}
+            {/* MOBILE MENU TOGGLE */}
             <button
               onClick={() => setMobileOpen((s) => !s)}
-              className="lg:hidden text-slate-300 hover:text-cyan-400"
+              className="lg:hidden text-slate-300 hover:text-cyan-400 p-1"
+              aria-label="Toggle menu"
             >
-              {mobileOpen ? <X size={26} /> : <Menu size={26} />}
+              {mobileOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
         </div>
@@ -242,82 +310,103 @@ export default function DashboardNavbar() {
         {/* ================= MOBILE MENU ================= */}
         {mobileOpen && (
           <div className="lg:hidden border-t border-white/10 bg-[#020617]">
-            <div className="px-4 py-3 space-y-1">
-              {navLinks.map(({ href, label, icon: Icon }) => (
+            <div className="px-4 py-3 space-y-0.5 max-h-[80vh] overflow-y-auto">
+              {allLinks.map(({ href, label, icon: Icon }) => (
                 <Link
                   key={href}
                   href={href}
                   onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition
                     ${
-                      pathname === href
+                      isActive(href)
                         ? "bg-cyan-500/20 text-cyan-400"
                         : "text-slate-300 hover:bg-white/10"
                     }`}
                 >
-                  <Icon size={18} />
+                  <Icon size={17} />
                   {label}
                 </Link>
               ))}
 
-              {/* Mobile Admin-only items */}
+              {/* Mobile — Admin-only extras */}
               {role !== "manager" && (
                 <>
-                  {/* ── SUBSCRIPTION LINK (mobile, admin only) ── */}
+                  <div className="my-1 border-t border-white/10" />
+
                   <Link
                     href="/dashboard/subscription"
                     onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition ${
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition ${
                       pathname === "/dashboard/subscription"
                         ? "bg-cyan-500/20 text-cyan-400"
                         : "text-slate-300 hover:bg-white/10"
                     }`}
                   >
-                    <CreditCard size={18} />
+                    <CreditCard size={17} />
                     Subscription
                   </Link>
 
                   <Link
                     href="/dashboard/profile"
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-md text-sm text-slate-300 hover:bg-white/10 transition"
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition ${
+                      pathname === "/dashboard/profile"
+                        ? "bg-cyan-500/20 text-cyan-400"
+                        : "text-slate-300 hover:bg-white/10"
+                    }`}
                   >
-                    <UserCircle size={18} />
+                    <UserCircle size={17} />
                     Profile
                   </Link>
 
                   <Link
                     href={requestsHref}
                     onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition relative ${
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-md text-sm transition relative ${
                       pendingCount > 0
                         ? "text-red-400 hover:bg-red-500/10"
                         : "text-slate-300 hover:bg-white/10"
                     }`}
                   >
-                    <Bell size={18} />
+                    <Bell size={17} />
                     <span>Delivery Requests</span>
                     {pendingCount > 0 && (
-                      <span className="ml-auto bg-red-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg border border-red-400">
+                      <span className="ml-auto bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-lg border border-red-400">
                         {pendingCount > 99 ? "99+" : pendingCount}
                       </span>
                     )}
                   </Link>
+
+                  {/* Logout for Admin on mobile */}
+                  <div className="pt-1 border-t border-white/10 mt-1">
+                    <button
+                      onClick={() => {
+                        setMobileOpen(false);
+                        setShowDialog(true);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
+                    >
+                      <LogOut size={17} />
+                      Logout
+                    </button>
+                  </div>
                 </>
               )}
 
-              {/* LOGOUT (Mobile - Manager only) */}
+              {/* Logout for Manager on mobile */}
               {role === "manager" && (
-                <button
-                  onClick={() => {
-                    setMobileOpen(false);
-                    setShowDialog(true);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
-                >
-                  <LogOut size={18} />
-                  Logout
-                </button>
+                <div className="pt-1 border-t border-white/10 mt-1">
+                  <button
+                    onClick={() => {
+                      setMobileOpen(false);
+                      setShowDialog(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
+                  >
+                    <LogOut size={17} />
+                    Logout
+                  </button>
+                </div>
               )}
             </div>
           </div>

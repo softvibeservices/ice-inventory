@@ -2,76 +2,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getActivityLogs } from '@/lib/activityLogger';
 import { connectDB } from '@/lib/mongodb';
+import { verifyUserRequest } from '@/lib/userAuth';
 
 /**
  * GET /api/activity-logs/export
- * Export activity logs as CSV
+ * Export activity logs as CSV for admin's shop.
+ * Secured via JWT Bearer token — admin role only.
  */
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
-    
-    // Get user from headers
-    const userId = request.headers.get('x-user-id');
-    const userRole = request.headers.get('x-user-role');
-    
-    if (!userId || userRole !== 'admin') {
+
+    const auth = await verifyUserRequest(request);
+    if (auth instanceof NextResponse) return auth;
+
+    if (auth.role !== 'admin') {
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { error: 'Forbidden: Admin access required' },
+        { status: 403 }
       );
     }
-    
-    // Get all logs for this shop (with high limit)
-    const result = await getActivityLogs(
-      { shopId: userId },
-      1,
-      10000 // Large limit for export
-    );
-    
-    // Convert to CSV
-    const csvRows = [
-      // Header row
-      [
-        'Timestamp',
-        'Business Date',
-        'Actor Name',
-        'Actor Role',
-        'Action Type',
-        'Category',
-        'Severity',
-        'Serial Number',
-        'Customer Name',
-        'Details'
-      ].join(','),
-      
-      // Data rows
-      ...result.logs.map(log => {
-        const details = log.details || {};
-        return [
-          new Date(log.timestamp).toISOString(),
-          new Date(log.businessDate).toLocaleDateString(),
-          `"${log.actorName}"`,
-          log.actorRole,
-          log.actionType,
-          log.actionCategory,
-          log.severity,
-          `"${details.serialNumber || 'N/A'}"`,
-          `"${details.customerName || 'N/A'}"`,
-          `"${JSON.stringify(details).replace(/"/g, '""')}"` // Escape quotes
-        ].join(',');
-      })
+
+    // Parse optional date range from query params for filtered export
+    const { searchParams } = new URL(request.url);
+    const filters: any = { shopId: auth.userId };
+    if (searchParams.get('startDate')) {
+      filters.startDate = new Date(searchParams.get('startDate')!);
+    }
+    if (searchParams.get('endDate')) {
+      filters.endDate = new Date(searchParams.get('endDate')!);
+    }
+
+    // Fetch all logs for this shop (high limit for export)
+    const result = await getActivityLogs(filters, 1, 10000);
+
+    // Build CSV
+    const headers = [
+      'Timestamp',
+      'Date',
+      'Time',
+      'Actor Name',
+      'Actor Role',
+      'Action',
+      'Category',
+      'Severity',
+      'Order #',
+      'Customer',
+      'Amount',
+      'Details',
     ];
-    
-    const csv = csvRows.join('\n');
-    
+
+    const escape = (val: any): string => {
+      if (val == null) return '';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = result.logs.map((log) => {
+      const d = log.details || {};
+      const ts = new Date(log.timestamp);
+      return [
+        escape(ts.toISOString()),
+        escape(ts.toLocaleDateString('en-IN')),
+        escape(ts.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })),
+        escape(log.actorName),
+        escape(log.actorRole),
+        escape(log.actionType.replace(/_/g, ' ')),
+        escape(log.actionCategory),
+        escape(log.severity),
+        escape(d.serialNumber || d.billNumber || ''),
+        escape(d.customerName || ''),
+        escape(d.amount || d.totalAmount || d.settledAmount || d.orderAmount || ''),
+        escape(JSON.stringify(d)),
+      ].join(',');
+    });
+
+    const csv = [headers.map(escape).join(','), ...rows].join('\n');
+
     return new NextResponse(csv, {
       headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="activity-logs-${Date.now()}.csv"`,
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="activity-logs-${new Date().toISOString().slice(0, 10)}.csv"`,
       },
     });
-    
+
   } catch (error) {
     console.error('[API] Activity logs export error:', error);
     return NextResponse.json(
