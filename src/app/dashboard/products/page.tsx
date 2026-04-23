@@ -1,5 +1,5 @@
 // src/app/dashboard/products/page.tsx
-"use client";
+"use client"; 
 
 import React, { JSX, useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
