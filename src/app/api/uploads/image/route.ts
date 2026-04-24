@@ -1,5 +1,4 @@
 // src/app/api/uploads/image/route.ts
-
 import { NextResponse } from "next/server";
 import cloudinary from "@/lib/cloudinary";
 import type { UploadApiResponse } from "cloudinary";
@@ -43,11 +42,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // ✅ Validate file size (max 5MB)
-    const maxSizeBytes = 5 * 1024 * 1024; // 5MB
-    if (file.size > maxSizeBytes) {
+    // ✅ Validate file size based on tag/type
+    // Logo: 200 KB max, QR: 250 KB max, Signature: 200 KB max
+    let maxSizeKB = 250; // Default to QR's max
+    if (tag === "logo" || tag === "sig") {
+      maxSizeKB = 200;
+    }
+    
+    const fileSizeKB = file.size / 1024;
+    if (fileSizeKB > maxSizeKB) {
       return NextResponse.json(
-        { error: "File size exceeds 5MB limit" },
+        { error: `File size exceeds ${maxSizeKB} KB limit (current: ${Math.round(fileSizeKB)} KB)` },
         { status: 400, headers: corsHeaders }
       );
     }
