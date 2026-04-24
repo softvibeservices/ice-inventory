@@ -7,10 +7,27 @@ import { verifyUserRequest } from "@/lib/userAuth";
 
 export const runtime = "nodejs";
 
+// ✅ Add CORS headers to prevent tracking prevention issues
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+// Handle preflight OPTIONS request
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function POST(req: Request) {
   // Verify the user is authenticated before accepting any upload
   const auth = await verifyUserRequest(req);
-  if (auth instanceof NextResponse) return auth;
+  if (auth instanceof NextResponse) {
+    return NextResponse.json(
+      { error: "Unauthorized. Please log in again." },
+      { status: 401, headers: corsHeaders }
+    );
+  }
 
   try {
     const formData = await req.formData();
@@ -22,7 +39,25 @@ export async function POST(req: Request) {
     if (!file) {
       return NextResponse.json(
         { error: "No file provided" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // ✅ Validate file size (max 5MB)
+    const maxSizeBytes = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSizeBytes) {
+      return NextResponse.json(
+        { error: "File size exceeds 5MB limit" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // ✅ Validate file type
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(file.type)) {
+      return NextResponse.json(
+        { error: "Invalid file type. Only images are allowed." },
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -36,7 +71,7 @@ export async function POST(req: Request) {
             folder,
             overwrite: true,
             resource_type: "image",
-            tags: [tag],
+            tags: [tag, `user-${auth.userId}`], // ✅ Add user tag for tracking
             transformation: [{ fetch_format: "auto", quality: "auto" }],
           },
           (error, result) => {
@@ -58,10 +93,14 @@ export async function POST(req: Request) {
         height: uploadResult.height,
         format: uploadResult.format,
       },
-      { status: 200 }
+      { status: 200, headers: corsHeaders }
     );
   } catch (e) {
     const message = e instanceof Error ? e.message : "Upload failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error("Upload error:", message);
+    return NextResponse.json(
+      { error: message },
+      { status: 500, headers: corsHeaders }
+    );
   }
 }

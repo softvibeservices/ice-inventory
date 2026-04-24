@@ -50,10 +50,10 @@ export default function BillingDetailsComponent({ userId }: Props) {
     if (!userId) return;
     (async () => {
       try {
-       const token = localStorage.getItem("token");
-const res = await fetch(`/api/seller-details`, {
-  headers: { "Authorization": `Bearer ${token}` },
-});
+        const token = localStorage.getItem("token");
+        const res = await fetch(`/api/seller-details`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!res.ok) {
           return;
         }
@@ -150,21 +150,34 @@ const res = await fetch(`/api/seller-details`, {
     []
   );
 
-  // Upload to Cloudinary via API route
+  // ✅ FIX: Upload to Cloudinary via API route WITH AUTHENTICATION
   const uploadToCloudinary = async (file: File, tag: "logo" | "qr" | "sig") => {
     try {
       setUploading((u) => ({ ...u, [tag]: true }));
       await validateImage(file, tag);
+      
       const form = new FormData();
       form.append("file", file);
       form.append("folder", "icecream-inventory/billing-assets");
       form.append("tag", tag);
+      
+      // ✅ GET TOKEN AND SEND IT WITH REQUEST
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("Authentication token not found. Please login again.");
+      }
+      
       const res = await fetch("/api/uploads/image", {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`, // ✅ THIS WAS MISSING!
+        },
         body: form,
       });
+      
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Upload failed");
+      
       if (tag === "logo") {
         setBill((b) => ({
           ...b,
@@ -215,14 +228,14 @@ const res = await fetch(`/api/seller-details`, {
     setSaveLoading(true);
     try {
       const token = localStorage.getItem("token");
-const res = await fetch("/api/seller-details", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
-  },
-  body: JSON.stringify({ ...bill }),  // userId removed — server uses token
-});
+      const res = await fetch("/api/seller-details", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ...bill }),
+      });
       const data = await res.json();
       if (!res.ok) {
         setSaveLoading(false);
@@ -241,7 +254,7 @@ const res = await fetch("/api/seller-details", {
         signatureUrl: data.signatureUrl ?? bill.signatureUrl,
         signaturePublicId: data.signaturePublicId ?? bill.signaturePublicId,
         slogan: data.slogan ?? bill.slogan,
-        compositionLine: data.compositionLine ?? bill.compositionLine, // ✅ Save composition line
+        compositionLine: data.compositionLine ?? bill.compositionLine,
         _id: data._id ?? data._id,
         userId: data.userId ?? userId,
       };
@@ -323,7 +336,6 @@ const res = await fetch("/api/seller-details", {
                 {bill.slogan || "—"}
               </div>
             </div>
-            {/* ✅ NEW: Display Composition Line */}
             <div className="sm:col-span-2">
               <div className="text-xs text-gray-500 mb-1">Composition Line (appears below GST on bill)</div>
               <div className="text-sm text-gray-800 break-words">
@@ -597,7 +609,7 @@ const res = await fetch("/api/seller-details", {
               />
             </label>
 
-            {/* ✅ NEW: Composition Line Field */}
+            {/* Composition Line Field */}
             <label className="text-sm text-gray-600 md:col-span-2">
               <div className="flex items-center gap-2 mb-1">
                 <span>Composition Line (appears below GST on bill)</span>
