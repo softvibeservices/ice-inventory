@@ -106,6 +106,13 @@ export default function CustomerList({
     return colors[idx];
   };
 
+  // Check if settlement button should be disabled
+  const isSettlementDisabled = (customer: Customer) => {
+    const credit = Number(customer.credit ?? 0);
+    const debit = Number(customer.debit ?? 0);
+    return credit <= 0 || debit <= 0;
+  };
+
   const renderPagination = () => {
     if (viewAll || totalPages <= 1) return null;
     const maxVisible = 5;
@@ -239,6 +246,8 @@ export default function CustomerList({
             ) : (
               paginatedCustomers.map((c, idx) => {
                 const globalIndex = viewAll ? filtered.indexOf(c) + 1 : (currentPage - 1) * ITEMS_PER_PAGE + idx + 1;
+                const settlementDisabled = isSettlementDisabled(c);
+                
                 return (
                   <tr key={c._id} className="hover:bg-slate-50/60 transition-colors group">
                     <td className="px-4 py-3">
@@ -303,7 +312,12 @@ export default function CustomerList({
                         <ActionBtn onClick={() => handleEdit(c)} title="Edit" color="amber">
                           <Edit size={13} />
                         </ActionBtn>
-                        <ActionBtn onClick={() => openSettlementModal(c)} title="Settle" color="emerald">
+                        <ActionBtn 
+                          onClick={() => openSettlementModal(c)} 
+                          title={settlementDisabled ? "No amount to settle" : "Settle"} 
+                          color="emerald"
+                          disabled={settlementDisabled}
+                        >
                           <DollarSign size={13} />
                         </ActionBtn>
                         <ActionBtn onClick={() => openDeleteModal(c._id)} title="Delete" color="red">
@@ -334,6 +348,8 @@ export default function CustomerList({
         ) : (
           paginatedCustomers.map((c, idx) => {
             const globalIndex = viewAll ? filtered.indexOf(c) + 1 : (currentPage - 1) * ITEMS_PER_PAGE + idx + 1;
+            const settlementDisabled = isSettlementDisabled(c);
+            
             return (
               <div key={c._id} className="px-4 py-4 space-y-3 hover:bg-slate-50/60 transition-colors">
                 {/* Top row */}
@@ -390,7 +406,15 @@ export default function CustomerList({
                   <button onClick={() => handleEdit(c)} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-amber-50 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition">
                     <Edit size={13} /> Edit
                   </button>
-                  <button onClick={() => openSettlementModal(c)} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-50 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition">
+                  <button 
+                    onClick={() => openSettlementModal(c)} 
+                    disabled={settlementDisabled}
+                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${
+                      settlementDisabled 
+                        ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    }`}
+                  >
                     <DollarSign size={13} /> Settle
                   </button>
                   <button onClick={() => openDeleteModal(c._id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition">
@@ -415,11 +439,13 @@ function ActionBtn({
   title,
   color,
   children,
+  disabled = false,
 }: {
   onClick: () => void;
   title: string;
   color: "blue" | "amber" | "emerald" | "red";
   children: React.ReactNode;
+  disabled?: boolean;
 }) {
   const colorMap = {
     blue: "bg-blue-50 text-blue-600 hover:bg-blue-100",
@@ -427,11 +453,17 @@ function ActionBtn({
     emerald: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100",
     red: "bg-red-50 text-red-500 hover:bg-red-100",
   };
+  
+  const disabledStyle = "bg-slate-100 text-slate-400 cursor-not-allowed";
+  
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`flex h-7 w-7 items-center justify-center rounded-md transition ${colorMap[color]}`}
+      disabled={disabled}
+      className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
+        disabled ? disabledStyle : colorMap[color]
+      }`}
     >
       {children}
     </button>

@@ -133,7 +133,7 @@ export default function CustomerViewModal({ customer, onClose, onDelete }: Props
               {customer.location?.latitude && customer.location?.longitude ? (
                 <button
                   onClick={openInMap}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 transition mt-1"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700 underline transition mt-1"
                 >
                   <MapPin size={12} />
                   View on Google Maps
