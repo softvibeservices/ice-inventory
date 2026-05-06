@@ -1,219 +1,195 @@
-// src/app/api/admin/subscriptions/route.ts
+// src/app/api/subscription/route.ts
 //
 // ─────────────────────────────────────────────────────────────────────────────
-//  GET /api/admin/subscriptions  — superAdmin only
+//  GET /api/subscription
 //
-//  Returns a paginated list of ALL subscriptions across all users.
-//  Joins with the User collection to include the user's name and email.
+//  SECURITY FIX (VUL-09): Added `export const dynamic = "force-dynamic"`
 //
-//  Query parameters:
-//    page        — page number (default: 1)
-//    limit       — items per page (default: 20, max: 100)
-//    plan        — filter by planId
-//    status      — filter by subscription status
-//    dateFrom    — filter subscriptions created on or after this date (ISO string)
-//    dateTo      — filter subscriptions created on or before this date (ISO string)
-//    search      — search by user email or name (requires a join — handled via
-//                  user lookup first then subscription query)
+//  WHY THIS MATTERS:
+//    Without this directive, Next.js may cache this route's response during
+//    the build phase (static generation). Subscription data is user-specific
+//    and changes frequently (usage counters, expiry dates, add-on activation).
+//    Serving stale cached data would show users incorrect limits and billing info.
 //
-//  Response shape:
+//  BEFORE:
+//    No dynamic directive → route could be statically cached → users see stale data
+//
+//  AFTER:
+//    `export const dynamic = "force-dynamic"` → route always runs server-side
+//    per request → users always see current subscription state
+//
+//  Returns the full subscription status for the authenticated admin user.
+//  This is the primary endpoint consumed by:
+//    - SubscriptionBadge.tsx
+//    - PlanLimitWarning.tsx
+//    - UpgradePromptModal.tsx
+//    - /dashboard/subscription/page.tsx
+//
+//  Auth: Admin only (not manager — managers don't have their own subscription;
+//        they operate under their admin's subscription).
+//
+//  The response shape is ISubscriptionStatusResponse from subscription.types.ts:
 //    {
-//      subscriptions: IAdminSubscriptionListItem[]
-//      total: number
-//      page: number
-//      limit: number
-//      totalPages: number
+//      subscription: ISubscriptionStatus  — plan, usage, limits, add-ons
+//      recentPayments: IPaymentRecordSummary[] — last 10 payment records
 //    }
+//
+//  Lazy operations performed before responding:
+//    1. lazyResetInvoiceCountIfNeeded() — resets monthly counter if past anchor
+//    2. Subscription lazy expiry check (inside getActiveSubscription())
+//    3. Add-on lazy expiry check (inside getActiveAddOns())
+//
+//  This ensures the data shown to the user is always current without needing
+//  background cron jobs (Vercel Free Tier compatible).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse } from "next/server";
-import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
-import { verifySuperAdminRequest } from "@/lib/superAdminAuth";
-import Subscription from "@/models/Subscription";
-import User from "@/models/User";
+import { verifyUserRequest } from "@/lib/userAuth";
+import {
+  getActiveSubscription,
+  getActiveAddOns,
+  getEffectiveCapabilities,
+  lazyResetInvoiceCountIfNeeded,
+} from "@/lib/subscriptionGuard";
+import PaymentRecord from "@/models/PaymentRecord";
+import Customer from "@/models/Customer";
+import Product from "@/models/Product";
 import { PLAN_NAMES } from "@/types/subscription.types";
-import type { PlanId, BillingPeriod, SubscriptionStatus } from "@/types/subscription.types";
+import type {
+  ISubscriptionStatus,
+  IActiveAddOnSummary,
+  IPaymentRecordSummary,
+  ISubscriptionStatusResponse,
+} from "@/types/subscription.types";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Response item shape
+//  VUL-09 FIX: Force dynamic rendering
 // ─────────────────────────────────────────────────────────────────────────────
-interface IAdminSubscriptionListItem {
-  subscriptionId: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  userShopName: string | null;
-  planId: PlanId;
-  planName: string;
-  billingPeriod: BillingPeriod;
-  status: SubscriptionStatus;
-  startDate: string;
-  currentPeriodEnd: string | null;
-  trialEndsAt: string | null;
-  invoicesUsedThisMonth: number;
-  invoicesUsedTotal: number;
-  invoiceCountResetAt: string;
-  hasCustomLimits: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  GET handler
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET(req: Request): Promise<NextResponse> {
   try {
-    // ── 1. SuperAdmin auth ─────────────────────────────────────────────────
-    const auth = await verifySuperAdminRequest(req);
+    // ── 1. Auth check ───────────────────────────────────────────────────────
+    const auth = await verifyUserRequest(req);
     if (auth instanceof NextResponse) return auth;
 
-    await connectDB();
-
-    // ── 2. Parse query parameters ─────────────────────────────────────────
-    const { searchParams } = new URL(req.url);
-
-    const page   = Math.max(1, parseInt(searchParams.get("page")  ?? "1", 10));
-    const limit  = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10)));
-    const skip   = (page - 1) * limit;
-
-    const planFilter   = searchParams.get("plan")   as PlanId | null;
-    const statusFilter = searchParams.get("status") as SubscriptionStatus | null;
-    const dateFrom     = searchParams.get("dateFrom");
-    const dateTo       = searchParams.get("dateTo");
-    const search       = searchParams.get("search")?.trim() ?? "";
-
-    // ── 3. If search is provided, first look up matching user IDs ─────────
-    let userIdFilter: mongoose.Types.ObjectId[] | null = null;
-
-    if (search) {
-      const matchingUsers = await User.find({
-        role: "admin",
-        $or: [
-          { name:     { $regex: search, $options: "i" } },
-          { email:    { $regex: search, $options: "i" } },
-          { shopName: { $regex: search, $options: "i" } },
-        ],
-      })
-        .select("_id")
-        .lean();
-
-      userIdFilter = matchingUsers.map((u) => u._id as mongoose.Types.ObjectId);
-
-      // If no users match the search, return empty result immediately
-      if (userIdFilter.length === 0) {
-        return NextResponse.json(
-          { subscriptions: [], total: 0, page, limit, totalPages: 0 },
-          { status: 200 }
-        );
-      }
-    }
-
-    // ── 4. Build subscription query ────────────────────────────────────────
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const subQuery: Record<string, any> = {};
-
-    if (userIdFilter !== null) {
-      subQuery.userId = { $in: userIdFilter };
-    }
-
-    const validPlans: PlanId[] = ["free_trial", "launch", "scale", "business", "customize"];
-    if (planFilter && validPlans.includes(planFilter)) {
-      subQuery.planId = planFilter;
-    }
-
-    const validStatuses: SubscriptionStatus[] = ["active", "expired", "cancelled", "grace"];
-    if (statusFilter && validStatuses.includes(statusFilter)) {
-      subQuery.status = statusFilter;
-    }
-
-    // Date range filter on createdAt
-    if (dateFrom || dateTo) {
-      subQuery.createdAt = {};
-      if (dateFrom) {
-        const fromDate = new Date(dateFrom);
-        if (!isNaN(fromDate.getTime())) {
-          subQuery.createdAt.$gte = fromDate;
-        }
-      }
-      if (dateTo) {
-        const toDate = new Date(dateTo);
-        if (!isNaN(toDate.getTime())) {
-          // Set to end of day
-          toDate.setHours(23, 59, 59, 999);
-          subQuery.createdAt.$lte = toDate;
-        }
-      }
-    }
-
-    // ── 5. Fetch subscriptions with pagination ────────────────────────────
-    const [subscriptions, total] = await Promise.all([
-      Subscription.find(subQuery)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Subscription.countDocuments(subQuery),
-    ]);
-
-    if (subscriptions.length === 0) {
+    // ── 2. Admin-only guard ─────────────────────────────────────────────────
+    //  Managers operate under their admin's subscription.
+    //  The subscription GET is for admin account holders only.
+    if (auth.role === "manager") {
       return NextResponse.json(
-        { subscriptions: [], total: 0, page, limit, totalPages: 0 },
-        { status: 200 }
+        {
+          error:
+            "Subscription management is only available to admin account holders.",
+        },
+        { status: 403 }
       );
     }
 
-    // ── 6. Batch-fetch user data for these subscriptions ──────────────────
-    const subUserIds = subscriptions.map((s) => s.userId);
+    await connectDB();
 
-    const users = await User.find({ _id: { $in: subUserIds } })
-      .select("_id name email shopName")
+    const userId = auth.userId;
+
+    // ── 3. Fetch subscription with lazy expiry check ────────────────────────
+    const subscription = await getActiveSubscription(userId);
+
+    if (!subscription) {
+      return NextResponse.json(
+        {
+          error:
+            "No subscription found for this account. Please contact support.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ── 4. Lazy monthly invoice counter reset ───────────────────────────────
+    //  Must run before reading invoicesUsedThisMonth so the displayed count
+    //  is always accurate for the current billing month.
+    await lazyResetInvoiceCountIfNeeded(subscription);
+
+    // ── 5. Fetch active add-ons (with lazy expiry) ──────────────────────────
+    const activeAddOns = await getActiveAddOns(userId);
+
+    // ── 6. Get effective capabilities (plan + add-on bonuses merged) ────────
+    const { capabilities } = await getEffectiveCapabilities(userId);
+
+    // ── 7. Live counts for customers and products ───────────────────────────
+    //  These are NOT stored on the Subscription doc — they are computed fresh
+    //  on each request via an indexed countDocuments() query. This is cheap
+    //  (single index scan) and always accurate regardless of creates/deletes.
+    //  Running both in parallel keeps latency minimal.
+    const [customersCount, productsCount] = await Promise.all([
+      Customer.countDocuments({ userId }),
+      Product.countDocuments({ userId }),
+    ]);
+
+    // ── 8. Build the ISubscriptionStatus response shape ─────────────────────
+    const addOnSummaries: IActiveAddOnSummary[] = activeAddOns.map((addon) => ({
+      id: String(addon._id),
+      type: addon.type,
+      quantity: addon.quantity,
+      expiresAt: addon.expiresAt ? addon.expiresAt.toISOString() : null,
+      isActive: addon.isActive,
+    }));
+
+    const subscriptionStatus: ISubscriptionStatus = {
+      planId: subscription.planId,
+      planName: PLAN_NAMES[subscription.planId],
+      billingPeriod: subscription.billingPeriod,
+      status: subscription.status,
+      startDate: subscription.startDate.toISOString(),
+      currentPeriodEnd: subscription.currentPeriodEnd
+        ? subscription.currentPeriodEnd.toISOString()
+        : null,
+      trialEndsAt: subscription.trialEndsAt
+        ? subscription.trialEndsAt.toISOString()
+        : null,
+      usage: {
+        invoicesUsedThisMonth: subscription.invoicesUsedThisMonth,
+        invoicesUsedTotal: subscription.invoicesUsedTotal,
+        customersCount,
+        productsCount,
+      },
+      effectiveLimits: capabilities,
+      invoiceCountResetAt: subscription.invoiceCountResetAt.toISOString(),
+      activeAddOns: addOnSummaries,
+    };
+
+    // ── 9. Fetch last 10 payment records for this user ──────────────────────
+    const rawPayments = await PaymentRecord.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(10)
       .lean();
 
-    const userMap = new Map(users.map((u) => [String(u._id), u]));
+    const recentPayments: IPaymentRecordSummary[] = rawPayments.map((p) => ({
+      id: String(p._id),
+      type: p.type,
+      planId: p.planId,
+      billingPeriod: p.billingPeriod,
+      addonType: p.addonType,
+      addonQuantity: p.addonQuantity,
+      amount: p.amount,
+      currency: p.currency,
+      status: p.status,
+      razorpayOrderId: p.razorpayOrderId,
+      razorpayPaymentId: p.razorpayPaymentId,
+      createdAt: (p.createdAt as Date).toISOString(),
+    }));
 
-    // ── 7. Build response items ────────────────────────────────────────────
-    const items: IAdminSubscriptionListItem[] = subscriptions.map((sub) => {
-      const user = userMap.get(String(sub.userId));
+    // ── 10. Return the combined response ─────────────────────────────────────
+    const response: ISubscriptionStatusResponse = {
+      subscription: subscriptionStatus,
+      recentPayments,
+    };
 
-      return {
-        subscriptionId:       String(sub._id),
-        userId:               String(sub.userId),
-        userName:             user?.name ?? "Unknown User",
-        userEmail:            user?.email ?? "—",
-        userShopName:         user?.shopName ?? null,
-        planId:               sub.planId as PlanId,
-        planName:             PLAN_NAMES[sub.planId as PlanId],
-        billingPeriod:        (sub.billingPeriod ?? "monthly") as BillingPeriod,
-        status:               sub.status as SubscriptionStatus,
-        startDate:            (sub.startDate as Date).toISOString(),
-        currentPeriodEnd:     sub.currentPeriodEnd
-          ? (sub.currentPeriodEnd as Date).toISOString()
-          : null,
-        trialEndsAt:          sub.trialEndsAt
-          ? (sub.trialEndsAt as Date).toISOString()
-          : null,
-        invoicesUsedThisMonth: sub.invoicesUsedThisMonth,
-        invoicesUsedTotal:     sub.invoicesUsedTotal,
-        invoiceCountResetAt:  (sub.invoiceCountResetAt as Date).toISOString(),
-        hasCustomLimits:      !!sub.customLimits,
-        createdAt:            (sub.createdAt as Date).toISOString(),
-        updatedAt:            (sub.updatedAt as Date).toISOString(),
-      };
-    });
-
-    return NextResponse.json(
-      {
-        subscriptions: items,
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-      { status: 200 }
-    );
+    return NextResponse.json(response, { status: 200 });
   } catch (error) {
-    console.error("[GET /api/admin/subscriptions] Error:", error);
+    console.error("[GET /api/subscription] Unexpected error:", error);
     return NextResponse.json(
       { error: "Internal server error. Please try again later." },
       { status: 500 }
