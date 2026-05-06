@@ -1,30 +1,26 @@
 // src/app/dashboard/subscription/page.tsx
 //
 // ─────────────────────────────────────────────────────────────────────────────
-//  /dashboard/subscription
+//  FIXED VUL-06: Real Razorpay checkout integration
 //
-//  Full subscription management page for admin users.
-//
-//  Sections:
-//    1. Current plan card — plan name, status, dates, days remaining
-//    2. Usage bars         — invoices, customers, products
-//    3. Active add-ons     — type, quantity, expiry
-//    4. Upgrade plans      — Launch / Scale / Business comparison cards
-//    5. Add-ons catalogue  — 6 add-on tiles
-//    6. Payment history    — last 10 PaymentRecord docs
-//
-//  Since Razorpay keys are not yet configured, upgrade / add-on purchase
-//  buttons display a "Coming soon" state and show a contact support modal.
-//  When Razorpay keys are added, replace the handleUpgrade / handleAddon
-//  functions with the actual Razorpay checkout flow.
+//  CHANGES FROM PREVIOUS VERSION:
+//    - Removed ComingSoonModal — replaced with actual payment flow
+//    - Added handleUpgradePlan() — creates Razorpay order and opens checkout
+//    - Added handlePurchaseAddon() — handles add-on purchases
+//    - Added Razorpay callback handling with payment verification
+//    - Added proper error states and loading indicators
+//    - Invalidates subscription cache after successful payment
+//    - All "Upgrade" and "Buy" buttons now trigger real payment flow
 // ─────────────────────────────────────────────────────────────────────────────
 
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
+import { invalidateSubscriptionCache } from "@/hooks/useSubscription";
 import {
   CreditCard,
   CheckCircle2,
@@ -39,10 +35,12 @@ import {
   RefreshCw,
   AlertTriangle,
   Mail,
+  Loader2,
+  X,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Types (mirrors subscription.types.ts ISubscriptionStatusResponse)
+//  TypeScript interfaces
 // ─────────────────────────────────────────────────────────────────────────────
 interface EffectiveLimits {
   invoicesPerMonth: number | null;
@@ -97,6 +95,20 @@ interface PaymentRecord {
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   createdAt: string;
+}
+
+// Razorpay checkout response shape
+interface RazorpayResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
+// Extend Window type for Razorpay
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,36 +198,42 @@ const UPGRADE_PLANS = [
   },
 ];
 
-const ADDON_DISPLAY: Record<string, { label: string; desc: string; price: string }> = {
+const ADDON_DISPLAY: Record<string, { label: string; desc: string; price: string; addonType: string }> = {
   extra_invoice_100: {
     label: "+100 Invoices/Month",
     desc: "Add 100 more invoices to your monthly plan.",
     price: "₹199/mo",
+    addonType: "extra_invoice_100",
   },
   extra_invoice_300: {
     label: "+300 Invoices/Month",
     desc: "Add 300 more invoices for higher billing volume.",
     price: "₹499/mo",
+    addonType: "extra_invoice_300",
   },
   extra_manager: {
     label: "+1 Manager Seat",
     desc: "One additional internal manager account.",
     price: "₹149/mo",
+    addonType: "extra_manager",
   },
   extra_delivery: {
     label: "+3 Delivery Partners",
     desc: "Expand your dispatch team.",
     price: "₹199/mo",
+    addonType: "extra_delivery",
   },
   advanced_reports: {
     label: "Advanced Reports",
     desc: "Deeper business reporting and insights.",
     price: "₹299/mo",
+    addonType: "advanced_reports",
   },
   setup_migration: {
     label: "Setup & Migration",
     desc: "We help you import products, customers and configure your system.",
     price: "₹499 one-time",
+    addonType: "setup_migration",
   },
 };
 
@@ -340,16 +358,18 @@ function PaymentStatusBadge({ status }: { status: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Coming Soon Modal — shown when upgrade is clicked without Razorpay
+//  Error Modal — shown when payment fails or verification fails
 // ─────────────────────────────────────────────────────────────────────────────
-function ComingSoonModal({
+function ErrorModal({
   open,
   onClose,
-  planName,
+  title,
+  message,
 }: {
   open: boolean;
   onClose: () => void;
-  planName?: string;
+  title: string;
+  message: string;
 }) {
   if (!open) return null;
   return (
@@ -361,45 +381,24 @@ function ComingSoonModal({
         className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-14 h-14 rounded-2xl bg-cyan-50 border border-cyan-100 flex items-center justify-center mx-auto mb-4">
-          <Zap size={26} className="text-cyan-600" />
+        <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mx-auto mb-4">
+          <XCircle size={26} className="text-red-600" />
         </div>
-        <h3 className="text-lg font-bold text-gray-900 mb-2">
-          {planName ? `Upgrade to ${planName}` : "Payment coming soon"}
-        </h3>
-        <p className="text-sm text-gray-600 leading-6 mb-5">
-          Online payments are being set up and will be available very soon.
-          To upgrade your plan now, please contact us directly at{" "}
-          <a
-            href="mailto:support@softvibe.in"
-            className="text-cyan-600 font-semibold hover:underline"
-          >
-            support@softvibe.in
-          </a>{" "}
-          and we&apos;ll activate your plan manually.
-        </p>
-        <div className="flex flex-col gap-3">
-          <a
-            href="mailto:support@softvibe.in"
-            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            <Mail size={16} />
-            Email support
-          </a>
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2.5 border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors"
-          >
-            Close
-          </button>
-        </div>
+        <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
+        <p className="text-sm text-gray-600 leading-6 mb-5">{message}</p>
+        <button
+          onClick={onClose}
+          className="w-full px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-xl transition-colors"
+        >
+          Close
+        </button>
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Page component
+//  Main Page Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function SubscriptionPage() {
   const router = useRouter();
@@ -409,9 +408,15 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Coming-soon modal
-  const [csModal, setCsModal] = useState<{ open: boolean; planName?: string }>({
+  // Checkout state
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+
+  // Error modal state
+  const [errorModal, setErrorModal] = useState<{ open: boolean; title: string; message: string }>({
     open: false,
+    title: "",
+    message: "",
   });
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
@@ -468,6 +473,208 @@ export default function SubscriptionPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // ── Handle plan upgrade (subscription payment) ────────────────────────────
+  const handleUpgradePlan = async (planId: string, billingPeriod: "monthly" | "yearly") => {
+    if (!razorpayLoaded) {
+      setErrorModal({
+        open: true,
+        title: "Payment Gateway Loading",
+        message: "Payment system is still loading. Please wait a moment and try again.",
+      });
+      return;
+    }
+
+    setCheckoutLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+
+      // Step 1: Create Razorpay order
+      const createRes = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ planId, billingPeriod }),
+      });
+
+      if (!createRes.ok) {
+        const errData = await createRes.json();
+        throw new Error(errData.error || "Failed to create payment order");
+      }
+
+      const orderData = await createRes.json();
+
+      // Step 2: Open Razorpay checkout
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        order_id: orderData.razorpayOrderId,
+        name: "Ice Inventory",
+        description: `${orderData.planId} Plan - ${orderData.billingPeriod}`,
+        handler: async (response: RazorpayResponse) => {
+          // Step 3: Verify payment on backend
+          try {
+            const verifyRes = await fetch("/api/payment/verify", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+                paymentRecordId: orderData.paymentRecordId,
+              }),
+            });
+
+            if (!verifyRes.ok) {
+              throw new Error("Payment verification failed");
+            }
+
+            // Step 4: Invalidate cache and refresh
+            invalidateSubscriptionCache();
+            await fetchData();
+            
+            setErrorModal({
+              open: true,
+              title: "Payment Successful!",
+              message: "Your plan has been upgraded successfully. The page will refresh to show your new limits.",
+            });
+          } catch (verifyErr) {
+            setErrorModal({
+              open: true,
+              title: "Verification Failed",
+              message:
+                "Payment was completed but verification failed. Your plan will be activated shortly. If not, please contact support.",
+            });
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setCheckoutLoading(false);
+          },
+        },
+        theme: {
+          color: "#0891B2",
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      setErrorModal({
+        open: true,
+        title: "Payment Failed",
+        message: err instanceof Error ? err.message : "Failed to initiate payment. Please try again.",
+      });
+      setCheckoutLoading(false);
+    }
+  };
+
+  // ── Handle add-on purchase ─────────────────────────────────────────────────
+  const handlePurchaseAddon = async (addonType: string) => {
+    if (!razorpayLoaded) {
+      setErrorModal({
+        open: true,
+        title: "Payment Gateway Loading",
+        message: "Payment system is still loading. Please wait a moment and try again.",
+      });
+      return;
+    }
+
+    setCheckoutLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+
+      // Step 1: Create addon order
+      const createRes = await fetch("/api/payment/addon/create-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ addonType, quantity: 1 }),
+      });
+
+      if (!createRes.ok) {
+        const errData = await createRes.json();
+        throw new Error(errData.error || "Failed to create addon order");
+      }
+
+      const orderData = await createRes.json();
+
+      // Step 2: Open Razorpay checkout
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        order_id: orderData.razorpayOrderId,
+        name: "Ice Inventory",
+        description: ADDON_DISPLAY[addonType]?.label || "Add-on Purchase",
+        handler: async (response: RazorpayResponse) => {
+          // Step 3: Verify addon payment
+          try {
+            const verifyRes = await fetch("/api/payment/addon/verify", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+                paymentRecordId: orderData.paymentRecordId,
+              }),
+            });
+
+            if (!verifyRes.ok) {
+              throw new Error("Add-on verification failed");
+            }
+
+            // Step 4: Refresh data
+            invalidateSubscriptionCache();
+            await fetchData();
+            
+            setErrorModal({
+              open: true,
+              title: "Add-on Activated!",
+              message: "Your add-on has been purchased and activated successfully.",
+            });
+          } catch (verifyErr) {
+            setErrorModal({
+              open: true,
+              title: "Verification Failed",
+              message:
+                "Payment was completed but verification failed. Your add-on will be activated shortly.",
+            });
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setCheckoutLoading(false);
+          },
+        },
+        theme: {
+          color: "#0891B2",
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+    } catch (err) {
+      setErrorModal({
+        open: true,
+        title: "Payment Failed",
+        message: err instanceof Error ? err.message : "Failed to initiate payment. Please try again.",
+      });
+      setCheckoutLoading(false);
+    }
+  };
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) {
@@ -531,374 +738,413 @@ export default function SubscriptionPage() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
-      <DashboardNavbar />
-
-      <ComingSoonModal
-        open={csModal.open}
-        onClose={() => setCsModal({ open: false })}
-        planName={csModal.planName}
+    <>
+      {/* Razorpay Script */}
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        onLoad={() => setRazorpayLoaded(true)}
+        onError={() => {
+          setErrorModal({
+            open: true,
+            title: "Payment System Error",
+            message: "Failed to load payment system. Please refresh the page and try again.",
+          });
+        }}
       />
 
-      <main className="flex-grow max-w-5xl mx-auto w-full px-4 py-6 sm:py-8 space-y-6">
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <DashboardNavbar />
 
-        {/* ── Page header ─────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Subscription</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Manage your plan, usage and billing history
-            </p>
-          </div>
-          <button
-            onClick={fetchData}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 bg-white hover:bg-gray-50 rounded-xl transition-colors"
-          >
-            <RefreshCw size={14} />
-            Refresh
-          </button>
-        </div>
+        <ErrorModal
+          open={errorModal.open}
+          onClose={() => setErrorModal({ open: false, title: "", message: "" })}
+          title={errorModal.title}
+          message={errorModal.message}
+        />
 
-        {/* ── Expired banner ───────────────────────────────────────────────── */}
-        {isExpired && (
-          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-            <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold text-red-800">
-                Your subscription has expired
-              </p>
-              <p className="text-xs text-red-700 mt-0.5">
-                Upgrade below to restore access to billing and other features.
-              </p>
+        {/* Loading overlay during checkout */}
+        {checkoutLoading && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4">
+              <Loader2 size={40} className="text-cyan-600 animate-spin" />
+              <p className="text-gray-700 font-semibold">Processing payment...</p>
+              <p className="text-sm text-gray-500">Please do not close this window</p>
             </div>
           </div>
         )}
 
-        {/* ── Current Plan Card ────────────────────────────────────────────── */}
-        <div className={`bg-white rounded-2xl border p-5 sm:p-6 ${planDisplay.color}`}>
-          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            <div className="flex items-start gap-3">
-              <div className="w-11 h-11 rounded-xl bg-white/70 border border-current/20 flex items-center justify-center shrink-0">
-                <CreditCard size={20} />
-              </div>
+        <main className="flex-grow max-w-5xl mx-auto w-full px-4 py-6 sm:py-8 space-y-6">
+
+          {/* ── Page header ─────────────────────────────────────────────────── */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Subscription</h1>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Manage your plan, usage and billing history
+              </p>
+            </div>
+            <button
+              onClick={fetchData}
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 bg-white hover:bg-gray-50 rounded-xl transition-colors"
+            >
+              <RefreshCw size={14} />
+              Refresh
+            </button>
+          </div>
+
+          {/* ── Expired banner ───────────────────────────────────────────────── */}
+          {isExpired && (
+            <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
               <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-lg font-bold">{planDisplay.name} Plan</h2>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${planDisplay.badge}`}>
-                    {sub.status === "active"
-                      ? "Active"
-                      : sub.status === "grace"
-                      ? "Grace Period"
-                      : "Expired"}
-                  </span>
-                </div>
-                <p className="text-sm opacity-70 mt-0.5">{planDisplay.tagline}</p>
+                <p className="text-sm font-semibold text-red-800">
+                  Your subscription has expired
+                </p>
+                <p className="text-xs text-red-700 mt-0.5">
+                  Upgrade below to restore access to billing and other features.
+                </p>
               </div>
             </div>
+          )}
 
-            {/* Dates */}
-            <div className="text-right text-sm space-y-1 shrink-0">
-              {sub.planId === "free_trial" ? (
-                <>
-                  <p className="opacity-60">Trial ends</p>
-                  <p className="font-semibold">{formatDate(sub.trialEndsAt)}</p>
-                  {daysLeft !== null && (
-                    <p
-                      className={`text-xs font-medium ${
-                        daysLeft <= 5 ? "text-red-600" : "opacity-70"
-                      }`}
-                    >
-                      {daysLeft > 0 ? `${daysLeft} days left` : "Expired today"}
+          {/* ── Current Plan Card ────────────────────────────────────────────── */}
+          <div className={`bg-white rounded-2xl border p-5 sm:p-6 ${planDisplay.color}`}>
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white/70 border border-current/20 flex items-center justify-center shrink-0">
+                  <CreditCard size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-lg font-bold">{planDisplay.name} Plan</h2>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${planDisplay.badge}`}>
+                      {sub.status === "active"
+                        ? "Active"
+                        : sub.status === "grace"
+                        ? "Grace Period"
+                        : "Expired"}
+                    </span>
+                  </div>
+                  <p className="text-sm opacity-70 mt-0.5">{planDisplay.tagline}</p>
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="text-right text-sm space-y-1 shrink-0">
+                {sub.planId === "free_trial" ? (
+                  <>
+                    <p className="opacity-60">Trial ends</p>
+                    <p className="font-semibold">{formatDate(sub.trialEndsAt)}</p>
+                    {daysLeft !== null && (
+                      <p
+                        className={`text-xs font-medium ${
+                          daysLeft <= 5 ? "text-red-600" : "opacity-70"
+                        }`}
+                      >
+                        {daysLeft > 0 ? `${daysLeft} days left` : "Expired today"}
+                      </p>
+                    )}
+                  </>
+                ) : sub.currentPeriodEnd ? (
+                  <>
+                    <p className="opacity-60">Renews on</p>
+                    <p className="font-semibold capitalize">
+                      {sub.billingPeriod} · {formatDate(sub.currentPeriodEnd)}
                     </p>
-                  )}
-                </>
-              ) : sub.currentPeriodEnd ? (
-                <>
-                  <p className="opacity-60">Renews on</p>
-                  <p className="font-semibold capitalize">
-                    {sub.billingPeriod} · {formatDate(sub.currentPeriodEnd)}
-                  </p>
-                  {daysLeft !== null && (
-                    <p className="text-xs opacity-70">{daysLeft} days remaining</p>
-                  )}
-                </>
-              ) : null}
-              <p className="text-xs opacity-50">Since {formatDate(sub.startDate)}</p>
+                    {daysLeft !== null && (
+                      <p className="text-xs opacity-70">{daysLeft} days remaining</p>
+                    )}
+                  </>
+                ) : null}
+                <p className="text-xs opacity-50">Since {formatDate(sub.startDate)}</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* ── Usage ────────────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-1">Usage</h3>
-          <p className="text-xs text-gray-400 mb-4">
-            {sub.planId === "free_trial"
-              ? "Lifetime invoice count · Resets never"
-              : `Monthly usage · Resets on ${formatDate(sub.invoiceCountResetAt)}`}
-          </p>
-
-          <UsageBar
-            label={sub.planId === "free_trial" ? "Trial Invoices (lifetime)" : "Invoices this month"}
-            icon={FileText}
-            used={invoicesUsed}
-            limit={invoicesLimit}
-          />
-          <UsageBar
-            label="Customers"
-            icon={Users}
-            used={sub.usage.customersCount}
-            limit={sub.effectiveLimits.customers}
-            suffix=" slots"
-          />
-          <UsageBar
-            label="Products"
-            icon={Package}
-            used={sub.usage.productsCount}
-            limit={sub.effectiveLimits.products}
-            suffix=" slots"
-          />
-        </div>
-
-        {/* ── Active Add-ons ───────────────────────────────────────────────── */}
-        {sub.activeAddOns.length > 0 && (
+          {/* ── Usage ────────────────────────────────────────────────────────── */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
-            <h3 className="text-base font-semibold text-gray-900 mb-4">
-              Active Add-ons
-            </h3>
-            <div className="space-y-3">
-              {sub.activeAddOns.map((addon) => {
-                const info = ADDON_DISPLAY[addon.type];
-                return (
-                  <div
-                    key={addon.id}
-                    className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center shrink-0">
-                        <Zap size={15} className="text-cyan-600" />
+            <h3 className="text-base font-semibold text-gray-900 mb-1">Usage</h3>
+            <p className="text-xs text-gray-400 mb-4">
+              {sub.planId === "free_trial"
+                ? "Lifetime invoice count · Resets never"
+                : `Monthly usage · Resets on ${formatDate(sub.invoiceCountResetAt)}`}
+            </p>
+
+            <UsageBar
+              label={sub.planId === "free_trial" ? "Trial Invoices (lifetime)" : "Invoices this month"}
+              icon={FileText}
+              used={invoicesUsed}
+              limit={invoicesLimit}
+            />
+            <UsageBar
+              label="Customers"
+              icon={Users}
+              used={sub.usage.customersCount}
+              limit={sub.effectiveLimits.customers}
+              suffix=" slots"
+            />
+            <UsageBar
+              label="Products"
+              icon={Package}
+              used={sub.usage.productsCount}
+              limit={sub.effectiveLimits.products}
+              suffix=" slots"
+            />
+          </div>
+
+          {/* ── Active Add-ons ───────────────────────────────────────────────── */}
+          {sub.activeAddOns.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">
+                Active Add-ons
+              </h3>
+              <div className="space-y-3">
+                {sub.activeAddOns.map((addon) => {
+                  const info = ADDON_DISPLAY[addon.type];
+                  return (
+                    <div
+                      key={addon.id}
+                      className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-cyan-100 flex items-center justify-center shrink-0">
+                          <Zap size={15} className="text-cyan-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">
+                            {info?.label ?? addon.type}
+                          </p>
+                          {addon.quantity > 1 && (
+                            <p className="text-xs text-gray-500">× {addon.quantity}</p>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">
-                          {info?.label ?? addon.type}
-                        </p>
-                        {addon.quantity > 1 && (
-                          <p className="text-xs text-gray-500">× {addon.quantity}</p>
+                      <div className="text-right">
+                        {addon.expiresAt ? (
+                          <p className="text-xs text-gray-500">
+                            Expires {formatDate(addon.expiresAt)}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-green-600 font-medium">
+                            Lifetime
+                          </p>
                         )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      {addon.expiresAt ? (
-                        <p className="text-xs text-gray-500">
-                          Expires {formatDate(addon.expiresAt)}
-                        </p>
-                      ) : (
-                        <p className="text-xs text-green-600 font-medium">
-                          Lifetime
-                        </p>
-                      )}
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Upgrade Plans ────────────────────────────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-semibold text-gray-900">
+                {sub.planId === "free_trial" || isExpired
+                  ? "Choose a plan"
+                  : "Upgrade your plan"}
+              </h3>
+              <TrendingUp size={18} className="text-cyan-600" />
+            </div>
+            <p className="text-xs text-gray-400 mb-5">
+              Select a plan and complete payment to upgrade instantly.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {UPGRADE_PLANS.map((plan) => {
+                const isCurrent = sub.planId === plan.id && !isExpired;
+                return (
+                  <article
+                    key={plan.id}
+                    className={`relative rounded-xl border p-4 flex flex-col gap-3 ${
+                      plan.highlight
+                        ? "border-cyan-400 bg-cyan-50/40 shadow-sm"
+                        : "border-gray-200"
+                    } ${isCurrent ? "ring-2 ring-green-400" : ""}`}
+                  >
+                    {plan.highlight && (
+                      <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-cyan-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                        POPULAR
+                      </span>
+                    )}
+                    {isCurrent && (
+                      <span className="absolute -top-2.5 right-4 bg-green-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                        CURRENT
+                      </span>
+                    )}
+
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">{plan.name}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{plan.tagline}</p>
                     </div>
-                  </div>
+
+                    <div className="text-2xl font-extrabold text-gray-900">
+                      ₹{plan.monthly.toLocaleString("en-IN")}
+                      <span className="text-xs font-normal text-gray-400 ml-1">/mo</span>
+                    </div>
+
+                    <ul className="space-y-1.5 flex-1">
+                      {plan.features.map((f) => (
+                        <li key={f} className="flex items-start gap-2 text-xs text-gray-600">
+                          <CheckCircle2 size={13} className="text-cyan-600 shrink-0 mt-0.5" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+
+                    <button
+                      onClick={() => {
+                        if (!isCurrent) {
+                          handleUpgradePlan(plan.id, "monthly");
+                        }
+                      }}
+                      disabled={isCurrent || checkoutLoading}
+                      className={`w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold rounded-xl transition-colors ${
+                        isCurrent
+                          ? "bg-green-50 text-green-700 border border-green-200 cursor-default"
+                          : checkoutLoading
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : plan.highlight
+                          ? "bg-cyan-600 hover:bg-cyan-700 text-white"
+                          : "bg-gray-900 hover:bg-gray-800 text-white"
+                      }`}
+                    >
+                      {isCurrent ? (
+                        <>
+                          <CheckCircle2 size={13} />
+                          Current Plan
+                        </>
+                      ) : checkoutLoading ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          Upgrade to {plan.name}
+                          <ChevronRight size={13} />
+                        </>
+                      )}
+                    </button>
+                  </article>
                 );
               })}
             </div>
           </div>
-        )}
 
-        {/* ── Upgrade Plans ────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-base font-semibold text-gray-900">
-              {sub.planId === "free_trial" || isExpired
-                ? "Choose a plan"
-                : "Upgrade your plan"}
-            </h3>
-            <TrendingUp size={18} className="text-cyan-600" />
-          </div>
-          <p className="text-xs text-gray-400 mb-5">
-            Payment gateway integration coming soon — contact us to upgrade now.
-          </p>
+          {/* ── Add-ons Catalogue ────────────────────────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-base font-semibold text-gray-900">Optional Add-ons</h3>
+              <Zap size={18} className="text-amber-500" />
+            </div>
+            <p className="text-xs text-gray-400 mb-5">
+              Expand your plan without changing your tier.
+            </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {UPGRADE_PLANS.map((plan) => {
-              const isCurrent = sub.planId === plan.id && !isExpired;
-              return (
-                <article
-                  key={plan.id}
-                  className={`relative rounded-xl border p-4 flex flex-col gap-3 ${
-                    plan.highlight
-                      ? "border-cyan-400 bg-cyan-50/40 shadow-sm"
-                      : "border-gray-200"
-                  } ${isCurrent ? "ring-2 ring-green-400" : ""}`}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.entries(ADDON_DISPLAY).map(([type, info]) => (
+                <div
+                  key={type}
+                  className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-shadow"
                 >
-                  {plan.highlight && (
-                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-cyan-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                      POPULAR
-                    </span>
-                  )}
-                  {isCurrent && (
-                    <span className="absolute -top-2.5 right-4 bg-green-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                      CURRENT
-                    </span>
-                  )}
-
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">{plan.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{plan.tagline}</p>
+                  <p className="text-sm font-semibold text-gray-800 mb-1">
+                    {info.label}
+                  </p>
+                  <p className="text-xs text-gray-500 leading-5 mb-3">{info.desc}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-gray-900">{info.price}</span>
+                    <button
+                      onClick={() => handlePurchaseAddon(info.addonType)}
+                      disabled={checkoutLoading}
+                      className={`text-xs font-semibold transition-colors ${
+                        checkoutLoading
+                          ? "text-gray-400 cursor-not-allowed"
+                          : "text-cyan-600 hover:text-cyan-700"
+                      }`}
+                    >
+                      {checkoutLoading ? "..." : "Buy →"}
+                    </button>
                   </div>
-
-                  <div className="text-2xl font-extrabold text-gray-900">
-                    ₹{plan.monthly.toLocaleString("en-IN")}
-                    <span className="text-xs font-normal text-gray-400 ml-1">/mo</span>
-                  </div>
-
-                  <ul className="space-y-1.5 flex-1">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-xs text-gray-600">
-                        <CheckCircle2 size={13} className="text-cyan-600 shrink-0 mt-0.5" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <button
-                    onClick={() =>
-                      setCsModal({ open: true, planName: plan.name })
-                    }
-                    disabled={isCurrent}
-                    className={`w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold rounded-xl transition-colors ${
-                      isCurrent
-                        ? "bg-green-50 text-green-700 border border-green-200 cursor-default"
-                        : plan.highlight
-                        ? "bg-cyan-600 hover:bg-cyan-700 text-white"
-                        : "bg-gray-900 hover:bg-gray-800 text-white"
-                    }`}
-                  >
-                    {isCurrent ? (
-                      <>
-                        <CheckCircle2 size={13} />
-                        Current Plan
-                      </>
-                    ) : (
-                      <>
-                        Upgrade to {plan.name}
-                        <ChevronRight size={13} />
-                      </>
-                    )}
-                  </button>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── Add-ons Catalogue ────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-base font-semibold text-gray-900">Optional Add-ons</h3>
-            <Zap size={18} className="text-amber-500" />
-          </div>
-          <p className="text-xs text-gray-400 mb-5">
-            Expand your plan without changing your tier.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(ADDON_DISPLAY).map(([type, info]) => (
-              <div
-                key={type}
-                className="border border-gray-100 rounded-xl p-4 hover:shadow-sm transition-shadow"
-              >
-                <p className="text-sm font-semibold text-gray-800 mb-1">
-                  {info.label}
-                </p>
-                <p className="text-xs text-gray-500 leading-5 mb-3">{info.desc}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-gray-900">{info.price}</span>
-                  <button
-                    onClick={() =>
-                      setCsModal({ open: true, planName: info.label })
-                    }
-                    className="text-xs font-semibold text-cyan-600 hover:text-cyan-700 transition-colors"
-                  >
-                    Buy →
-                  </button>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Payment History ───────────────────────────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-4">
+              Payment History
+            </h3>
+
+            {payments.length === 0 ? (
+              <div className="py-10 text-center">
+                <CreditCard size={32} className="text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-400">No payments yet.</p>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Payment History ───────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
-          <h3 className="text-base font-semibold text-gray-900 mb-4">
-            Payment History
-          </h3>
-
-          {payments.length === 0 ? (
-            <div className="py-10 text-center">
-              <CreditCard size={32} className="text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-400">No payments yet.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[520px]">
-                <thead>
-                  <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-                    <th className="pb-2 font-medium pr-4">Date</th>
-                    <th className="pb-2 font-medium pr-4">Description</th>
-                    <th className="pb-2 font-medium pr-4">Amount</th>
-                    <th className="pb-2 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {payments.map((p) => (
-                    <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="py-3 pr-4 text-gray-500 text-xs whitespace-nowrap">
-                        {formatDate(p.createdAt)}
-                      </td>
-                      <td className="py-3 pr-4 text-gray-700">
-                        {p.type === "subscription"
-                          ? `${
-                              PLAN_DISPLAY[p.planId ?? ""]?.name ?? p.planId
-                            } Plan · ${p.billingPeriod ?? ""}`
-                          : ADDON_DISPLAY[p.addonType ?? ""]?.label ??
-                            p.addonType}
-                      </td>
-                      <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">
-                        {formatCurrency(p.amount)}
-                      </td>
-                      <td className="py-3">
-                        <PaymentStatusBadge status={p.status} />
-                      </td>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[520px]">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-400 border-b border-gray-100">
+                      <th className="pb-2 font-medium pr-4">Date</th>
+                      <th className="pb-2 font-medium pr-4">Description</th>
+                      <th className="pb-2 font-medium pr-4">Amount</th>
+                      <th className="pb-2 font-medium">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* ── Support CTA ───────────────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border border-dashed border-gray-300 rounded-2xl px-5 py-4 bg-gray-50">
-          <div>
-            <p className="font-semibold text-gray-800 text-sm">
-              Need a custom plan or have a billing question?
-            </p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Contact our team and we&apos;ll help you find the right fit.
-            </p>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {payments.map((p) => (
+                      <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="py-3 pr-4 text-gray-500 text-xs whitespace-nowrap">
+                          {formatDate(p.createdAt)}
+                        </td>
+                        <td className="py-3 pr-4 text-gray-700">
+                          {p.type === "subscription"
+                            ? `${
+                                PLAN_DISPLAY[p.planId ?? ""]?.name ?? p.planId
+                              } Plan · ${p.billingPeriod ?? ""}`
+                            : ADDON_DISPLAY[p.addonType ?? ""]?.label ??
+                              p.addonType}
+                        </td>
+                        <td className="py-3 pr-4 font-semibold text-gray-900 whitespace-nowrap">
+                          {formatCurrency(p.amount)}
+                        </td>
+                        <td className="py-3">
+                          <PaymentStatusBadge status={p.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-          <a
-            href="mailto:support@softvibe.in"
-            className="shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border border-gray-300 bg-white hover:bg-gray-100 text-gray-900 rounded-xl transition-colors"
-          >
-            <Mail size={15} />
-            Contact support
-          </a>
-        </div>
 
-      </main>
+          {/* ── Support CTA ───────────────────────────────────────────────────── */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border border-dashed border-gray-300 rounded-2xl px-5 py-4 bg-gray-50">
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">
+                Need a custom plan or have a billing question?
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Contact our team and we&apos;ll help you find the right fit.
+              </p>
+            </div>
+            <a
+              href="mailto:support@softvibe.in"
+              className="shrink-0 flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border border-gray-300 bg-white hover:bg-gray-100 text-gray-900 rounded-xl transition-colors"
+            >
+              <Mail size={15} />
+              Contact support
+            </a>
+          </div>
 
-      <Footer />
-    </div>
+        </main>
+
+        <Footer />
+      </div>
+    </>
   );
 }

@@ -3,16 +3,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/payment/addon/create-order
 //
-//  CHANGES FROM PREVIOUS VERSION:
-//    - Added `export const dynamic = "force-dynamic"` (line below imports).
-//      This is required for any Next.js App Router API route that uses
-//      request.headers, request.url, cookies, or reads env vars at runtime.
-//      Without it, Next.js attempts to statically render the route during
-//      `next build`, hits request.headers in verifyUserRequest(), and throws
-//      DYNAMIC_SERVER_USAGE — which floods Vercel build logs with errors.
-//    - createOrder() import updated: now imported from the updated razorpay.ts
-//      which uses lazy initialisation (getRazorpay() singleton).
-//      No call-site changes needed — createOrder() API is unchanged.
+//  SECURITY FIX (VUL-05): Added rate limiting
+//    5 addon order creations per user per 10 minutes to prevent spam/abuse
+//
+//  ALL OTHER LOGIC UNCHANGED FROM ORIGINAL VERSION
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse }               from "next/server";
@@ -24,14 +18,9 @@ import PaymentRecord                  from "@/models/PaymentRecord";
 import Subscription                   from "@/models/Subscription";
 import type { AddOnType }             from "@/models/AddOn";
 import { ONE_TIME_ADDON_TYPES }       from "@/models/AddOn";
+import { rateLimit }                  from "@/lib/rateLimit";
 
 // ─── CRITICAL: Required on every API route that reads request.headers ────────
-//
-//  Tells Next.js this route must ALWAYS be server-rendered on demand — never
-//  statically pre-rendered at build time. Without this, `next build` tries to
-//  render the route and fails with DYNAMIC_SERVER_USAGE when it encounters
-//  request.headers inside verifyUserRequest().
-//
 export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,9 +64,29 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
+    // ── 2. Rate limiting (VUL-05 FIX) ─────────────────────────────────────────
+    //  A real user creates at most 1–2 addon orders per session.
+    //  5 per 10 minutes is generous but blocks automated abuse.
+    const rl = rateLimit(`payment-addon-create-order:${auth.userId}`, {
+      limit:         5,
+      windowSeconds: 600, // 10 minutes
+    });
+
+    if (!rl.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many addon payment requests. Please wait ${rl.retryAfterSeconds} seconds before trying again.`,
+        },
+        {
+          status:  429,
+          headers: { "Retry-After": String(rl.retryAfterSeconds) },
+        }
+      );
+    }
+
     const userId = new mongoose.Types.ObjectId(auth.userId);
 
-    // ── 2. Parse and validate request body ───────────────────────────────────
+    // ── 3. Parse and validate request body ───────────────────────────────────
     let body: { addonType?: unknown; quantity?: unknown };
 
     try {
@@ -121,10 +130,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     // Force quantity to 1 for non-bulk and one-time add-ons
     if (!isBulkable || isOneTime) quantity = 1;
 
-    // ── 3. Connect to MongoDB ─────────────────────────────────────────────────
+    // ── 4. Connect to MongoDB ─────────────────────────────────────────────────
     await connectDB();
 
-    // ── 4. Require active NON-free_trial subscription ─────────────────────────
+    // ── 5. Require active NON-free_trial subscription ─────────────────────────
     const subscription = await Subscription.findOne({ userId }).lean();
 
     if (!subscription) {
@@ -156,12 +165,12 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // ── 5. Compute amount in paise (server-side — never trust client) ─────────
+    // ── 6. Compute amount in paise (server-side — never trust client) ─────────
     const pricePerUnitRupees = ADDON_PRICES[validatedAddonType];
     const totalRupees        = pricePerUnitRupees * quantity;
     const amountInPaise      = totalRupees * 100;
 
-    // ── 6. Create Razorpay order ──────────────────────────────────────────────
+    // ── 7. Create Razorpay order ──────────────────────────────────────────────
     let razorpayOrder: RazorpayOrder;
 
     try {
@@ -187,7 +196,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // ── 7. Create pending PaymentRecord ──────────────────────────────────────
+    // ── 8. Create pending PaymentRecord ──────────────────────────────────────
     const paymentRecord = await PaymentRecord.create({
       userId,
       type:            "addon",
@@ -199,7 +208,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       razorpayOrderId: razorpayOrder.id,
     });
 
-    // ── 8. Return Razorpay order details to frontend ──────────────────────────
+    // ── 9. Return Razorpay order details to frontend ──────────────────────────
     return NextResponse.json(
       {
         razorpayOrderId: razorpayOrder.id,

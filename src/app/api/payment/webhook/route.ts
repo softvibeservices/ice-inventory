@@ -5,16 +5,11 @@
 //
 //  SECURITY FIXES IN THIS VERSION:
 //
-//  FIX 1 — TOCTOU Race Condition in activateSubscriptionPayment() (CRITICAL)
-//    Same atomic findOneAndUpdate fix applied here. The webhook fires
-//    milliseconds after the client-side verify call completes. Without the
-//    atomic claim, both paths could activate (and double-extend) the
-//    subscription simultaneously.
-//
-//    Fix: activateSubscriptionPayment() now uses an atomic findOneAndUpdate
-//    to claim the PaymentRecord. If it gets null back, the client-side verify
-//    already processed it — the function returns immediately without touching
-//    the Subscription document.
+//  FIX 1 — TOCTOU Race Condition in activateSubscriptionPayment() (ALREADY FIXED)
+//  FIX 2 — VUL-04: TOCTOU Race Condition in activateAddonPayment() (NEW FIX)
+//    Same atomic findOneAndUpdate fix applied to addon activation path.
+//    Both webhook and client-side verify could race - atomic claim ensures
+//    exactly one path creates the AddOn document.
 //
 //  EXTENSION FIX (carried from previous update):
 //    New plan period starts from the user's existing currentPeriodEnd if it
@@ -61,10 +56,8 @@ function computeNextMonthReset(): Date {
 // ─────────────────────────────────────────────────────────────────────────────
 //  activateSubscriptionPayment()
 //
-//  SECURITY FIX: Uses atomic findOneAndUpdate to claim the PaymentRecord
-//  before touching the Subscription document. This is the same race-condition
-//  fix as in verify/route.ts — whichever path arrives first wins, the other
-//  path sees null and exits without a double-write.
+//  Already uses atomic findOneAndUpdate to claim the PaymentRecord.
+//  (Fix from previous update - unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 async function activateSubscriptionPayment(
   razorpayOrderId:   string,
@@ -72,11 +65,6 @@ async function activateSubscriptionPayment(
 ): Promise<void> {
 
   // ── Atomically claim the PaymentRecord ────────────────────────────────────
-  //
-  //  Filter condition: { razorpayOrderId, status: "pending" }
-  //  If the verify route already set status → "captured", this returns null
-  //  and we stop. No subscription modification happens.
-  //
   const claimedRecord = await PaymentRecord.findOneAndUpdate(
     { razorpayOrderId, status: "pending" },
     {
@@ -89,8 +77,6 @@ async function activateSubscriptionPayment(
   );
 
   if (!claimedRecord) {
-    // Either already captured by the verify route, or unknown order.
-    // Log and exit — no action required.
     console.log(
       `[webhook] activateSubscriptionPayment: orderId=${razorpayOrderId} ` +
       "already captured or not found — skipping"
@@ -111,10 +97,6 @@ async function activateSubscriptionPayment(
   }
 
   // ── Determine the start date for the new period ───────────────────────────
-  //
-  //  SAFE: The atomic claim above ensures this code runs for exactly one
-  //  caller — double-extension is impossible.
-  //
   const now = new Date();
   const hasActivePeriod =
     (subscription.status === "active" || subscription.status === "grace") &&
@@ -160,15 +142,57 @@ async function activateSubscriptionPayment(
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  activateAddonPayment()
-//  (UNCHANGED — add-ons are not affected by the race condition fix)
+//
+//  VUL-04 FIX: Now uses atomic findOneAndUpdate to claim the PaymentRecord
+//  before creating the AddOn document. This eliminates the race condition where
+//  both the webhook and client-side /addon/verify could activate the same addon.
+//
+//  BEFORE (race condition):
+//    1. Webhook reads PaymentRecord with status="pending"
+//    2. Client /addon/verify reads same PaymentRecord with status="pending"
+//    3. Both create AddOn documents
+//    4. Both write status="captured" (last write wins, but two addons exist)
+//
+//  AFTER (atomic claim):
+//    1. First caller (webhook OR verify) claims the record atomically
+//    2. Second caller gets null from findOneAndUpdate → exits immediately
+//    3. Only one AddOn document is ever created
 // ─────────────────────────────────────────────────────────────────────────────
 async function activateAddonPayment(
-  paymentRecord:     InstanceType<typeof PaymentRecord>,
+  razorpayOrderId:   string,
   razorpayPaymentId: string
 ): Promise<void> {
-  const subscription = await Subscription.findOne({ userId: paymentRecord.userId });
 
-  const addonType = paymentRecord.addonType as AddOnType;
+  // ── VUL-04 FIX: Atomic claim ──────────────────────────────────────────────
+  //
+  //  Find the PaymentRecord by razorpayOrderId AND status="pending", then
+  //  atomically transition to "captured". MongoDB's document-level locking
+  //  ensures exactly one caller wins.
+  //
+  const claimedRecord = await PaymentRecord.findOneAndUpdate(
+    { razorpayOrderId, status: "pending" }, // only match if still pending
+    {
+      $set: {
+        status:            "captured",
+        razorpayPaymentId,
+      },
+    },
+    { new: false } // return OLD doc to read addonType, userId, etc.
+  );
+
+  if (!claimedRecord) {
+    // Already captured by /addon/verify or unknown order
+    console.log(
+      `[webhook] activateAddonPayment: orderId=${razorpayOrderId} ` +
+      "already captured or not found — skipping"
+    );
+    return;
+  }
+
+  // ── Now safe to create the AddOn — we atomically claimed the record ───────
+  const subscription = await Subscription.findOne({ userId: claimedRecord.userId });
+
+  const addonType = claimedRecord.addonType as AddOnType;
   const isOneTime = ONE_TIME_ADDON_TYPES.includes(addonType);
 
   let expiresAt:        Date | null   = null;
@@ -184,24 +208,25 @@ async function activateAddonPayment(
   }
 
   const newAddOn = await AddOn.create({
-    userId:           paymentRecord.userId,
+    userId:           claimedRecord.userId,
     type:             addonType,
-    quantity:         paymentRecord.addonQuantity ?? 1,
+    quantity:         claimedRecord.addonQuantity ?? 1,
     isActive:         true,
     expiresAt,
     billingAnchorDay: isOneTime ? null : billingAnchorDay,
-    paymentRecordId:  paymentRecord._id,
+    paymentRecordId:  claimedRecord._id,
   });
 
-  paymentRecord.status            = "captured";
-  paymentRecord.razorpayPaymentId = razorpayPaymentId;
-  paymentRecord.activatedAddOnId  = newAddOn._id as mongoose.Types.ObjectId;
-
-  await paymentRecord.save();
+  // ── Write activatedAddOnId back onto the PaymentRecord ────────────────────
+  //  The status was already set to "captured" in the atomic claim above,
+  //  so this just adds the reverse-reference.
+  await PaymentRecord.findByIdAndUpdate(claimedRecord._id, {
+    $set: { activatedAddOnId: newAddOn._id as mongoose.Types.ObjectId },
+  });
 
   console.log(
-    `[webhook] Add-on activated: userId=${paymentRecord.userId} ` +
-    `type=${addonType} qty=${paymentRecord.addonQuantity ?? 1}`
+    `[webhook] Add-on activated: userId=${claimedRecord.userId} ` +
+    `type=${addonType} qty=${claimedRecord.addonQuantity ?? 1}`
   );
 }
 
@@ -297,16 +322,11 @@ export async function POST(req: Request): Promise<NextResponse> {
       }
 
       if (paymentRecord.type === "subscription") {
-        // Pass orderId + paymentId — the function handles its own atomic claim
+        // Subscription path: atomic claim inside activateSubscriptionPayment()
         await activateSubscriptionPayment(razorpayOrderId, razorpayPaymentId);
       } else if (paymentRecord.type === "addon") {
-        // Add-on path: check idempotency the old way (safe — webhook is the
-        // only caller for add-ons; there is no competing /addon/verify race)
-        if (paymentRecord.status === "captured") {
-          console.log(`[webhook] Add-on already captured for orderId=${razorpayOrderId}`);
-        } else {
-          await activateAddonPayment(paymentRecord, razorpayPaymentId);
-        }
+        // VUL-04 FIX: Add-on path now also uses atomic claim
+        await activateAddonPayment(razorpayOrderId, razorpayPaymentId);
       } else {
         console.warn(
           `[webhook] Unknown payment type "${paymentRecord.type}" for orderId=${razorpayOrderId}`
