@@ -3,6 +3,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  SubscriptionBadge — compact plan badge for DashboardNavbar.
 //
+//  SECURITY FIX (VUL-10): Now uses shared SUB_CACHE_KEY from cacheKeys.ts
+//
 //  Shows: current plan name + status pill (Active / Expired / Trial X days left)
 //  Used in DashboardNavbar top-right area (admin only).
 //
@@ -18,6 +20,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CreditCard } from "lucide-react";
+import { SUB_CACHE_KEY, CACHE_TTL_MS } from "@/lib/cacheKeys";
 
 interface BadgeData {
   planId: string;
@@ -27,16 +30,16 @@ interface BadgeData {
   currentPeriodEnd: string | null;
 }
 
-const CACHE_KEY = "sub_badge_cache";
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
+// ─────────────────────────────────────────────────────────────────────────────
+//  Cache helper functions (now using shared SUB_CACHE_KEY)
+// ─────────────────────────────────────────────────────────────────────────────
 function getCached(): BadgeData | null {
   try {
-    const raw = sessionStorage.getItem(CACHE_KEY);
+    const raw = sessionStorage.getItem(SUB_CACHE_KEY);
     if (!raw) return null;
     const { data, ts } = JSON.parse(raw) as { data: BadgeData; ts: number };
     if (Date.now() - ts > CACHE_TTL_MS) {
-      sessionStorage.removeItem(CACHE_KEY);
+      sessionStorage.removeItem(SUB_CACHE_KEY);
       return null;
     }
     return data;
@@ -47,7 +50,7 @@ function getCached(): BadgeData | null {
 
 function setCache(data: BadgeData): void {
   try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
+    sessionStorage.setItem(SUB_CACHE_KEY, JSON.stringify({ data, ts: Date.now() }));
   } catch {
     // sessionStorage might be blocked in some environments
   }

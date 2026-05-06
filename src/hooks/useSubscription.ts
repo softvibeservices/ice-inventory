@@ -3,6 +3,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  useSubscription — shared client hook for subscription status.
 //
+//  SECURITY FIX (VUL-10): Now uses shared SUB_CACHE_KEY from cacheKeys.ts
+//
 //  Fetches GET /api/subscription and returns the result.
 //  Caches the response in sessionStorage for 5 minutes to avoid hammering the
 //  API on every page navigation (sessionStorage is cleared on tab close, so
@@ -24,6 +26,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { SUB_CACHE_KEY, CACHE_TTL_MS } from "@/lib/cacheKeys";
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Types (mirrors the ISubscriptionStatus shape from subscription.types.ts)
@@ -70,11 +73,8 @@ export interface SubscriptionStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Cache constants
+//  Cache helper functions (now using shared SUB_CACHE_KEY)
 // ─────────────────────────────────────────────────────────────────────────────
-const CACHE_KEY     = "sub_status_cache";
-const CACHE_TTL_MS  = 5 * 60 * 1000; // 5 minutes
-
 interface CacheEntry {
   data:      SubscriptionStatus;
   fetchedAt: number; // Date.now()
@@ -83,11 +83,11 @@ interface CacheEntry {
 function readCache(): SubscriptionStatus | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(CACHE_KEY);
+    const raw = sessionStorage.getItem(SUB_CACHE_KEY);
     if (!raw) return null;
     const entry: CacheEntry = JSON.parse(raw);
     if (Date.now() - entry.fetchedAt > CACHE_TTL_MS) {
-      sessionStorage.removeItem(CACHE_KEY);
+      sessionStorage.removeItem(SUB_CACHE_KEY);
       return null;
     }
     return entry.data;
@@ -100,7 +100,7 @@ function writeCache(data: SubscriptionStatus): void {
   if (typeof window === "undefined") return;
   try {
     const entry: CacheEntry = { data, fetchedAt: Date.now() };
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify(entry));
+    sessionStorage.setItem(SUB_CACHE_KEY, JSON.stringify(entry));
   } catch {
     // sessionStorage may be blocked in some contexts — fail silently
   }
@@ -109,7 +109,7 @@ function writeCache(data: SubscriptionStatus): void {
 export function invalidateSubscriptionCache(): void {
   if (typeof window === "undefined") return;
   try {
-    sessionStorage.removeItem(CACHE_KEY);
+    sessionStorage.removeItem(SUB_CACHE_KEY);
   } catch {
     // ignore
   }
