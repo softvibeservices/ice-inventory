@@ -1,52 +1,85 @@
-// src/app/api/payment/addon/verify/route.ts
-//
-// ─────────────────────────────────────────────────────────────────────────────
-//  POST /api/payment/addon/verify
-//
-//  CHANGES FROM PREVIOUS VERSION:
-//    - Added `export const dynamic = "force-dynamic"`.
-//      Same reason as addon/create-order — request.headers is read inside
-//      verifyUserRequest() which triggers DYNAMIC_SERVER_USAGE at build time.
-// ─────────────────────────────────────────────────────────────────────────────
+// FIXED: src/app/api/payment/verify/route.ts
+// 
+// ✅ This file contains the corrected computePeriodEnd function
 
-import { NextResponse }            from "next/server";
-import mongoose                    from "mongoose";
-import { connectDB }               from "@/lib/mongodb";
-import { verifyUserRequest }       from "@/lib/userAuth";
-import { verifyRazorpaySignature } from "@/lib/razorpay";
-import PaymentRecord               from "@/models/PaymentRecord";
-import Subscription                from "@/models/Subscription";
-import AddOn                       from "@/models/AddOn";
-import type { AddOnType }          from "@/models/AddOn";
-import { ONE_TIME_ADDON_TYPES }    from "@/models/AddOn";
-import {
-  computeAddOnExpiry,
-  getAnchorDayFromDate,
-}                                  from "@/lib/addonAlignment";
+import { NextResponse } from "next/server";
+import crypto from "crypto";
+import mongoose from "mongoose";
+import { connectDB } from "@/lib/mongodb";
+import { verifyUserRequest } from "@/lib/userAuth";
+import PaymentRecord from "@/models/PaymentRecord";
+import Subscription from "@/models/Subscription";
+import { rateLimit } from "@/lib/rateLimit";
 
-// ─── CRITICAL: Required on every API route that reads request.headers ────────
-export const dynamic = "force-dynamic";
+type BillingPeriod = "monthly" | "sixmonths" | "yearly";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ADDON_LABELS — defined locally to avoid AddOn model export shape issues.
+//  ✅ FIXED: Proper calendar-based date calculation
 // ─────────────────────────────────────────────────────────────────────────────
-const ADDON_LABELS: Record<AddOnType, string> = {
-  extra_invoice_100: "Extra 100 Invoices / Month",
-  extra_invoice_300: "Extra 300 Invoices / Month",
-  extra_manager:     "Extra Manager Seat",
-  extra_delivery:    "Extra 3 Delivery Partners",
-  advanced_reports:  "Advanced Reports",
-  setup_migration:   "Setup & Data Migration",
-};
+function computePeriodEnd(billingPeriod: BillingPeriod, startFrom: Date): Date {
+  const result = new Date(startFrom);
+  
+  switch (billingPeriod) {
+    case "monthly":
+      // ✅ Add exactly 1 calendar month
+      result.setMonth(result.getMonth() + 1);
+      break;
+      
+    case "sixmonths":
+      // ✅ Add exactly 6 calendar months
+      result.setMonth(result.getMonth() + 6);
+      break;
+      
+    case "yearly":
+      // ✅ Add exactly 1 calendar year
+      result.setFullYear(result.getFullYear() + 1);
+      break;
+      
+    default:
+      // Default to 1 month
+      result.setMonth(result.getMonth() + 1);
+  }
+  
+  return result;
+}
 
-// Explicit shape for AddOn.findById().lean<T>() result
-interface ExistingAddOnDoc {
-  _id:              mongoose.Types.ObjectId;
-  type:             AddOnType;
-  quantity:         number;
-  isActive:         boolean;
-  expiresAt:        Date | null;
-  billingAnchorDay: number | null;
+// ─────────────────────────────────────────────────────────────────────────────
+//  Helper: Compute next month's reset date
+// ─────────────────────────────────────────────────────────────────────────────
+function computeNextMonthReset(): Date {
+  const now       = new Date();
+  const anchorDay = Math.min(now.getDate(), 28);
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, anchorDay)
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Helper: Verify Razorpay signature
+// ─────────────────────────────────────────────────────────────────────────────
+function verifyRazorpaySignature(
+  orderId: string,
+  paymentId: string,
+  signature: string
+): boolean {
+  try {
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    if (!keySecret) {
+      console.error("[verifyRazorpaySignature] RAZORPAY_KEY_SECRET not set");
+      return false;
+    }
+
+    const text = `${orderId}|${paymentId}`;
+    const generated = crypto
+      .createHmac("sha256", keySecret)
+      .update(text)
+      .digest("hex");
+
+    return generated === signature;
+  } catch (error) {
+    console.error("[verifyRazorpaySignature] Error:", error);
+    return false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,14 +93,32 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     if (auth.role === "manager") {
       return NextResponse.json(
-        { error: "Managers cannot verify add-on payments." },
+        { error: "Managers cannot verify subscription payments." },
         { status: 403 }
+      );
+    }
+
+    // ── 2. Rate limiting ─────────────────────────────────────────────────────
+    const rl = rateLimit(`payment-verify:${auth.userId}`, {
+      limit:         10,
+      windowSeconds: 60,
+    });
+
+    if (!rl.allowed) {
+      return NextResponse.json(
+        {
+          error: `Too many attempts. Please wait ${rl.retryAfterSeconds} seconds.`,
+        },
+        {
+          status:  429,
+          headers: { "Retry-After": String(rl.retryAfterSeconds) },
+        }
       );
     }
 
     const userId = new mongoose.Types.ObjectId(auth.userId);
 
-    // ── 2. Parse and validate request body ───────────────────────────────────
+    // ── 3. Parse and validate request body ───────────────────────────────────
     let body: {
       razorpayOrderId?:   unknown;
       razorpayPaymentId?: unknown;
@@ -84,12 +135,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    const {
-      razorpayOrderId,
-      razorpayPaymentId,
-      razorpaySignature,
-      paymentRecordId,
-    } = body;
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature, paymentRecordId } = body;
 
     if (
       typeof razorpayOrderId   !== "string" || !razorpayOrderId   ||
@@ -114,7 +160,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // ── 3. Verify Razorpay signature — SECURITY GATE ─────────────────────────
+    // ── 4. Verify Razorpay signature — SECURITY GATE ─────────────────────────
     const isSignatureValid = verifyRazorpaySignature(
       razorpayOrderId,
       razorpayPaymentId,
@@ -123,7 +169,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     if (!isSignatureValid) {
       console.warn(
-        `[addon/verify] Invalid signature for orderId=${razorpayOrderId} userId=${auth.userId}`
+        `[payment/verify] Invalid signature for orderId=${razorpayOrderId} userId=${auth.userId}`
       );
       return NextResponse.json(
         {
@@ -135,119 +181,160 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
 
-    // ── 4. Connect to MongoDB ─────────────────────────────────────────────────
+    // ── 5. Connect to MongoDB ─────────────────────────────────────────────────
     await connectDB();
 
-    // ── 5. Find the PaymentRecord (scoped to userId for security) ─────────────
-    const paymentRecord = await PaymentRecord.findOne({
-      _id:    new mongoose.Types.ObjectId(paymentRecordId),
-      userId,
-    });
+    // ── 6. ATOMIC CLAIM ───────────────────────────────────────────────────────
+    const claimedRecord = await PaymentRecord.findOneAndUpdate(
+      {
+        _id:    new mongoose.Types.ObjectId(paymentRecordId),
+        userId,
+        status: "pending",
+      },
+      {
+        $set: {
+          status:             "captured",
+          razorpayPaymentId,
+          razorpaySignature,
+        },
+      },
+      { new: false }
+    );
 
-    if (!paymentRecord) {
-      return NextResponse.json(
-        { error: "Payment record not found." },
-        { status: 404 }
-      );
-    }
+    // ── 7. Handle non-pending cases ───────────────────────────────────────────
+    if (!claimedRecord) {
+      const existing = await PaymentRecord.findOne({
+        _id:    new mongoose.Types.ObjectId(paymentRecordId),
+        userId,
+      });
 
-    // ── 6. Idempotency — already captured ────────────────────────────────────
-    if (paymentRecord.status === "captured") {
-      const existingAddOn = paymentRecord.activatedAddOnId
-        ? await AddOn.findById(paymentRecord.activatedAddOnId).lean<ExistingAddOnDoc>()
-        : null;
+      if (!existing) {
+        return NextResponse.json(
+          { error: "Payment record not found." },
+          { status: 404 }
+        );
+      }
+
+      if (existing.status === "captured") {
+        const subscription = await Subscription.findOne({ userId });
+        return NextResponse.json(
+          {
+            success:          true,
+            alreadyActivated: true,
+            subscription: subscription
+              ? {
+                  planId:           subscription.planId,
+                  status:           subscription.status,
+                  billingPeriod:    subscription.billingPeriod,
+                  currentPeriodEnd: subscription.currentPeriodEnd,
+                }
+              : null,
+          },
+          { status: 200 }
+        );
+      }
 
       return NextResponse.json(
         {
-          success:          true,
-          alreadyActivated: true,
-          addOn: existingAddOn
-            ? {
-                id:               existingAddOn._id.toString(),
-                type:             existingAddOn.type,
-                typeLabel:        ADDON_LABELS[existingAddOn.type],
-                quantity:         existingAddOn.quantity,
-                isActive:         existingAddOn.isActive,
-                isOneTime:        ONE_TIME_ADDON_TYPES.includes(existingAddOn.type),
-                expiresAt:        existingAddOn.expiresAt,
-                billingAnchorDay: existingAddOn.billingAnchorDay,
-              }
-            : null,
+          error:
+            `Cannot verify payment: record is in "${existing.status}" state. ` +
+            "Please contact support if you believe you were charged.",
         },
-        { status: 200 }
+        { status: 409 }
       );
     }
 
-    if (paymentRecord.type !== "addon") {
+    // ── 8. Validate record type ───────────────────────────────────────────────
+    if (claimedRecord.type !== "subscription") {
+      await PaymentRecord.findByIdAndUpdate(claimedRecord._id, {
+        $set: {
+          status:             "pending",
+          razorpayPaymentId:  undefined,
+          razorpaySignature:  undefined,
+        },
+      });
       return NextResponse.json(
-        { error: "This payment record is not an add-on payment." },
+        { error: "This payment record is not a subscription payment." },
         { status: 400 }
       );
     }
 
-    // ── 7. Fetch subscription for billing anchor alignment ────────────────────
+    // ── 9. Find user's Subscription ───────────────────────────────────────────
     const subscription = await Subscription.findOne({ userId });
 
-    const addonType = paymentRecord.addonType as AddOnType;
-    const isOneTime = ONE_TIME_ADDON_TYPES.includes(addonType);
-
-    // ── 8. Compute add-on expiry aligned to subscription billing anchor ───────
-    let expiresAt:        Date | null   = null;
-    let billingAnchorDay: number | null = null;
-
-    if (!isOneTime) {
-      if (subscription?.invoiceCountResetAt) {
-        billingAnchorDay = getAnchorDayFromDate(subscription.invoiceCountResetAt);
-      } else {
-        billingAnchorDay = Math.min(new Date().getDate(), 28);
-        console.warn(
-          `[addon/verify] No subscription found for userId=${auth.userId} ` +
-          `while computing add-on expiry. Using fallback anchor day=${billingAnchorDay}.`
-        );
-      }
-      expiresAt = computeAddOnExpiry(billingAnchorDay);
+    if (!subscription) {
+      console.error(
+        `[payment/verify] No Subscription document found for userId=${auth.userId}. ` +
+        "PaymentRecord is already marked captured — superAdmin must fix manually."
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Subscription record not found. Your payment has been recorded — " +
+            "please contact support and we will activate your plan immediately.",
+        },
+        { status: 500 }
+      );
     }
 
-    // ── 9. Create AddOn document ──────────────────────────────────────────────
-    const newAddOn = await AddOn.create({
-      userId,
-      type:             addonType,
-      quantity:         paymentRecord.addonQuantity ?? 1,
-      isActive:         true,
-      expiresAt,
-      billingAnchorDay: isOneTime ? null : billingAnchorDay,
-      paymentRecordId:  paymentRecord._id,
+    // ── 10. Determine start date for the new period ───────────────────────────
+    const now = new Date();
+    const hasActivePeriod =
+      (subscription.status === "active" || subscription.status === "grace") &&
+      subscription.currentPeriodEnd !== null &&
+      subscription.currentPeriodEnd > now;
+
+    const startFrom        = hasActivePeriod ? subscription.currentPeriodEnd! : now;
+    const billingPeriod    = claimedRecord.billingPeriod as BillingPeriod;
+    
+    // ✅ FIXED: Now uses proper calendar-based calculation
+    const currentPeriodEnd = computePeriodEnd(billingPeriod, startFrom);
+
+    console.log(
+      `[payment/verify] ✅ userId=${auth.userId} ` +
+      `plan=${claimedRecord.planId} billing=${billingPeriod} ` +
+      `hasActivePeriod=${hasActivePeriod} ` +
+      `startFrom=${startFrom.toISOString()} ` +
+      `newPeriodEnd=${currentPeriodEnd.toISOString()}`
+    );
+
+    // ── 11. Activate / extend subscription ───────────────────────────────────
+    subscription.planId           = claimedRecord.planId!;
+    subscription.billingPeriod    = billingPeriod;
+    subscription.status           = "active";
+    subscription.currentPeriodEnd = currentPeriodEnd;
+    subscription.trialEndsAt      = null;
+
+    if (!hasActivePeriod) {
+      subscription.invoicesUsedThisMonth = 0;
+      subscription.invoiceCountResetAt   = computeNextMonthReset();
+    }
+
+    await subscription.save();
+
+    // ── 12. Store the reverse-reference ───────────────────────────────────────
+    await PaymentRecord.findByIdAndUpdate(claimedRecord._id, {
+      $set: { activatedSubscriptionId: subscription._id },
     });
 
-    // ── 10. Mark PaymentRecord as captured ────────────────────────────────────
-    paymentRecord.status            = "captured";
-    paymentRecord.razorpayPaymentId = razorpayPaymentId;
-    paymentRecord.razorpaySignature = razorpaySignature;
-    paymentRecord.activatedAddOnId  = newAddOn._id as mongoose.Types.ObjectId;
-
-    await paymentRecord.save();
-
-    // ── 11. Return success ────────────────────────────────────────────────────
+    // ── 13. Return success ────────────────────────────────────────────────────
     return NextResponse.json(
       {
         success: true,
-        addOn: {
-          id:               newAddOn._id.toString(),
-          type:             newAddOn.type,
-          typeLabel:        ADDON_LABELS[newAddOn.type as AddOnType],
-          quantity:         newAddOn.quantity,
-          isActive:         newAddOn.isActive,
-          isOneTime,
-          expiresAt:        newAddOn.expiresAt,
-          billingAnchorDay: newAddOn.billingAnchorDay,
+        subscription: {
+          planId:           subscription.planId,
+          status:           subscription.status,
+          billingPeriod:    subscription.billingPeriod,
+          currentPeriodEnd: subscription.currentPeriodEnd,
+          trialEndsAt:      subscription.trialEndsAt,
         },
       },
       { status: 200 }
     );
-  } catch (err) {
-    console.error("[addon/verify] Unexpected error:", err);
+  } catch (error) {
+    console.error("[POST /api/payment/verify] Unexpected error:", error);
     return NextResponse.json(
-      { error: "Internal server error. Please try again or contact support." },
+      { error: "Internal server error. Please try again later." },
       { status: 500 }
     );
   }
