@@ -171,13 +171,21 @@ export async function POST(req: Request): Promise<NextResponse> {
     const amountInPaise      = totalRupees * 100;
 
     // ── 7. Create Razorpay order ──────────────────────────────────────────────
+    //  FIX: Shortened receipt format to stay under Razorpay's 40-character limit
+    //  Format: a_{last10ofUserId}_{timestamp}
+    //  Example: a_9cd799439011_1716789012345 = 28 chars (well under 40)
     let razorpayOrder: RazorpayOrder;
 
     try {
+      const userIdStr = userId.toString();
+      const timestamp = Date.now().toString();
+      // Use last 10 chars of userId + full timestamp = max 24 chars + prefix = 26 chars total
+      const receipt = `a_${userIdStr.slice(-10)}_${timestamp}`;
+      
       razorpayOrder = await createOrder({
         amount:   amountInPaise,
         currency: "INR",
-        receipt:  `addon_${userId.toString()}_${Date.now()}`,
+        receipt:  receipt,
         notes: {
           userId:    userId.toString(),
           addonType: validatedAddonType,
