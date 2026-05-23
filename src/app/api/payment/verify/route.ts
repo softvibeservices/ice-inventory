@@ -8,6 +8,21 @@
 //    2. Handles month-end dates correctly (e.g., Jan 31 → Feb 28)
 //    3. Atomic TOCTOU race condition fix (already present)
 //    4. Rate limiting (already present)
+//    5. *** SECURITY FIX: razorpayOrderId cross-check in atomic claim ***
+//       The signature verification and the PaymentRecord lookup were
+//       completely decoupled. An attacker could pass a valid signature from
+//       a cheap order (e.g. ₹499 Launch Monthly) together with the
+//       paymentRecordId of an expensive pending order they never paid for
+//       (e.g. ₹24,999 Business Yearly). The signature check would pass
+//       (it only validates razorpayOrderId + razorpayPaymentId + signature),
+//       and the DB claim would succeed (it only checked _id + userId +
+//       status), activating the expensive plan for free.
+//
+//       Fix: razorpayOrderId is now included in the findOneAndUpdate filter,
+//       so the signature-verified orderId MUST match the orderId stored on
+//       the PaymentRecord being claimed. A mismatch produces null →
+//       the request falls into the 404/already-captured branch and
+//       activation never happens.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse }            from "next/server";
@@ -175,12 +190,39 @@ export async function POST(req: Request): Promise<NextResponse> {
     // ── 5. Connect to MongoDB ──────────────────────────────────────────────────
     await connectDB();
 
-    // ── 6. ATOMIC CLAIM (prevents race condition) ─────────────────────────────
+    // ── 6. ATOMIC CLAIM (prevents race condition + orderId cross-check) ───────
+    //
+    //  *** SECURITY FIX ***
+    //
+    //  BEFORE (vulnerable):
+    //    PaymentRecord.findOneAndUpdate(
+    //      { _id: paymentRecordId, userId, status: "pending" },
+    //      ...
+    //    )
+    //
+    //    The filter never checked that the record's razorpayOrderId matched
+    //    the razorpayOrderId that was just signature-verified above.
+    //    An attacker could supply:
+    //      - razorpayOrderId / razorpayPaymentId / razorpaySignature
+    //        from a legitimately completed cheap payment (e.g. ₹499)
+    //      - paymentRecordId from a pending expensive order they never
+    //        paid for (e.g. ₹24,999 Business Yearly)
+    //    The signature check would pass (valid for the cheap order), and
+    //    the DB claim would succeed (correct _id + userId + pending status),
+    //    activating the expensive plan without actual payment.
+    //
+    //  AFTER (fixed):
+    //    razorpayOrderId is added to the filter. The signature-verified
+    //    orderId MUST be stored on the exact PaymentRecord being claimed.
+    //    Mismatching orderId + paymentRecordId → findOneAndUpdate returns
+    //    null → request is rejected as not found / already captured.
+    //
     const claimedRecord = await PaymentRecord.findOneAndUpdate(
       {
-        _id:    new mongoose.Types.ObjectId(paymentRecordId),
+        _id:             new mongoose.Types.ObjectId(paymentRecordId),
         userId,
-        status: "pending",
+        status:          "pending",
+        razorpayOrderId, // ✅ SECURITY FIX: signature-verified orderId must match the record
       },
       {
         $set: {
@@ -192,7 +234,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       { new: false }
     );
 
-    // ── 7. Handle non-pending cases ────────────────────────────────────────────
+    // ── 7. Handle non-pending / not-found cases ────────────────────────────────
     if (!claimedRecord) {
       const existing = await PaymentRecord.findOne({
         _id:    new mongoose.Types.ObjectId(paymentRecordId),
@@ -278,7 +320,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const startFrom        = hasActivePeriod ? subscription.currentPeriodEnd! : now;
     const billingPeriod    = claimedRecord.billingPeriod as BillingPeriod;
     
-    // ✅ NOW USES PROPER CALENDAR CALCULATION
+    // ✅ Uses proper calendar calculation
     const currentPeriodEnd = computePeriodEnd(billingPeriod, startFrom);
 
     console.log(
