@@ -4,25 +4,25 @@
 //  POST /api/payment/verify
 //
 //  FIXES IN THIS VERSION:
-//    1. Proper calendar-based date calculation (was adding fixed days)
-//    2. Handles month-end dates correctly (e.g., Jan 31 → Feb 28)
-//    3. Atomic TOCTOU race condition fix (already present)
-//    4. Rate limiting (already present)
-//    5. *** SECURITY FIX: razorpayOrderId cross-check in atomic claim ***
-//       The signature verification and the PaymentRecord lookup were
-//       completely decoupled. An attacker could pass a valid signature from
-//       a cheap order (e.g. ₹499 Launch Monthly) together with the
-//       paymentRecordId of an expensive pending order they never paid for
-//       (e.g. ₹24,999 Business Yearly). The signature check would pass
-//       (it only validates razorpayOrderId + razorpayPaymentId + signature),
-//       and the DB claim would succeed (it only checked _id + userId +
-//       status), activating the expensive plan for free.
 //
-//       Fix: razorpayOrderId is now included in the findOneAndUpdate filter,
-//       so the signature-verified orderId MUST match the orderId stored on
-//       the PaymentRecord being claimed. A mismatch produces null →
-//       the request falls into the 404/already-captured branch and
-//       activation never happens.
+//  Phase 4 — MEDIUM: computeNextMonthReset mixes local and UTC time
+//    BEFORE: anchorDay = Math.min(now.getDate(), 28)
+//      now.getDate() returns the calendar day in the SERVER'S LOCAL TIMEZONE.
+//      Date.UTC(...) then constructs the result in UTC.
+//      On a server in IST (+5:30), between 00:00–05:30 IST the local day is
+//      already "tomorrow" while the UTC date is still "today". The anchor day
+//      is off by one at that boundary, silently shifting every invoice reset
+//      for payments made in that window.
+//    AFTER: anchorDay = Math.min(now.getUTCDate(), 28)
+//      All date components now come from UTC accessors. Result is consistent
+//      regardless of the server's system timezone.
+//
+//  Previously fixed (carried from earlier updates):
+//    - Proper calendar-based computePeriodEnd (setMonth/setFullYear, not +days)
+//    - Atomic TOCTOU race condition fix (razorpayOrderId in claim filter)
+//    - Rate limiting
+//    - SECURITY FIX: razorpayOrderId cross-check in atomic claim filter
+//      prevents cheap-order signature replay against expensive pending records
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextResponse }            from "next/server";
@@ -38,51 +38,49 @@ import { rateLimit }               from "@/lib/rateLimit";
 export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ✅ FIXED: computePeriodEnd() - Proper calendar-based calculation
-//
-//  BEFORE (WRONG):
-//    - Used fixed day multiplication (30 * 24 * 60 * 60 * 1000)
-//    - Caused issues with month-end dates
-//    - Example: Jan 31 + 30 days = Mar 2 (skipped Feb entirely)
-//
-//  AFTER (CORRECT):
-//    - Uses JavaScript Date's built-in month/year arithmetic
-//    - Handles month-end overflow correctly
-//    - Example: Jan 31 + 1 month = Feb 28 (or Feb 29 in leap year)
+//  computePeriodEnd — calendar-based (setMonth / setFullYear)
+//  Consistent with addon/verify/route.ts and webhook/route.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 function computePeriodEnd(billingPeriod: BillingPeriod, startFrom: Date): Date {
   const result = new Date(startFrom);
-  
+
   switch (billingPeriod) {
     case "monthly":
-      // Add exactly 1 calendar month
       result.setMonth(result.getMonth() + 1);
       break;
-      
+
     case "sixmonths":
-      // Add exactly 6 calendar months
       result.setMonth(result.getMonth() + 6);
       break;
-      
+
     case "yearly":
-      // Add exactly 1 calendar year
       result.setFullYear(result.getFullYear() + 1);
       break;
-      
+
     default:
-      // Fallback to 1 month
       result.setMonth(result.getMonth() + 1);
   }
-  
+
   return result;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  computeNextMonthReset() - Helper for invoice count reset date
+//  computeNextMonthReset — PHASE 4 FIX: pure UTC, no local-time mixing
+//
+//  BEFORE (broken):
+//    const anchorDay = Math.min(now.getDate(), 28);   ← local timezone day
+//    return new Date(Date.UTC(..., anchorDay));         ← UTC construction
+//    Mixed: on IST (+5:30) servers, getDate() and getUTCDate() can differ
+//    by one between 00:00–05:30 IST, corrupting the invoice reset anchor.
+//
+//  AFTER (fixed):
+//    const anchorDay = Math.min(now.getUTCDate(), 28); ← UTC day, matches
+//    return new Date(Date.UTC(..., anchorDay));          ← UTC construction
+//    Pure UTC throughout — server timezone has zero effect.
 // ─────────────────────────────────────────────────────────────────────────────
 function computeNextMonthReset(): Date {
   const now       = new Date();
-  const anchorDay = Math.min(now.getDate(), 28);
+  const anchorDay = Math.min(now.getUTCDate(), 28); // ✅ PHASE 4 FIX: was now.getDate()
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, anchorDay)
   );
@@ -192,37 +190,17 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     // ── 6. ATOMIC CLAIM (prevents race condition + orderId cross-check) ───────
     //
-    //  *** SECURITY FIX ***
-    //
-    //  BEFORE (vulnerable):
-    //    PaymentRecord.findOneAndUpdate(
-    //      { _id: paymentRecordId, userId, status: "pending" },
-    //      ...
-    //    )
-    //
-    //    The filter never checked that the record's razorpayOrderId matched
-    //    the razorpayOrderId that was just signature-verified above.
-    //    An attacker could supply:
-    //      - razorpayOrderId / razorpayPaymentId / razorpaySignature
-    //        from a legitimately completed cheap payment (e.g. ₹499)
-    //      - paymentRecordId from a pending expensive order they never
-    //        paid for (e.g. ₹24,999 Business Yearly)
-    //    The signature check would pass (valid for the cheap order), and
-    //    the DB claim would succeed (correct _id + userId + pending status),
-    //    activating the expensive plan without actual payment.
-    //
-    //  AFTER (fixed):
-    //    razorpayOrderId is added to the filter. The signature-verified
-    //    orderId MUST be stored on the exact PaymentRecord being claimed.
-    //    Mismatching orderId + paymentRecordId → findOneAndUpdate returns
-    //    null → request is rejected as not found / already captured.
+    //  razorpayOrderId is included in the filter so the signature-verified
+    //  orderId MUST match the record being claimed. This closes the attack
+    //  where a valid cheap-order signature is replayed against an expensive
+    //  pending record with a different orderId.
     //
     const claimedRecord = await PaymentRecord.findOneAndUpdate(
       {
         _id:             new mongoose.Types.ObjectId(paymentRecordId),
         userId,
         status:          "pending",
-        razorpayOrderId, // ✅ SECURITY FIX: signature-verified orderId must match the record
+        razorpayOrderId, // ✅ orderId cross-check — prevents signature replay
       },
       {
         $set: {
@@ -319,8 +297,6 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     const startFrom        = hasActivePeriod ? subscription.currentPeriodEnd! : now;
     const billingPeriod    = claimedRecord.billingPeriod as BillingPeriod;
-    
-    // ✅ Uses proper calendar calculation
     const currentPeriodEnd = computePeriodEnd(billingPeriod, startFrom);
 
     console.log(
@@ -340,7 +316,8 @@ export async function POST(req: Request): Promise<NextResponse> {
 
     if (!hasActivePeriod) {
       subscription.invoicesUsedThisMonth = 0;
-      subscription.invoiceCountResetAt   = computeNextMonthReset();
+      // ✅ PHASE 4 FIX: computeNextMonthReset now uses getUTCDate() throughout
+      subscription.invoiceCountResetAt = computeNextMonthReset();
     }
 
     await subscription.save();

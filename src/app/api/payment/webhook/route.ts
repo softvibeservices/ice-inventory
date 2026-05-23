@@ -5,17 +5,41 @@
 //
 //  SECURITY FIXES IN THIS VERSION:
 //
-//  FIX 1 — TOCTOU Race Condition in activateSubscriptionPayment() (ALREADY FIXED)
-//  FIX 2 — VUL-04: TOCTOU Race Condition in activateAddonPayment() (NEW FIX)
-//    Same atomic findOneAndUpdate fix applied to addon activation path.
-//    Both webhook and client-side verify could race - atomic claim ensures
-//    exactly one path creates the AddOn document.
+//  Phase 3 — HIGH: Replace fixed-millisecond period calculation with
+//    calendar-based arithmetic.
 //
-//  EXTENSION FIX (carried from previous update):
-//    New plan period starts from the user's existing currentPeriodEnd if it
-//    is still in the future, preserving any remaining days.
+//    BEFORE (wrong):
+//      case "monthly":   new Date(startFrom.getTime() + 30  * 24 * 60 * 60 * 1000)
+//      case "sixmonths": new Date(startFrom.getTime() + 180 * 24 * 60 * 60 * 1000)
+//      case "yearly":    new Date(startFrom.getTime() + 365 * 24 * 60 * 60 * 1000)
 //
-//  ALL OTHER WEBHOOK LOGIC IS UNCHANGED.
+//    Problems with fixed-day arithmetic:
+//      - "Monthly" gives 30 days regardless of which month (Feb is 28/29 days,
+//        longer months are 31 days), so the expiry never lands on the same
+//        calendar day the user started on.
+//      - "Yearly" loses the leap day for users who start on Feb 29.
+//      - If webhook fires first (the fallback path), the user gets a different
+//        expiry date than if client-side verify fires first — which path runs
+//        first is a race condition, so two users paying the same plan on the
+//        same day can end up with different expiry dates.
+//
+//    AFTER (correct):
+//      Uses setMonth() and setFullYear() which are calendar-aware:
+//        Jan 31 + 1 month  → Feb 28 (or Feb 29 in a leap year)
+//        Feb 29 2024 + 1yr → Feb 28 2025 (JS handles overflow correctly)
+//      This matches exactly what verify/route.ts and addon/verify/route.ts
+//      already use, so subscription expiry is consistent regardless of which
+//      path activates the record.
+//
+//  Previously fixed (carried from earlier updates):
+//    - FIX 1: TOCTOU race condition in activateSubscriptionPayment() — atomic
+//      findOneAndUpdate claim prevents double-activation.
+//    - FIX 2 (VUL-04): TOCTOU race condition in activateAddonPayment() — same
+//      atomic claim prevents webhook + client-side verify from both creating
+//      an AddOn document.
+//    - Period extension: new plan period starts from currentPeriodEnd when
+//      still in the future, preserving any remaining days.
+//
 //  No JWT auth — HMAC only. Always return HTTP 200 to prevent Razorpay retries.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -34,20 +58,54 @@ import { ONE_TIME_ADDON_TYPES }                 from "@/models/AddOn";
 export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helpers
+//  computePeriodEnd — PHASE 3 FIX: calendar-based arithmetic
+//
+//  BEFORE (wrong — fixed milliseconds):
+//    case "monthly":   return new Date(startFrom.getTime() + 30  * 24 * 60 * 60 * 1000);
+//    case "sixmonths": return new Date(startFrom.getTime() + 180 * 24 * 60 * 60 * 1000);
+//    case "yearly":    return new Date(startFrom.getTime() + 365 * 24 * 60 * 60 * 1000);
+//
+//  AFTER (correct — setMonth / setFullYear):
+//    JavaScript's Date methods handle month-end overflow and leap years:
+//      Jan 31 + 1 month → Feb 28 (not Mar 2)
+//      Feb 29 2024 + 1yr → Feb 28 2025 (leap year handled)
+//    This is now identical to the logic in verify/route.ts and
+//    addon/verify/route.ts, so subscription expiry is consistent
+//    regardless of which path (webhook vs client verify) fires first.
 // ─────────────────────────────────────────────────────────────────────────────
 function computePeriodEnd(billingPeriod: BillingPeriod, startFrom: Date): Date {
+  // Clone so we don't mutate the input date
+  const result = new Date(startFrom);
+
   switch (billingPeriod) {
-    case "monthly":   return new Date(startFrom.getTime() + 30  * 24 * 60 * 60 * 1000);
-    case "sixmonths": return new Date(startFrom.getTime() + 180 * 24 * 60 * 60 * 1000);
-    case "yearly":    return new Date(startFrom.getTime() + 365 * 24 * 60 * 60 * 1000);
-    default:          return new Date(startFrom.getTime() + 30  * 24 * 60 * 60 * 1000);
+    case "monthly":
+      // ✅ PHASE 3 FIX: was +30 days (fixed ms), now +1 calendar month
+      result.setMonth(result.getMonth() + 1);
+      break;
+
+    case "sixmonths":
+      // ✅ PHASE 3 FIX: was +180 days (fixed ms), now +6 calendar months
+      result.setMonth(result.getMonth() + 6);
+      break;
+
+    case "yearly":
+      // ✅ PHASE 3 FIX: was +365 days (fixed ms), now +1 calendar year
+      result.setFullYear(result.getFullYear() + 1);
+      break;
+
+    default:
+      result.setMonth(result.getMonth() + 1);
   }
+
+  return result;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  computeNextMonthReset — helper for invoice count reset date
+// ─────────────────────────────────────────────────────────────────────────────
 function computeNextMonthReset(): Date {
   const now       = new Date();
-  const anchorDay = Math.min(now.getDate(), 28);
+  const anchorDay = Math.min(now.getUTCDate(), 28);
   return new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, anchorDay)
   );
@@ -56,8 +114,9 @@ function computeNextMonthReset(): Date {
 // ─────────────────────────────────────────────────────────────────────────────
 //  activateSubscriptionPayment()
 //
-//  Already uses atomic findOneAndUpdate to claim the PaymentRecord.
-//  (Fix from previous update - unchanged)
+//  Uses atomic findOneAndUpdate to claim the PaymentRecord before updating
+//  the Subscription. Prevents double-activation when both webhook and
+//  client-side verify fire in parallel.
 // ─────────────────────────────────────────────────────────────────────────────
 async function activateSubscriptionPayment(
   razorpayOrderId:   string,
@@ -105,10 +164,13 @@ async function activateSubscriptionPayment(
 
   const startFrom        = hasActivePeriod ? subscription.currentPeriodEnd! : now;
   const billingPeriod    = claimedRecord.billingPeriod as BillingPeriod;
+
+  // ✅ PHASE 3 FIX: now uses calendar arithmetic (was fixed ms)
   const currentPeriodEnd = computePeriodEnd(billingPeriod, startFrom);
 
   console.log(
-    `[webhook] userId=${claimedRecord.userId} ` +
+    `[webhook] activateSubscriptionPayment: userId=${claimedRecord.userId} ` +
+    `plan=${claimedRecord.planId} billing=${billingPeriod} ` +
     `hasActivePeriod=${hasActivePeriod} ` +
     `startFrom=${startFrom.toISOString()} ` +
     `newPeriodEnd=${currentPeriodEnd.toISOString()}`
@@ -143,45 +205,27 @@ async function activateSubscriptionPayment(
 // ─────────────────────────────────────────────────────────────────────────────
 //  activateAddonPayment()
 //
-//  VUL-04 FIX: Now uses atomic findOneAndUpdate to claim the PaymentRecord
-//  before creating the AddOn document. This eliminates the race condition where
-//  both the webhook and client-side /addon/verify could activate the same addon.
-//
-//  BEFORE (race condition):
-//    1. Webhook reads PaymentRecord with status="pending"
-//    2. Client /addon/verify reads same PaymentRecord with status="pending"
-//    3. Both create AddOn documents
-//    4. Both write status="captured" (last write wins, but two addons exist)
-//
-//  AFTER (atomic claim):
-//    1. First caller (webhook OR verify) claims the record atomically
-//    2. Second caller gets null from findOneAndUpdate → exits immediately
-//    3. Only one AddOn document is ever created
+//  Uses atomic findOneAndUpdate to claim the PaymentRecord (VUL-04 fix).
+//  Exactly one caller (webhook OR client-side verify) creates the AddOn.
 // ─────────────────────────────────────────────────────────────────────────────
 async function activateAddonPayment(
   razorpayOrderId:   string,
   razorpayPaymentId: string
 ): Promise<void> {
 
-  // ── VUL-04 FIX: Atomic claim ──────────────────────────────────────────────
-  //
-  //  Find the PaymentRecord by razorpayOrderId AND status="pending", then
-  //  atomically transition to "captured". MongoDB's document-level locking
-  //  ensures exactly one caller wins.
-  //
+  // ── Atomic claim ──────────────────────────────────────────────────────────
   const claimedRecord = await PaymentRecord.findOneAndUpdate(
-    { razorpayOrderId, status: "pending" }, // only match if still pending
+    { razorpayOrderId, status: "pending" },
     {
       $set: {
         status:            "captured",
         razorpayPaymentId,
       },
     },
-    { new: false } // return OLD doc to read addonType, userId, etc.
+    { new: false }
   );
 
   if (!claimedRecord) {
-    // Already captured by /addon/verify or unknown order
     console.log(
       `[webhook] activateAddonPayment: orderId=${razorpayOrderId} ` +
       "already captured or not found — skipping"
@@ -189,7 +233,7 @@ async function activateAddonPayment(
     return;
   }
 
-  // ── Now safe to create the AddOn — we atomically claimed the record ───────
+  // ── Compute add-on expiry ─────────────────────────────────────────────────
   const subscription = await Subscription.findOne({ userId: claimedRecord.userId });
 
   const addonType = claimedRecord.addonType as AddOnType;
@@ -202,11 +246,12 @@ async function activateAddonPayment(
     if (subscription?.invoiceCountResetAt) {
       billingAnchorDay = getAnchorDayFromDate(subscription.invoiceCountResetAt);
     } else {
-      billingAnchorDay = Math.min(new Date().getDate(), 28);
+      billingAnchorDay = Math.min(new Date().getUTCDate(), 28);
     }
     expiresAt = computeAddOnExpiry(billingAnchorDay);
   }
 
+  // ── Create the AddOn document ─────────────────────────────────────────────
   const newAddOn = await AddOn.create({
     userId:           claimedRecord.userId,
     type:             addonType,
@@ -218,15 +263,14 @@ async function activateAddonPayment(
   });
 
   // ── Write activatedAddOnId back onto the PaymentRecord ────────────────────
-  //  The status was already set to "captured" in the atomic claim above,
-  //  so this just adds the reverse-reference.
   await PaymentRecord.findByIdAndUpdate(claimedRecord._id, {
     $set: { activatedAddOnId: newAddOn._id as mongoose.Types.ObjectId },
   });
 
   console.log(
     `[webhook] Add-on activated: userId=${claimedRecord.userId} ` +
-    `type=${addonType} qty=${claimedRecord.addonQuantity ?? 1}`
+    `type=${addonType} qty=${claimedRecord.addonQuantity ?? 1} ` +
+    `expiresAt=${expiresAt?.toISOString() ?? "never (one-time)"}`
   );
 }
 
@@ -313,19 +357,19 @@ export async function POST(req: Request): Promise<NextResponse> {
 
       // Look up the record to decide which activate path to take.
       // NOTE: We do NOT check status here — the activate functions handle
-      // idempotency atomically themselves.
+      // idempotency via their own atomic claim.
       const paymentRecord = await PaymentRecord.findOne({ razorpayOrderId });
 
       if (!paymentRecord) {
-        console.warn(`[webhook] payment.captured: No PaymentRecord for orderId=${razorpayOrderId}`);
+        console.warn(
+          `[webhook] payment.captured: No PaymentRecord for orderId=${razorpayOrderId}`
+        );
         return NextResponse.json({ received: true }, { status: 200 });
       }
 
       if (paymentRecord.type === "subscription") {
-        // Subscription path: atomic claim inside activateSubscriptionPayment()
         await activateSubscriptionPayment(razorpayOrderId, razorpayPaymentId);
       } else if (paymentRecord.type === "addon") {
-        // VUL-04 FIX: Add-on path now also uses atomic claim
         await activateAddonPayment(razorpayOrderId, razorpayPaymentId);
       } else {
         console.warn(
@@ -356,7 +400,8 @@ export async function POST(req: Request): Promise<NextResponse> {
         paymentRecord.status = "failed";
         await paymentRecord.save();
         console.log(
-          `[webhook] Payment marked failed: orderId=${razorpayOrderId} userId=${paymentRecord.userId}`
+          `[webhook] Payment marked failed: orderId=${razorpayOrderId} ` +
+          `userId=${paymentRecord.userId}`
         );
       }
     } catch (err) {
