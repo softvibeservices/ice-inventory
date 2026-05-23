@@ -1,17 +1,8 @@
 // src/app/dashboard/subscription/page.tsx
 //
-// ─────────────────────────────────────────────────────────────────────────────
-//  FIXED VUL-06: Real Razorpay checkout integration
-//
-//  CHANGES FROM PREVIOUS VERSION:
-//    - Removed ComingSoonModal — replaced with actual payment flow
-//    - Added handleUpgradePlan() — creates Razorpay order and opens checkout
-//    - Added handlePurchaseAddon() — handles add-on purchases
-//    - Added Razorpay callback handling with payment verification
-//    - Added proper error states and loading indicators
-//    - Invalidates subscription cache after successful payment
-//    - All "Upgrade" and "Buy" buttons now trigger real payment flow
-// ─────────────────────────────────────────────────────────────────────────────
+// ✅ FIXED: Checkout loading state properly cleared after payment completion
+// ✅ FIXED: Error handling improved with proper loading state cleanup
+// ✅ FIXED: Success modal now auto-refreshes and clears loading
 
 "use client";
 
@@ -40,7 +31,7 @@ import {
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  TypeScript interfaces
+//  TypeScript interfaces (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 interface EffectiveLimits {
   invoicesPerMonth: number | null;
@@ -97,14 +88,12 @@ interface PaymentRecord {
   createdAt: string;
 }
 
-// Razorpay checkout response shape
 interface RazorpayResponse {
   razorpay_payment_id: string;
   razorpay_order_id: string;
   razorpay_signature: string;
 }
 
-// Extend Window type for Razorpay
 declare global {
   interface Window {
     Razorpay: any;
@@ -112,7 +101,7 @@ declare global {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Static data
+//  Static data (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 const PLAN_DISPLAY: Record<
   string,
@@ -238,7 +227,7 @@ const ADDON_DISPLAY: Record<string, { label: string; desc: string; price: string
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helpers
+//  Helper functions (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 function formatDate(iso: string | null) {
   if (!iso) return "—";
@@ -336,9 +325,6 @@ function UsageBar({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Payment status badge
-// ─────────────────────────────────────────────────────────────────────────────
 function PaymentStatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     captured: "bg-green-100 text-green-700",
@@ -358,20 +344,25 @@ function PaymentStatusBadge({ status }: { status: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Error Modal — shown when payment fails or verification fails
+//  Error/Success Modal Component
 // ─────────────────────────────────────────────────────────────────────────────
-function ErrorModal({
+function Modal({
   open,
   onClose,
   title,
   message,
+  type = "error",
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   message: string;
+  type?: "error" | "success";
 }) {
   if (!open) return null;
+
+  const isSuccess = type === "success";
+
   return (
     <div
       className="fixed inset-0 z-[9000] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
@@ -381,8 +372,18 @@ function ErrorModal({
         className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mx-auto mb-4">
-          <XCircle size={26} className="text-red-600" />
+        <div
+          className={`w-14 h-14 rounded-2xl border flex items-center justify-center mx-auto mb-4 ${
+            isSuccess
+              ? "bg-green-50 border-green-100"
+              : "bg-red-50 border-red-100"
+          }`}
+        >
+          {isSuccess ? (
+            <CheckCircle2 size={26} className="text-green-600" />
+          ) : (
+            <XCircle size={26} className="text-red-600" />
+          )}
         </div>
         <h3 className="text-lg font-bold text-gray-900 mb-2">{title}</h3>
         <p className="text-sm text-gray-600 leading-6 mb-5">{message}</p>
@@ -390,7 +391,7 @@ function ErrorModal({
           onClick={onClose}
           className="w-full px-4 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold rounded-xl transition-colors"
         >
-          Close
+          {isSuccess ? "Continue" : "Close"}
         </button>
       </div>
     </div>
@@ -408,15 +409,19 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Checkout state
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
-  // Error modal state
-  const [errorModal, setErrorModal] = useState<{ open: boolean; title: string; message: string }>({
+  const [modal, setModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    type: "error" | "success";
+  }>({
     open: false,
     title: "",
     message: "",
+    type: "error",
   });
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
@@ -474,18 +479,20 @@ export default function SubscriptionPage() {
     fetchData();
   }, [fetchData]);
 
-  // ── Handle plan upgrade (subscription payment) ────────────────────────────
+  // ── ✅ FIXED: Handle plan upgrade with proper loading state cleanup ───────
   const handleUpgradePlan = async (planId: string, billingPeriod: "monthly" | "yearly") => {
     if (!razorpayLoaded) {
-      setErrorModal({
+      setModal({
         open: true,
         title: "Payment Gateway Loading",
         message: "Payment system is still loading. Please wait a moment and try again.",
+        type: "error",
       });
       return;
     }
 
     setCheckoutLoading(true);
+    
     try {
       const token = localStorage.getItem("token");
 
@@ -515,7 +522,7 @@ export default function SubscriptionPage() {
         name: "Ice Inventory",
         description: `${orderData.planId} Plan - ${orderData.billingPeriod}`,
         handler: async (response: RazorpayResponse) => {
-          // Step 3: Verify payment on backend
+          // ✅ FIXED: Proper error handling with loading state cleanup
           try {
             const verifyRes = await fetch("/api/payment/verify", {
               method: "POST",
@@ -535,26 +542,35 @@ export default function SubscriptionPage() {
               throw new Error("Payment verification failed");
             }
 
-            // Step 4: Invalidate cache and refresh
+            // ✅ Success: Invalidate cache and refresh
             invalidateSubscriptionCache();
             await fetchData();
             
-            setErrorModal({
+            // ✅ CRITICAL FIX: Clear loading state BEFORE showing modal
+            setCheckoutLoading(false);
+            
+            setModal({
               open: true,
               title: "Payment Successful!",
-              message: "Your plan has been upgraded successfully. The page will refresh to show your new limits.",
+              message: "Your plan has been upgraded successfully. Your new limits are now active.",
+              type: "success",
             });
           } catch (verifyErr) {
-            setErrorModal({
+            // ✅ CRITICAL FIX: Clear loading state even on error
+            setCheckoutLoading(false);
+            
+            setModal({
               open: true,
               title: "Verification Failed",
               message:
                 "Payment was completed but verification failed. Your plan will be activated shortly. If not, please contact support.",
+              type: "error",
             });
           }
         },
         modal: {
           ondismiss: () => {
+            // ✅ User manually closed the modal before payment
             setCheckoutLoading(false);
           },
         },
@@ -566,31 +582,35 @@ export default function SubscriptionPage() {
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (err) {
-      setErrorModal({
+      // ✅ CRITICAL FIX: Clear loading state on order creation error
+      setCheckoutLoading(false);
+      
+      setModal({
         open: true,
         title: "Payment Failed",
         message: err instanceof Error ? err.message : "Failed to initiate payment. Please try again.",
+        type: "error",
       });
-      setCheckoutLoading(false);
     }
   };
 
-  // ── Handle add-on purchase ─────────────────────────────────────────────────
+  // ── ✅ FIXED: Handle add-on purchase with proper loading state cleanup ────
   const handlePurchaseAddon = async (addonType: string) => {
     if (!razorpayLoaded) {
-      setErrorModal({
+      setModal({
         open: true,
         title: "Payment Gateway Loading",
         message: "Payment system is still loading. Please wait a moment and try again.",
+        type: "error",
       });
       return;
     }
 
     setCheckoutLoading(true);
+    
     try {
       const token = localStorage.getItem("token");
 
-      // Step 1: Create addon order
       const createRes = await fetch("/api/payment/addon/create-order", {
         method: "POST",
         headers: {
@@ -607,7 +627,6 @@ export default function SubscriptionPage() {
 
       const orderData = await createRes.json();
 
-      // Step 2: Open Razorpay checkout
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: orderData.amount,
@@ -616,7 +635,6 @@ export default function SubscriptionPage() {
         name: "Ice Inventory",
         description: ADDON_DISPLAY[addonType]?.label || "Add-on Purchase",
         handler: async (response: RazorpayResponse) => {
-          // Step 3: Verify addon payment
           try {
             const verifyRes = await fetch("/api/payment/addon/verify", {
               method: "POST",
@@ -636,21 +654,28 @@ export default function SubscriptionPage() {
               throw new Error("Add-on verification failed");
             }
 
-            // Step 4: Refresh data
             invalidateSubscriptionCache();
             await fetchData();
             
-            setErrorModal({
+            // ✅ CRITICAL FIX: Clear loading state BEFORE showing modal
+            setCheckoutLoading(false);
+            
+            setModal({
               open: true,
               title: "Add-on Activated!",
               message: "Your add-on has been purchased and activated successfully.",
+              type: "success",
             });
           } catch (verifyErr) {
-            setErrorModal({
+            // ✅ CRITICAL FIX: Clear loading state even on error
+            setCheckoutLoading(false);
+            
+            setModal({
               open: true,
               title: "Verification Failed",
               message:
                 "Payment was completed but verification failed. Your add-on will be activated shortly.",
+              type: "error",
             });
           }
         },
@@ -667,12 +692,15 @@ export default function SubscriptionPage() {
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (err) {
-      setErrorModal({
+      // ✅ CRITICAL FIX: Clear loading state on order creation error
+      setCheckoutLoading(false);
+      
+      setModal({
         open: true,
         title: "Payment Failed",
         message: err instanceof Error ? err.message : "Failed to initiate payment. Please try again.",
+        type: "error",
       });
-      setCheckoutLoading(false);
     }
   };
 
@@ -718,7 +746,6 @@ export default function SubscriptionPage() {
     );
   }
 
-  // ── Derived display data ───────────────────────────────────────────────────
   const planDisplay = PLAN_DISPLAY[sub.planId] ?? PLAN_DISPLAY.launch;
   const daysLeft =
     sub.planId === "free_trial"
@@ -736,18 +763,17 @@ export default function SubscriptionPage() {
       ? sub.effectiveLimits.invoicesTotal
       : sub.effectiveLimits.invoicesPerMonth;
 
-  // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Razorpay Script */}
       <Script
         src="https://checkout.razorpay.com/v1/checkout.js"
         onLoad={() => setRazorpayLoaded(true)}
         onError={() => {
-          setErrorModal({
+          setModal({
             open: true,
             title: "Payment System Error",
             message: "Failed to load payment system. Please refresh the page and try again.",
+            type: "error",
           });
         }}
       />
@@ -755,14 +781,16 @@ export default function SubscriptionPage() {
       <div className="flex flex-col min-h-screen bg-gray-50">
         <DashboardNavbar />
 
-        <ErrorModal
-          open={errorModal.open}
-          onClose={() => setErrorModal({ open: false, title: "", message: "" })}
-          title={errorModal.title}
-          message={errorModal.message}
+        {/* ✅ Updated Modal with type support */}
+        <Modal
+          open={modal.open}
+          onClose={() => setModal({ ...modal, open: false })}
+          title={modal.title}
+          message={modal.message}
+          type={modal.type}
         />
 
-        {/* Loading overlay during checkout */}
+        {/* Loading overlay */}
         {checkoutLoading && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4">
@@ -775,7 +803,7 @@ export default function SubscriptionPage() {
 
         <main className="flex-grow max-w-5xl mx-auto w-full px-4 py-6 sm:py-8 space-y-6">
 
-          {/* ── Page header ─────────────────────────────────────────────────── */}
+          {/* Page header */}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Subscription</h1>
@@ -792,7 +820,7 @@ export default function SubscriptionPage() {
             </button>
           </div>
 
-          {/* ── Expired banner ───────────────────────────────────────────────── */}
+          {/* Expired banner */}
           {isExpired && (
             <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
               <AlertTriangle size={18} className="text-red-500 shrink-0 mt-0.5" />
@@ -807,7 +835,7 @@ export default function SubscriptionPage() {
             </div>
           )}
 
-          {/* ── Current Plan Card ────────────────────────────────────────────── */}
+          {/* Current Plan Card */}
           <div className={`bg-white rounded-2xl border p-5 sm:p-6 ${planDisplay.color}`}>
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="flex items-start gap-3">
@@ -829,7 +857,6 @@ export default function SubscriptionPage() {
                 </div>
               </div>
 
-              {/* Dates */}
               <div className="text-right text-sm space-y-1 shrink-0">
                 {sub.planId === "free_trial" ? (
                   <>
@@ -861,7 +888,7 @@ export default function SubscriptionPage() {
             </div>
           </div>
 
-          {/* ── Usage ────────────────────────────────────────────────────────── */}
+          {/* Usage */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
             <h3 className="text-base font-semibold text-gray-900 mb-1">Usage</h3>
             <p className="text-xs text-gray-400 mb-4">
@@ -892,7 +919,7 @@ export default function SubscriptionPage() {
             />
           </div>
 
-          {/* ── Active Add-ons ───────────────────────────────────────────────── */}
+          {/* Active Add-ons */}
           {sub.activeAddOns.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
               <h3 className="text-base font-semibold text-gray-900 mb-4">
@@ -937,7 +964,7 @@ export default function SubscriptionPage() {
             </div>
           )}
 
-          {/* ── Upgrade Plans ────────────────────────────────────────────────── */}
+          {/* Upgrade Plans */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-semibold text-gray-900">
@@ -1033,7 +1060,7 @@ export default function SubscriptionPage() {
             </div>
           </div>
 
-          {/* ── Add-ons Catalogue ────────────────────────────────────────────── */}
+          {/* Add-ons Catalogue */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-semibold text-gray-900">Optional Add-ons</h3>
@@ -1072,7 +1099,7 @@ export default function SubscriptionPage() {
             </div>
           </div>
 
-          {/* ── Payment History ───────────────────────────────────────────────── */}
+          {/* Payment History */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
             <h3 className="text-base font-semibold text-gray-900 mb-4">
               Payment History
@@ -1122,7 +1149,7 @@ export default function SubscriptionPage() {
             )}
           </div>
 
-          {/* ── Support CTA ───────────────────────────────────────────────────── */}
+          {/* Support CTA */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border border-dashed border-gray-300 rounded-2xl px-5 py-4 bg-gray-50">
             <div>
               <p className="font-semibold text-gray-800 text-sm">
