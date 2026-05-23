@@ -1,8 +1,9 @@
 // src/app/dashboard/subscription/page.tsx
 //
-// ✅ FIXED: Checkout loading state properly cleared after payment completion
-// ✅ FIXED: Error handling improved with proper loading state cleanup
-// ✅ FIXED: Success modal now auto-refreshes and clears loading
+// ✅ FIXED: Added full billing period support (monthly, 6 months, yearly)
+// ✅ FIXED: Billing period selector on upgrade cards
+// ✅ FIXED: Proper payment integration for all billing periods
+// ✅ FIXED: Savings badges for 6-month and yearly plans
 
 "use client";
 
@@ -31,7 +32,7 @@ import {
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  TypeScript interfaces (unchanged)
+//  TypeScript interfaces
 // ─────────────────────────────────────────────────────────────────────────────
 interface EffectiveLimits {
   invoicesPerMonth: number | null;
@@ -100,8 +101,10 @@ declare global {
   }
 }
 
+type BillingPeriod = "monthly" | "sixmonths" | "yearly";
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  Static data (unchanged)
+//  Static data
 // ─────────────────────────────────────────────────────────────────────────────
 const PLAN_DISPLAY: Record<
   string,
@@ -139,13 +142,18 @@ const PLAN_DISPLAY: Record<
   },
 };
 
+// ✅ FIXED: Added all billing period prices with savings
 const UPGRADE_PLANS = [
   {
     id: "launch",
     name: "Launch",
-    monthly: 499,
     tagline: "For small shop owners",
     highlight: false,
+    pricing: {
+      monthly: { price: 499, save: "" },
+      sixmonths: { price: 2499, save: "Save ₹495" },
+      yearly: { price: 4999, save: "Save ₹989" },
+    },
     features: [
       "120 invoices / month",
       "60 customers",
@@ -158,9 +166,13 @@ const UPGRADE_PLANS = [
   {
     id: "scale",
     name: "Scale",
-    monthly: 1499,
     tagline: "For growing distributors",
     highlight: true,
+    pricing: {
+      monthly: { price: 1499, save: "" },
+      sixmonths: { price: 7999, save: "Save ₹995" },
+      yearly: { price: 14999, save: "Save ₹2,989" },
+    },
     features: [
       "400 invoices / month",
       "100 customers",
@@ -173,9 +185,13 @@ const UPGRADE_PLANS = [
   {
     id: "business",
     name: "Business",
-    monthly: 2499,
     tagline: "For high-volume operations",
     highlight: false,
+    pricing: {
+      monthly: { price: 2499, save: "" },
+      sixmonths: { price: 13499, save: "Save ₹1,495" },
+      yearly: { price: 24999, save: "Save ₹4,989" },
+    },
     features: [
       "1,500 invoices / month",
       "Unlimited customers",
@@ -226,8 +242,15 @@ const ADDON_DISPLAY: Record<string, { label: string; desc: string; price: string
   },
 };
 
+// ✅ FIXED: Billing period display labels
+const BILLING_PERIOD_LABELS: Record<BillingPeriod, string> = {
+  monthly: "Monthly",
+  sixmonths: "6 Months",
+  yearly: "Yearly",
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helper functions (unchanged)
+//  Helper functions
 // ─────────────────────────────────────────────────────────────────────────────
 function formatDate(iso: string | null) {
   if (!iso) return "—";
@@ -250,6 +273,10 @@ function formatCurrency(paise: number) {
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(paise / 100);
+}
+
+function formatPrice(value: number) {
+  return new Intl.NumberFormat("en-IN").format(value);
 }
 
 function UsageBar({
@@ -344,7 +371,7 @@ function PaymentStatusBadge({ status }: { status: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Error/Success Modal Component
+//  Modal Component
 // ─────────────────────────────────────────────────────────────────────────────
 function Modal({
   open,
@@ -411,6 +438,9 @@ export default function SubscriptionPage() {
 
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+
+  // ✅ FIXED: Added billing period state
+  const [selectedPeriod, setSelectedPeriod] = useState<BillingPeriod>("monthly");
 
   const [modal, setModal] = useState<{
     open: boolean;
@@ -479,8 +509,8 @@ export default function SubscriptionPage() {
     fetchData();
   }, [fetchData]);
 
-  // ── ✅ FIXED: Handle plan upgrade with proper loading state cleanup ───────
-  const handleUpgradePlan = async (planId: string, billingPeriod: "monthly" | "yearly") => {
+  // ── ✅ FIXED: Handle plan upgrade with selected billing period ────────────
+  const handleUpgradePlan = async (planId: string, billingPeriod: BillingPeriod) => {
     if (!razorpayLoaded) {
       setModal({
         open: true,
@@ -520,9 +550,8 @@ export default function SubscriptionPage() {
         currency: orderData.currency,
         order_id: orderData.razorpayOrderId,
         name: "Ice Inventory",
-        description: `${orderData.planId} Plan - ${orderData.billingPeriod}`,
+        description: `${orderData.planId} Plan - ${BILLING_PERIOD_LABELS[billingPeriod]}`,
         handler: async (response: RazorpayResponse) => {
-          // ✅ FIXED: Proper error handling with loading state cleanup
           try {
             const verifyRes = await fetch("/api/payment/verify", {
               method: "POST",
@@ -542,11 +571,9 @@ export default function SubscriptionPage() {
               throw new Error("Payment verification failed");
             }
 
-            // ✅ Success: Invalidate cache and refresh
             invalidateSubscriptionCache();
             await fetchData();
             
-            // ✅ CRITICAL FIX: Clear loading state BEFORE showing modal
             setCheckoutLoading(false);
             
             setModal({
@@ -556,7 +583,6 @@ export default function SubscriptionPage() {
               type: "success",
             });
           } catch (verifyErr) {
-            // ✅ CRITICAL FIX: Clear loading state even on error
             setCheckoutLoading(false);
             
             setModal({
@@ -570,7 +596,6 @@ export default function SubscriptionPage() {
         },
         modal: {
           ondismiss: () => {
-            // ✅ User manually closed the modal before payment
             setCheckoutLoading(false);
           },
         },
@@ -582,7 +607,6 @@ export default function SubscriptionPage() {
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (err) {
-      // ✅ CRITICAL FIX: Clear loading state on order creation error
       setCheckoutLoading(false);
       
       setModal({
@@ -594,7 +618,7 @@ export default function SubscriptionPage() {
     }
   };
 
-  // ── ✅ FIXED: Handle add-on purchase with proper loading state cleanup ────
+  // ── Handle add-on purchase ─────────────────────────────────────────────────
   const handlePurchaseAddon = async (addonType: string) => {
     if (!razorpayLoaded) {
       setModal({
@@ -657,7 +681,6 @@ export default function SubscriptionPage() {
             invalidateSubscriptionCache();
             await fetchData();
             
-            // ✅ CRITICAL FIX: Clear loading state BEFORE showing modal
             setCheckoutLoading(false);
             
             setModal({
@@ -667,7 +690,6 @@ export default function SubscriptionPage() {
               type: "success",
             });
           } catch (verifyErr) {
-            // ✅ CRITICAL FIX: Clear loading state even on error
             setCheckoutLoading(false);
             
             setModal({
@@ -692,7 +714,6 @@ export default function SubscriptionPage() {
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (err) {
-      // ✅ CRITICAL FIX: Clear loading state on order creation error
       setCheckoutLoading(false);
       
       setModal({
@@ -781,7 +802,6 @@ export default function SubscriptionPage() {
       <div className="flex flex-col min-h-screen bg-gray-50">
         <DashboardNavbar />
 
-        {/* ✅ Updated Modal with type support */}
         <Modal
           open={modal.open}
           onClose={() => setModal({ ...modal, open: false })}
@@ -876,7 +896,7 @@ export default function SubscriptionPage() {
                   <>
                     <p className="opacity-60">Renews on</p>
                     <p className="font-semibold capitalize">
-                      {sub.billingPeriod} · {formatDate(sub.currentPeriodEnd)}
+                      {BILLING_PERIOD_LABELS[sub.billingPeriod as BillingPeriod]} · {formatDate(sub.currentPeriodEnd)}
                     </p>
                     {daysLeft !== null && (
                       <p className="text-xs opacity-70">{daysLeft} days remaining</p>
@@ -964,7 +984,7 @@ export default function SubscriptionPage() {
             </div>
           )}
 
-          {/* Upgrade Plans */}
+          {/* ✅ FIXED: Upgrade Plans with Billing Period Selector */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-semibold text-gray-900">
@@ -975,12 +995,52 @@ export default function SubscriptionPage() {
               <TrendingUp size={18} className="text-cyan-600" />
             </div>
             <p className="text-xs text-gray-400 mb-5">
-              Select a plan and complete payment to upgrade instantly.
+              Select a billing period and plan to upgrade instantly.
             </p>
 
+            {/* ✅ FIXED: Billing Period Toggle */}
+            <div className="flex flex-wrap items-center gap-4 mb-6">
+              <div
+                className="inline-flex items-center bg-gray-100 rounded-xl p-1"
+                role="group"
+                aria-label="Billing period"
+              >
+                {([
+                  { key: "monthly" as BillingPeriod, label: "Monthly" },
+                  { key: "sixmonths" as BillingPeriod, label: "6 Months", badge: "−17%" },
+                  { key: "yearly" as BillingPeriod, label: "Yearly", badge: "−17%" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setSelectedPeriod(opt.key)}
+                    className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                      selectedPeriod === opt.key
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    {opt.label}
+                    {opt.badge && (
+                      <span className="text-[10px] font-semibold bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">
+                        {opt.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Save more with longer billing cycles.
+              </p>
+            </div>
+
+            {/* ✅ FIXED: Plan Cards with Dynamic Pricing */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {UPGRADE_PLANS.map((plan) => {
                 const isCurrent = sub.planId === plan.id && !isExpired;
+                const billing = plan.pricing[selectedPeriod];
+                
                 return (
                   <article
                     key={plan.id}
@@ -1006,9 +1066,21 @@ export default function SubscriptionPage() {
                       <p className="text-xs text-gray-500 mt-0.5">{plan.tagline}</p>
                     </div>
 
-                    <div className="text-2xl font-extrabold text-gray-900">
-                      ₹{plan.monthly.toLocaleString("en-IN")}
-                      <span className="text-xs font-normal text-gray-400 ml-1">/mo</span>
+                    {/* ✅ FIXED: Dynamic Price Display */}
+                    <div>
+                      <div className="text-2xl font-extrabold text-gray-900">
+                        ₹{formatPrice(billing.price)}
+                        <span className="text-xs font-normal text-gray-400 ml-1">
+                          {selectedPeriod === "monthly" ? "/mo" : selectedPeriod === "sixmonths" ? "/6mo" : "/yr"}
+                        </span>
+                      </div>
+                      {billing.save ? (
+                        <p className="text-xs text-green-600 font-medium mt-1">
+                          {billing.save}
+                        </p>
+                      ) : (
+                        <div className="h-5 mt-1" />
+                      )}
                     </div>
 
                     <ul className="space-y-1.5 flex-1">
@@ -1020,10 +1092,11 @@ export default function SubscriptionPage() {
                       ))}
                     </ul>
 
+                    {/* ✅ FIXED: Pass selected period to upgrade handler */}
                     <button
                       onClick={() => {
                         if (!isCurrent) {
-                          handleUpgradePlan(plan.id, "monthly");
+                          handleUpgradePlan(plan.id, selectedPeriod);
                         }
                       }}
                       disabled={isCurrent || checkoutLoading}
@@ -1131,7 +1204,7 @@ export default function SubscriptionPage() {
                           {p.type === "subscription"
                             ? `${
                                 PLAN_DISPLAY[p.planId ?? ""]?.name ?? p.planId
-                              } Plan · ${p.billingPeriod ?? ""}`
+                              } Plan · ${BILLING_PERIOD_LABELS[p.billingPeriod as BillingPeriod] ?? p.billingPeriod}`
                             : ADDON_DISPLAY[p.addonType ?? ""]?.label ??
                               p.addonType}
                         </td>
