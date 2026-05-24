@@ -1,4 +1,4 @@
-// icecream-inventory/src/app/dashboard/products/ProductList.tsx
+// src/app/dashboard/products/ProductList.tsx
 "use client";
 
 import React, { useMemo, useState } from "react";
@@ -68,6 +68,34 @@ const SORT_BUTTONS: SortButtonDef[] = [
 
 const ITEMS_PER_PAGE = 20;
 
+// ─── PDF color palette ──────────────────────────────────────────────────────
+const PDF = {
+  // Brand blue
+  blue:       [30,  80, 162] as [number, number, number],
+  blueLight:  [219, 234, 254] as [number, number, number],
+  blueMid:    [59, 130, 246] as [number, number, number],
+  // Greens
+  green:      [22, 101, 52]  as [number, number, number],
+  greenLight: [220, 252, 231] as [number, number, number],
+  // Ambers / warnings
+  amber:      [120, 53, 15]  as [number, number, number],
+  amberLight: [254, 243, 199] as [number, number, number],
+  amberBorder:[245, 158, 11] as [number, number, number],
+  // Neutrals
+  white:      [255, 255, 255] as [number, number, number],
+  gray50:     [249, 250, 251] as [number, number, number],
+  gray100:    [243, 244, 246] as [number, number, number],
+  gray200:    [229, 231, 235] as [number, number, number],
+  gray400:    [156, 163, 175] as [number, number, number],
+  gray600:    [75,  85,  99]  as [number, number, number],
+  gray800:    [31,  41,  55]  as [number, number, number],
+  gray900:    [17,  24,  39]  as [number, number, number],
+  // Purple for category badges
+  purple:     [91,  33, 182]  as [number, number, number],
+  purpleLight:[237, 233, 254] as [number, number, number],
+};
+// ────────────────────────────────────────────────────────────────────────────
+
 export default function ProductList({
   products,
   loading,
@@ -79,10 +107,10 @@ export default function ProductList({
   setConfirmDeleteId,
   fetchProducts,
 }: ProductListProps) {
-  const [currentPage, setCurrentPage]     = useState(1);
-  const [viewAll, setViewAll]             = useState(false);
+  const [currentPage, setCurrentPage]       = useState(1);
+  const [viewAll, setViewAll]               = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("All");
-  const [internalSort, setInternalSort]   = useState<InternalSortMode>("default");
+  const [internalSort, setInternalSort]     = useState<InternalSortMode>("default");
 
   /* ─── helpers ─── */
   const renderPackQty  = (p: Product) =>
@@ -206,36 +234,426 @@ export default function ProductList({
     return filtered.slice(start, start + ITEMS_PER_PAGE);
   }, [filtered, currentPage, viewAll]);
 
-  /* ─── PDF export ─── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     PROFESSIONAL PDF EXPORT
+  ═══════════════════════════════════════════════════════════════════════════*/
   const exportPDF = () => {
-    const doc = new jsPDF({ orientation: "landscape" });
-    doc.setFontSize(16);
-    doc.text("Product Report", 14, 18);
-    doc.setFontSize(9);
-    doc.setTextColor(100);
-    doc.text(`Generated: ${new Date().toLocaleString("en-IN")} · Total: ${filtered.length} products`, 14, 25);
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
 
-    autoTable(doc, {
-      startY: 30,
-      head: [["#", "Product Name", "Category", "Unit", "Pack Qty", "Pack Unit", "Selling Price", "MRP", "Stock Qty"]],
-      body: filtered.map((p, i) => [
-        i + 1,
-        p.name,
-        p.category || "Uncategorized",
-        p.unit,
-        renderPackQty(p),
-        renderPackUnit(p),
-        fmtCurrency(p.sellingPrice),
-        p.mrp ? fmtCurrency(p.mrp) : "—",
-        p.quantity !== undefined ? p.quantity : "—",
-      ]),
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [37, 99, 235] },
-      alternateRowStyles: { fillColor: [248, 250, 252] },
+    const PW  = doc.internal.pageSize.getWidth();   // 297 mm
+    const PH  = doc.internal.pageSize.getHeight();  // 210 mm
+    const ML  = 14;  // margin left
+    const MR  = 14;  // margin right
+    const CW  = PW - ML - MR; // content width
+
+    const now      = new Date();
+    const dateStr  = now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    const timeStr  = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+    const dateTime = `${dateStr}, ${timeStr}`;
+
+    // ── derived stats ──────────────────────────────────────────────────────
+    const totalProducts  = filtered.length;
+    const totalStockVal  = filtered.reduce((s, p) => s + (p.sellingPrice ?? 0) * (p.quantity ?? 0), 0);
+    const lowStockItems  = filtered.filter(
+      (p) => p.quantity !== undefined && p.minStock !== undefined && p.minStock > 0 && p.quantity <= p.minStock
+    );
+    const lowStockCount  = lowStockItems.length;
+    const uniqueCategories = Array.from(new Set(filtered.map((p) => p.category?.trim() || "Uncategorized")));
+    const categoryCount  = uniqueCategories.length;
+
+    // ── helper: draw rounded rectangle ────────────────────────────────────
+    const roundedRect = (
+      x: number, y: number, w: number, h: number, r: number,
+      style: "F" | "S" | "FD" = "F"
+    ) => {
+      doc.roundedRect(x, y, w, h, r, r, style);
+    };
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SECTION 1 — HEADER BANNER
+    // ════════════════════════════════════════════════════════════════════════
+    // Background
+    doc.setFillColor(...PDF.blue);
+    doc.rect(0, 0, PW, 42, "F");
+
+    // Subtle diagonal accent strip
+    doc.setFillColor(255, 255, 255);
+  // AFTER:
+(doc as any).setGState((doc as any).GState({ opacity: 0.05 }));
+doc.triangle(PW - 80, 0, PW, 0, PW, 42, "F");
+(doc as any).setGState((doc as any).GState({ opacity: 1 }));
+
+    // Report title
+    doc.setTextColor(...PDF.white);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("Product Inventory Report", ML, 16);
+
+    // Sub-line
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(180, 210, 255);
+    doc.text(`Generated on ${dateTime}`, ML, 23);
+
+    // Divider line inside header
+    doc.setDrawColor(255, 255, 255);
+   // AFTER:
+(doc as any).setGState((doc as any).GState({ opacity: 0.25 }));
+doc.line(ML, 27, PW - MR, 27);
+(doc as any).setGState((doc as any).GState({ opacity: 1 }));
+
+    // Active filter note
+    const filterParts: string[] = [];
+    if (activeCategory !== "All") filterParts.push(`Category: ${activeCategory}`);
+    if (search.trim()) filterParts.push(`Search: "${search.trim()}"`);
+    const filterNote = filterParts.length
+      ? `Filters applied — ${filterParts.join(" · ")}`
+      : "Showing all products (no active filters)";
+    doc.setTextColor(180, 210, 255);
+    doc.setFontSize(8);
+    doc.text(filterNote, ML, 32);
+
+    // Right-side: company badge area
+    doc.setTextColor(...PDF.white);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Ice Saathi", PW - MR, 14, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(180, 210, 255);
+    // AFTER:
+doc.text("Ice Saathi — Inventory Management", PW - MR, 20, { align: "right" });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SECTION 2 — SUMMARY KPI CARDS
+    // ════════════════════════════════════════════════════════════════════════
+    const cardY   = 48;
+    const cardH   = 22;
+    const cardGap = 4;
+    const cardW   = (CW - cardGap * 3) / 4;
+
+    const kpiCards = [
+      {
+        label: "Total Products",
+        value: String(totalProducts),
+        sub:   `${categoryCount} categor${categoryCount === 1 ? "y" : "ies"}`,
+        bg:    PDF.blueLight,
+        accent: PDF.blue,
+        valueColor: PDF.blue,
+      },
+      {
+        label: "Stock Value",
+        value: `Rs.${totalStockVal >= 100000
+          ? `${(totalStockVal / 100000).toFixed(2)}L`
+          : totalStockVal >= 1000
+          ? `${(totalStockVal / 1000).toFixed(1)}K`
+          : totalStockVal.toFixed(0)}`,
+        sub:   "selling price x qty",
+        bg:    PDF.greenLight,
+        accent: PDF.green,
+        valueColor: PDF.green,
+      },
+      {
+        label: "Low Stock Alerts",
+        value: String(lowStockCount),
+        sub:   lowStockCount > 0 ? "need restocking" : "all stock healthy",
+        bg:    lowStockCount > 0 ? PDF.amberLight : PDF.greenLight,
+        accent: lowStockCount > 0 ? PDF.amberBorder : PDF.green,
+        valueColor: lowStockCount > 0 ? [161, 60, 0] as [number,number,number] : PDF.green,
+      },
+      {
+        label: "Categories",
+        value: String(categoryCount),
+        sub:   uniqueCategories.slice(0, 2).join(", ") + (uniqueCategories.length > 2 ? "+" : ""),
+        bg:    PDF.purpleLight,
+        accent: PDF.purple,
+        valueColor: PDF.purple,
+      },
+    ];
+
+    kpiCards.forEach((card, i) => {
+      const cx = ML + i * (cardW + cardGap);
+
+      // Card background
+      doc.setFillColor(...card.bg);
+      roundedRect(cx, cardY, cardW, cardH, 2, "F");
+
+      // Left accent bar
+      doc.setFillColor(...card.accent);
+      roundedRect(cx, cardY, 2.5, cardH, 1, "F");
+
+      // Label
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(...PDF.gray600);
+      doc.text(card.label.toUpperCase(), cx + 5.5, cardY + 6.5);
+
+      // Value
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(...card.valueColor);
+      doc.text(card.value, cx + 5.5, cardY + 14.5);
+
+      // Sub
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.5);
+      doc.setTextColor(...PDF.gray400);
+      doc.text(card.sub, cx + 5.5, cardY + 19.5, { maxWidth: cardW - 8 });
     });
 
-    doc.save("products-report.pdf");
+    // ════════════════════════════════════════════════════════════════════════
+    // SECTION 3 — SECTION LABEL
+    // ════════════════════════════════════════════════════════════════════════
+    const tableStartY = cardY + cardH + 6;
+
+    doc.setFillColor(...PDF.gray100);
+    doc.rect(ML, tableStartY, CW, 6, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(...PDF.gray600);
+    doc.text("PRODUCT LIST", ML + 3, tableStartY + 4.2);
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SECTION 4 — PRODUCT TABLE
+    // ════════════════════════════════════════════════════════════════════════
+    const colDefs = [
+      { header: "#",            dataKey: "idx"   },
+      { header: "Product Name", dataKey: "name"  },
+      { header: "Category",     dataKey: "cat"   },
+      { header: "Unit",         dataKey: "unit"  },
+      { header: "Pack",         dataKey: "pack"  },
+      { header: "Sell Price",   dataKey: "sp"    },
+      { header: "MRP",          dataKey: "mrp"   },
+      { header: "Stock",        dataKey: "qty"   },
+      { header: "Min Stock",    dataKey: "min"   },
+      { header: "Notes",        dataKey: "notes" },
+    ];
+
+    const tableRows = filtered.map((p, i) => {
+      const isLow =
+        p.quantity !== undefined &&
+        p.minStock !== undefined &&
+        p.minStock > 0 &&
+        p.quantity <= p.minStock;
+      return {
+        idx:   i + 1,
+        name:  p.name,
+        cat:   p.category || "Uncategorized",
+        unit:  p.unit,
+        pack:
+          p.packQuantity !== undefined && p.packQuantity !== null
+            ? `${p.packQuantity}${p.packUnit ? " " + p.packUnit : ""}`
+            : "—",
+        sp:    `Rs.${(p.sellingPrice ?? 0).toFixed(2)}`,
+        mrp:   p.mrp ? `Rs.${p.mrp.toFixed(2)}` : "—",
+        qty:   p.quantity !== undefined ? String(p.quantity) : "—",
+        min:   p.minStock !== undefined && p.minStock > 0 ? String(p.minStock) : "—",
+        notes: p.notes || "",
+        _isLow: isLow,
+      };
+    });
+
+    autoTable(doc, {
+      startY:  tableStartY + 6,
+      margin:  { left: ML, right: MR },
+      columns: colDefs,
+      body:    tableRows,
+      theme:   "plain",
+
+      // ── Header row styling ──
+      headStyles: {
+        fillColor:   PDF.blue,
+        textColor:   PDF.white,
+        fontStyle:   "bold",
+        fontSize:    7.5,
+        cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+        halign:      "left",
+        valign:      "middle",
+      },
+
+      // ── Body row styling ──
+      bodyStyles: {
+        fontSize:    7.5,
+        cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 },
+        textColor:   PDF.gray800,
+        valign:      "middle",
+      },
+
+      // ── Alternating rows ──
+      alternateRowStyles: {
+        fillColor: PDF.gray50,
+      },
+
+      // ── Column-specific alignment ──
+      columnStyles: {
+        idx:   { halign: "center", fontStyle: "bold", textColor: PDF.gray400, cellWidth: 8    },
+        name:  { cellWidth: 52                                                                  },
+        cat:   { cellWidth: 30                                                                  },
+        unit:  { halign: "center", cellWidth: 18                                               },
+        pack:  { halign: "center", textColor: PDF.gray600, cellWidth: 20                       },
+        sp:    { halign: "right",  fontStyle: "bold", textColor: PDF.green,   cellWidth: 22   },
+        mrp:   { halign: "right",  textColor: PDF.gray600,                    cellWidth: 20   },
+        qty:   { halign: "center", cellWidth: 18                                               },
+        min:   { halign: "center", cellWidth: 18                                               },
+        notes: { textColor: PDF.gray400, fontSize: 6.5,                       cellWidth: 63   },
+      },
+
+      // ── Per-cell hook — low-stock highlight & category badge ──
+      didParseCell(data) {
+        const row = data.row.raw as typeof tableRows[0];
+
+        // Low-stock rows: amber tint on qty cell
+        if (row._isLow && data.column.dataKey === "qty") {
+          data.cell.styles.fillColor    = PDF.amberLight;
+          data.cell.styles.textColor    = PDF.amber;
+          data.cell.styles.fontStyle    = "bold";
+        }
+
+        // Low-stock name — add a subtle left border feel via text color
+        if (row._isLow && data.column.dataKey === "name") {
+          data.cell.styles.textColor = [120, 53, 15];
+        }
+      },
+
+      // ── Draw line below header ──
+      didDrawCell(data) {
+        if (data.section === "head" && data.column.index === 0) {
+          doc.setDrawColor(...PDF.blueLight);
+          doc.setLineWidth(0.1);
+        }
+      },
+
+      // ── Row-level hook: draw left accent for low-stock rows ──
+      didDrawPage(data) {
+        // Add border line at table top
+        doc.setDrawColor(...PDF.gray200);
+        doc.setLineWidth(0.3);
+      },
+
+      // ── Horizontal line between rows ──
+      rowPageBreak: "avoid",
+      showHead: "everyPage",
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY as number;
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SECTION 5 — LOW STOCK SUMMARY (only if there are low-stock items)
+    // ════════════════════════════════════════════════════════════════════════
+    if (lowStockCount > 0) {
+      const lsY = finalY + 8;
+
+      // Check if it fits on current page, else add page
+      const spaceLeft = PH - lsY - 20;
+      const lsRows    = lowStockItems.slice(0, 8); // max 8 rows in summary
+      const lsH       = 8 + lsRows.length * 7 + 6;
+
+      if (spaceLeft < lsH) {
+        doc.addPage();
+      }
+
+      const lsStartY = spaceLeft < lsH ? 20 : lsY;
+
+      // Section header
+      doc.setFillColor(...PDF.amberLight);
+      doc.setDrawColor(...PDF.amberBorder);
+      doc.setLineWidth(0.4);
+      roundedRect(ML, lsStartY, CW, 7, 1.5, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(...PDF.amber);
+      doc.text(`! Low Stock Alert — ${lowStockCount} product${lowStockCount > 1 ? "s" : ""} need restocking`, ML + 3, lsStartY + 4.7);
+
+      autoTable(doc, {
+        startY: lsStartY + 8,
+        margin: { left: ML, right: MR },
+        columns: [
+          { header: "#",            dataKey: "idx"     },
+          { header: "Product Name", dataKey: "name"    },
+          { header: "Category",     dataKey: "cat"     },
+          { header: "Current Stock",dataKey: "qty"     },
+          { header: "Min Stock",    dataKey: "min"     },
+          { header: "Deficit",      dataKey: "deficit" },
+        ],
+        body: lowStockItems.map((p, i) => ({
+          idx:     i + 1,
+          name:    p.name,
+          cat:     p.category || "Uncategorized",
+          qty:     String(p.quantity ?? 0),
+          min:     String(p.minStock ?? 0),
+          deficit: String(Math.max(0, (p.minStock ?? 0) - (p.quantity ?? 0))),
+        })),
+        theme: "plain",
+        headStyles: {
+          fillColor: PDF.amberBorder,
+          textColor: PDF.white,
+          fontStyle: "bold",
+          fontSize:  7.5,
+          cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 },
+        },
+        bodyStyles: {
+          fontSize:  7.5,
+          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 },
+          textColor: PDF.gray800,
+        },
+        alternateRowStyles: { fillColor: PDF.amberLight },
+        columnStyles: {
+          idx:     { halign: "center", fontStyle: "bold", textColor: PDF.gray400, cellWidth: 8  },
+          name:    { cellWidth: 70                                                                },
+          cat:     { cellWidth: 40                                                                },
+          qty:     { halign: "center", textColor: [161, 60, 0] as [number,number,number], fontStyle: "bold", cellWidth: 28 },
+          min:     { halign: "center", cellWidth: 28                                             },
+          deficit: { halign: "center", fontStyle: "bold", textColor: [180, 30, 30] as [number,number,number], cellWidth: 28 },
+        },
+        rowPageBreak: "avoid",
+        showHead: "everyPage",
+      });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SECTION 6 — FOOTER (on every page)
+    // ════════════════════════════════════════════════════════════════════════
+    const totalDocPages = (doc as any).internal.getNumberOfPages();
+
+    for (let pageNum = 1; pageNum <= totalDocPages; pageNum++) {
+      doc.setPage(pageNum);
+
+      // Footer background strip
+      doc.setFillColor(...PDF.gray100);
+      doc.rect(0, PH - 10, PW, 10, "F");
+
+      // Separator line
+      doc.setDrawColor(...PDF.gray200);
+      doc.setLineWidth(0.3);
+      doc.line(0, PH - 10, PW, PH - 10);
+
+      // Left: brand
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(...PDF.gray600);
+      doc.text("Ice Saathi — Product Report", ML, PH - 5.5);
+
+      // Center: generated info
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...PDF.gray400);
+      doc.text(`Generated: ${dateTime}`, PW / 2, PH - 5.5, { align: "center" });
+
+      // Right: page number
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...PDF.blue);
+      doc.text(`Page ${pageNum} of ${totalDocPages}`, PW - MR, PH - 5.5, { align: "right" });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SAVE
+    // ════════════════════════════════════════════════════════════════════════
+    const slug = activeCategory !== "All" ? `-${activeCategory.toLowerCase().replace(/\s+/g, "_")}` : "";
+    doc.save(`products-report${slug}-${now.toISOString().slice(0, 10)}.pdf`);
   };
+  /* ═══════════════════════════════════════════════════════════════════════════
+     END PDF EXPORT
+  ═══════════════════════════════════════════════════════════════════════════*/
 
   /* ─── active filter count ─── */
   const activeFilterCount =
@@ -316,9 +734,9 @@ export default function ProductList({
     );
   };
 
-  /* ════════════════════════════════════════════════
+  /* ════════════════════════════════════════════════════════════════════════
      RENDER
-  ════════════════════════════════════════════════ */
+  ════════════════════════════════════════════════════════════════════════ */
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
 

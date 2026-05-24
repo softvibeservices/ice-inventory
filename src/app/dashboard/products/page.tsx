@@ -4,7 +4,7 @@
 import React, { JSX, useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { Upload, FileText, Plus, Package, Lock } from "lucide-react";
+import { Upload, FileSpreadsheet, Plus, Package, Lock } from "lucide-react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import PlanLimitWarning from "@/app/components/PlanLimitWarning";
@@ -12,7 +12,7 @@ import UpgradePromptModal from "@/app/components/UpgradePromptModal";
 import ProductList from "./ProductList";
 import ProductForm from "./ProductForm";
 import DeleteConfirmationModal from "./DeleteConfirmationModal";
-import CSVFormatModal from "./CSVFormatModal";
+import FileTemplateModal from "./FileTemplateModal";
 import BulkUploadModal from "./BulkUploadModal";
 import { Product, FormState, SortMode } from "@/types/product.type";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -29,17 +29,16 @@ export default function ProductsPage(): JSX.Element {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>("default");
-  const [showCSVFormat, setShowCSVFormat] = useState(false);
+  const [showFileTemplate, setShowFileTemplate] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
 
-  // ── PHASE 8: Subscription state ───────────────────────────────────────────
+  // ── Subscription state ───────────────────────────────────────────────────
   const { subscription } = useSubscription();
   const [upgradeModal, setUpgradeModal] = useState(false);
 
-  //  Derived limit values from the live subscription
-  const productLimit   = subscription?.effectiveLimits.products   ?? null;
-  const productCount   = products.length; // live count from fetched data
-  const isAtLimit      = productLimit !== null && productCount >= productLimit;
+  const productLimit = subscription?.effectiveLimits.products ?? null;
+  const productCount = products.length;
+  const isAtLimit    = productLimit !== null && productCount >= productLimit;
   // ─────────────────────────────────────────────────────────────────────────
 
   const initialForm: FormState = {
@@ -174,12 +173,11 @@ export default function ProductsPage(): JSX.Element {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
 
-        // ── PHASE 8: Handle product limit 403 ────────────────────────────
+        // Handle product limit 403
         if (res.status === 403 && err?.upgradeRequired) {
           setUpgradeModal(true);
           return;
         }
-        // ─────────────────────────────────────────────────────────────────
 
         throw new Error(err?.error || `${method} failed`);
       }
@@ -287,7 +285,7 @@ export default function ProductsPage(): JSX.Element {
       <main className="flex-grow w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
 
-          {/* ── PHASE 8: Plan limit warning ───────────────────────────────── */}
+          {/* Plan limit warning */}
           {subscription && (
             <PlanLimitWarning
               productsCount={productCount}
@@ -295,9 +293,8 @@ export default function ProductsPage(): JSX.Element {
               planId={subscription.planId}
             />
           )}
-          {/* ─────────────────────────────────────────────────────────────── */}
 
-          {/* ── Page header ── */}
+          {/* Page header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
@@ -305,29 +302,27 @@ export default function ProductsPage(): JSX.Element {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 leading-tight">Products</h1>
-                {/* ── PHASE 8: Live usage count in subtitle ── */}
                 <p className="text-sm text-gray-500">
                   {productLimit !== null
                     ? `${productCount} / ${productLimit} products used`
                     : "Manage your shop's product catalogue"}
                 </p>
-                {/* ─────────────────────────────────────────── */}
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* CSV Format — tertiary */}
+              {/* ── File Templates button — shows BOTH CSV & Excel ── */}
               <button
-                onClick={() => setShowCSVFormat(true)}
+                onClick={() => setShowFileTemplate(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium
                            border border-gray-200 rounded-lg text-gray-600 bg-white
                            hover:bg-gray-50 transition-colors shadow-sm"
               >
-                <FileText size={15} />
-                CSV Format
+                <FileSpreadsheet size={15} />
+                File Templates
               </button>
 
-              {/* Bulk Upload — secondary */}
+              {/* Bulk Upload */}
               <button
                 onClick={() => setShowBulkUpload(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold
@@ -338,7 +333,7 @@ export default function ProductsPage(): JSX.Element {
                 Bulk Upload
               </button>
 
-              {/* ── PHASE 8: Add Product — disabled + tooltip when at limit ── */}
+              {/* Add Product — locked when at limit */}
               {isAtLimit ? (
                 <button
                   onClick={() => setUpgradeModal(true)}
@@ -370,11 +365,10 @@ export default function ProductsPage(): JSX.Element {
                   {showForm ? "Hide Form" : "Add Product"}
                 </button>
               )}
-              {/* ─────────────────────────────────────────────────────────── */}
             </div>
           </div>
 
-          {/* ── Product Form (collapsible) ── */}
+          {/* Product Form (collapsible) */}
           {showForm && !isAtLimit && (
             <ProductForm
               formData={formData}
@@ -387,7 +381,7 @@ export default function ProductsPage(): JSX.Element {
             />
           )}
 
-          {/* ── Product List ── */}
+          {/* Product List */}
           <ProductList
             products={products}
             loading={loading}
@@ -402,7 +396,7 @@ export default function ProductsPage(): JSX.Element {
         </div>
       </main>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       <DeleteConfirmationModal
         confirmDeleteId={confirmDeleteId}
         setConfirmDeleteId={setConfirmDeleteId}
@@ -410,7 +404,8 @@ export default function ProductsPage(): JSX.Element {
         isDeleting={isDeleting}
       />
 
-      {showCSVFormat && <CSVFormatModal onClose={() => setShowCSVFormat(false)} />}
+      {/* ── File Templates modal (CSV + Excel) ── */}
+      {showFileTemplate && <FileTemplateModal onClose={() => setShowFileTemplate(false)} />}
 
       {showBulkUpload && (
         <BulkUploadModal
@@ -420,7 +415,7 @@ export default function ProductsPage(): JSX.Element {
         />
       )}
 
-      {/* ── PHASE 8: Upgrade prompt modal ─────────────────────────────────── */}
+      {/* Upgrade prompt modal */}
       <UpgradePromptModal
         open={upgradeModal}
         onClose={() => setUpgradeModal(false)}
@@ -429,7 +424,6 @@ export default function ProductsPage(): JSX.Element {
         limit={productLimit}
         currentPlanId={subscription?.planId}
       />
-      {/* ─────────────────────────────────────────────────────────────────── */}
 
       <Toaster position="top-right" reverseOrder={false} />
       <Footer />

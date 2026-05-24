@@ -88,11 +88,9 @@ export default function CustomerList({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Avatar initials
   const initials = (name: string) =>
     name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
-  // Avatar color from name
   const avatarColor = (name: string) => {
     const colors = [
       "bg-blue-100 text-blue-700",
@@ -239,6 +237,7 @@ export default function CustomerList({
             ) : (
               paginatedCustomers.map((c, idx) => {
                 const globalIndex = viewAll ? filtered.indexOf(c) + 1 : (currentPage - 1) * ITEMS_PER_PAGE + idx + 1;
+                const canSettle = typeof c.debit === "number" && c.debit > 0;
                 return (
                   <tr key={c._id} className="hover:bg-slate-50/60 transition-colors group">
                     <td className="px-4 py-3">
@@ -303,9 +302,20 @@ export default function CustomerList({
                         <ActionBtn onClick={() => handleEdit(c)} title="Edit" color="amber">
                           <Edit size={13} />
                         </ActionBtn>
-                        <ActionBtn onClick={() => openSettlementModal(c)} title="Settle" color="emerald">
-                          <DollarSign size={13} />
-                        </ActionBtn>
+                        {/* Settlement button — disabled when no debit */}
+                        {canSettle ? (
+                          <ActionBtn onClick={() => openSettlementModal(c)} title="Settle balance" color="emerald">
+                            <DollarSign size={13} />
+                          </ActionBtn>
+                        ) : (
+                          <button
+                            disabled
+                            title="Nothing to settle"
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-50 text-slate-300 cursor-not-allowed"
+                          >
+                            <DollarSign size={13} />
+                          </button>
+                        )}
                         <ActionBtn onClick={() => openDeleteModal(c._id)} title="Delete" color="red">
                           <Trash2 size={13} />
                         </ActionBtn>
@@ -334,6 +344,7 @@ export default function CustomerList({
         ) : (
           paginatedCustomers.map((c, idx) => {
             const globalIndex = viewAll ? filtered.indexOf(c) + 1 : (currentPage - 1) * ITEMS_PER_PAGE + idx + 1;
+            const canSettle = typeof c.debit === "number" && c.debit > 0;
             return (
               <div key={c._id} className="px-4 py-4 space-y-3 hover:bg-slate-50/60 transition-colors">
                 {/* Top row */}
@@ -390,9 +401,16 @@ export default function CustomerList({
                   <button onClick={() => handleEdit(c)} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-amber-50 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition">
                     <Edit size={13} /> Edit
                   </button>
-                  <button onClick={() => openSettlementModal(c)} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-50 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition">
-                    <DollarSign size={13} /> Settle
-                  </button>
+                  {/* Settlement button — disabled when no debit */}
+                  {canSettle ? (
+                    <button onClick={() => openSettlementModal(c)} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-50 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition">
+                      <DollarSign size={13} /> Settle
+                    </button>
+                  ) : (
+                    <button disabled title="Nothing to settle" className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-slate-50 py-2 text-xs font-semibold text-slate-300 cursor-not-allowed">
+                      <DollarSign size={13} /> Settle
+                    </button>
+                  )}
                   <button onClick={() => openDeleteModal(c._id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition">
                     <Trash2 size={13} />
                   </button>
@@ -409,7 +427,7 @@ export default function CustomerList({
   );
 }
 
-// Small helper component for icon action buttons
+// ── ActionBtn helper ─────────────────────────────────────────────────────────
 function ActionBtn({
   onClick,
   title,
