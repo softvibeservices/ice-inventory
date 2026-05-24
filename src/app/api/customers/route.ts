@@ -7,6 +7,11 @@ import Customer from "@/models/Customer";
 import { verifyUserRequest } from "@/lib/userAuth";
 import { checkCustomerLimit } from "@/lib/subscriptionGuard";
 
+// ── Activity Log ──────────────────────────────────────────────────────────────
+import { createLog, getManagerActor } from "@/lib/createLog";
+import { ActivityAction } from "@/models/ActivityLog";
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function POST(req: Request) {
   const auth = await verifyUserRequest(req);
   if (auth instanceof NextResponse) return auth;
@@ -113,6 +118,21 @@ export async function PUT(req: Request) {
       );
     }
 
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.CUSTOMER_EDITED,
+        metadata: {
+          customerId:   updated._id.toString(),
+          customerName: updated.name,
+          shopName:     updated.shopName,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return NextResponse.json(updated);
   } catch {
     return NextResponse.json(
@@ -148,6 +168,21 @@ export async function DELETE(req: Request) {
         { status: 404 }
       );
     }
+
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.CUSTOMER_DELETED,
+        metadata: {
+          customerId:   deleted._id.toString(),
+          customerName: deleted.name,
+          shopName:     deleted.shopName,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ success: true, id });
   } catch {

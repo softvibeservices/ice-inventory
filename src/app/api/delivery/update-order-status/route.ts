@@ -6,10 +6,16 @@ import { connectDB } from "@/lib/mongodb";
 import Order from "@/models/Order";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
 
+// ── Activity Log ──────────────────────────────────────────────────────────────
+import { createLog, getDeliveryActor } from "@/lib/createLog";
+import { ActivityAction } from "@/models/ActivityLog";
+// ─────────────────────────────────────────────────────────────────────────────
+
 type DeliveryStatus = "Pending" | "On the Way" | "Delivered";
 
 interface LeanOrder {
   _id: string;
+  orderId?: string;                                      // ← added for activity log
   deliveryStatus: DeliveryStatus;
   deliveryPartnerId?: mongoose.Types.ObjectId | string | null;
   deliveryOnTheWayAt?: Date | null;
@@ -44,8 +50,9 @@ export async function PATCH(req: Request) {
 
     await connectDB();
 
+    // ── orderId added to select so we can log the human-readable order ID ─────
     const existingOrder = await Order.findById(orderId)
-      .select("deliveryStatus deliveryPartnerId shopName customerName")
+      .select("deliveryStatus deliveryPartnerId shopName customerName orderId")
       .lean<LeanOrder | null>();
 
     if (!existingOrder) {
@@ -126,6 +133,42 @@ export async function PATCH(req: Request) {
     //
     // If you later want to notify the ADMIN that a partner picked up the order,
     // add that logic here (fetch the admin's FCM token from User model and send).
+
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getDeliveryActor(partnerId);
+    if (actor) {
+      if (status === "On the Way") {
+        await createLog({
+          ...actor,
+          action: ActivityAction.DELIVERY_ORDER_ACCEPTED,
+          metadata: {
+            orderId:      existingOrder.orderId ?? existingOrder._id.toString(),
+            customerName: existingOrder.customerName,
+          },
+        });
+      } else if (status === "Delivered") {
+        await createLog({
+          ...actor,
+          action: ActivityAction.DELIVERY_ORDER_DELIVERED,
+          metadata: {
+            orderId: existingOrder.orderId ?? existingOrder._id.toString(),
+          },
+        });
+      }
+
+      // Log note separately if one was provided alongside any status change
+      if (note) {
+        await createLog({
+          ...actor,
+          action: ActivityAction.DELIVERY_NOTE_ADDED,
+          metadata: {
+            orderId:      existingOrder.orderId ?? existingOrder._id.toString(),
+            deliveryNote: note,
+          },
+        });
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json(
       {

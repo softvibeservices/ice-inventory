@@ -7,6 +7,11 @@ import Product from "@/models/Product";
 import { verifyUserRequest } from "@/lib/userAuth";
 import { checkProductLimit } from "@/lib/subscriptionGuard";
 
+// ── Activity Log ──────────────────────────────────────────────────────────────
+import { createLog, getManagerActor } from "@/lib/createLog";
+import { ActivityAction } from "@/models/ActivityLog";
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function POST(req: Request) {
   const auth = await verifyUserRequest(req);
   if (auth instanceof NextResponse) return auth;
@@ -111,6 +116,20 @@ export async function PUT(req: Request) {
       );
     }
 
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.PRODUCT_EDITED,
+        metadata: {
+          productId:   updated._id.toString(),
+          productName: updated.name,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return NextResponse.json(updated);
   } catch {
     return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
@@ -142,6 +161,20 @@ export async function DELETE(req: Request) {
         { status: 404 }
       );
     }
+
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.PRODUCT_DELETED,
+        metadata: {
+          productId:   deleted._id.toString(),
+          productName: deleted.name,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ success: true, id });
   } catch {
