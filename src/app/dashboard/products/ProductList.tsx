@@ -278,9 +278,10 @@ export default function ProductList({
 
     // Subtle diagonal accent strip
     doc.setFillColor(255, 255, 255);
-    doc.setGState(doc.GState({ opacity: 0.05 }));
-    doc.triangle(PW - 80, 0, PW, 0, PW, 42, "F");
-    doc.setGState(doc.GState({ opacity: 1 }));
+  // AFTER:
+(doc as any).setGState((doc as any).GState({ opacity: 0.05 }));
+doc.triangle(PW - 80, 0, PW, 0, PW, 42, "F");
+(doc as any).setGState((doc as any).GState({ opacity: 1 }));
 
     // Report title
     doc.setTextColor(...PDF.white);
@@ -296,9 +297,10 @@ export default function ProductList({
 
     // Divider line inside header
     doc.setDrawColor(255, 255, 255);
-    doc.setGState(doc.GState({ opacity: 0.25 }));
-    doc.line(ML, 27, PW - MR, 27);
-    doc.setGState(doc.GState({ opacity: 1 }));
+   // AFTER:
+(doc as any).setGState((doc as any).GState({ opacity: 0.25 }));
+doc.line(ML, 27, PW - MR, 27);
+(doc as any).setGState((doc as any).GState({ opacity: 1 }));
 
     // Active filter note
     const filterParts: string[] = [];
@@ -319,7 +321,8 @@ export default function ProductList({
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(180, 210, 255);
-    doc.text("Ice Cream Inventory Management", PW - MR, 20, { align: "right" });
+    // AFTER:
+doc.text("Ice Saathi — Inventory Management", PW - MR, 20, { align: "right" });
 
     // ════════════════════════════════════════════════════════════════════════
     // SECTION 2 — SUMMARY KPI CARDS

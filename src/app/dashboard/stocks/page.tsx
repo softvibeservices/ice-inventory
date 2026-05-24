@@ -186,15 +186,31 @@ export default function StockPage() {
     }
   };
 
-  const emptyStock = async () => {
-    if (!userId || confirmText !== "CONFIRM") return;
+  const requestEmptyStockOtp = async (): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/products/empty-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to send OTP");
+      return true;
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to send OTP");
+      return false;
+    }
+  };
+
+  const emptyStock = async (otp: string) => {
+    if (!userId) return;
     try {
       setEmptying(true);
       const token = localStorage.getItem("token");
       const res = await fetch("/api/products/empty", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ otp }),
       });
 
       let data;
@@ -268,6 +284,7 @@ export default function StockPage() {
         setConfirmText={setConfirmText}
         emptying={emptying}
         emptyStock={emptyStock}
+        requestOtp={requestEmptyStockOtp}
       />
     </div>
   );

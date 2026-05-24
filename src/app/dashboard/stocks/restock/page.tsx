@@ -1,4 +1,5 @@
 // src/app/dashboard/stocks/restock/page.tsx
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -20,7 +21,7 @@ import {
   CheckSquare,
 } from "lucide-react";
 
-type SortType = "name-asc" | "name-desc" | "category";
+type SortType = "name-asc" | "name-desc" | "category-asc" | "category-desc" | "unit-asc" | "unit-desc";
 
 export default function RestockPage() {
   const router = useRouter();
@@ -80,13 +81,27 @@ export default function RestockPage() {
         (p) => p.name.toLowerCase().includes(q) || (p.category || "").toLowerCase().includes(q)
       );
     }
-    if (sortType === "name-asc") list.sort((a, b) => a.name.localeCompare(b.name));
-    else if (sortType === "name-desc") list.sort((a, b) => b.name.localeCompare(a.name));
-    else list.sort((a, b) => {
-      const ca = (a.category || "").toLowerCase();
-      const cb = (b.category || "").toLowerCase();
-      return ca === cb ? a.name.localeCompare(b.name) : ca.localeCompare(cb);
-    });
+    if (sortType === "name-asc") {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortType === "name-desc") {
+      list.sort((a, b) => b.name.localeCompare(a.name));
+    } else if (sortType === "category-asc" || sortType === "category-desc") {
+      list.sort((a, b) => {
+        const ca = (a.category || "").toLowerCase();
+        const cb = (b.category || "").toLowerCase();
+        const cmp = ca.localeCompare(cb);
+        if (cmp !== 0) return sortType === "category-asc" ? cmp : -cmp;
+        return a.name.localeCompare(b.name);
+      });
+    } else if (sortType === "unit-asc" || sortType === "unit-desc") {
+      list.sort((a, b) => {
+        const ua = (a.unit || "").toLowerCase();
+        const ub = (b.unit || "").toLowerCase();
+        const cmp = ua.localeCompare(ub);
+        if (cmp !== 0) return sortType === "unit-asc" ? cmp : -cmp;
+        return a.name.localeCompare(b.name);
+      });
+    }
     return list;
   }, [products, search, sortType]);
 
@@ -223,7 +238,10 @@ export default function RestockPage() {
           >
             <option value="name-asc">Name (A–Z)</option>
             <option value="name-desc">Name (Z–A)</option>
-            <option value="category">Category</option>
+            <option value="category-asc">Category (A–Z)</option>
+            <option value="category-desc">Category (Z–A)</option>
+            <option value="unit-asc">Unit (A–Z)</option>
+            <option value="unit-desc">Unit (Z–A)</option>
           </select>
         </div>
 
