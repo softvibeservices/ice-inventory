@@ -12,15 +12,12 @@ interface CustomerReportPDFProps {
 
 export default function CustomerReportPDF({ customers }: CustomerReportPDFProps) {
 
-  // Accounting-style currency formatting
   const formatCurrency = (v?: number) => {
     if (typeof v !== "number" || Number.isNaN(v)) return "-";
-
     const abs = Math.abs(v).toLocaleString("en-IN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-
     return v < 0 ? `(Rs. ${abs})` : `Rs. ${abs}`;
   };
 
@@ -32,24 +29,67 @@ export default function CustomerReportPDF({ customers }: CustomerReportPDFProps)
     });
 
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
 
-    // ================= HEADER =================
+    // ================= BRANDED HEADER =================
+    // Header background bar
+    doc.setFillColor(30, 64, 175);
+    doc.rect(0, 0, pageWidth, 30, "F");
+
+    // Company name (Ice Saathi)
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("Customer Report", pageWidth / 2, 14, { align: "center" });
+    doc.setFontSize(20);
+    doc.setTextColor(255, 255, 255);
+    doc.text("Ice Saathi", 14, 14);
 
+    // Sub-title on header
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
+    doc.setFontSize(10);
+    doc.setTextColor(180, 210, 255);
+    doc.text("Customer Management System", 14, 21);
+
+    // Report title (right side of header)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15);
+    doc.setTextColor(255, 255, 255);
+    doc.text("Customer Report", pageWidth - 14, 14, { align: "right" });
+
+    // Date (right side of header)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(180, 210, 255);
     doc.text(
-      `Generated on: ${new Date().toLocaleDateString("en-IN")}`,
-      pageWidth / 2,
-      20,
-      { align: "center" }
+      `Generated: ${new Date().toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })}`,
+      pageWidth - 14,
+      21,
+      { align: "right" }
     );
 
-    // Divider under header
-    doc.setLineWidth(0.6);
-    doc.line(10, 24, pageWidth - 10, 24);
+    // ================= SUMMARY STRIP =================
+    doc.setFillColor(245, 247, 250);
+    doc.rect(0, 30, pageWidth, 14, "F");
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(80, 80, 100);
+
+    const totalCredit = customers.reduce((s, c) => s + (c.credit || 0), 0);
+    const totalDebit = customers.reduce((s, c) => s + (c.debit || 0), 0);
+    const totalSales = customers.reduce((s, c) => s + (c.totalSales || 0), 0);
+
+    doc.text(`Total Customers: ${customers.length}`, 14, 39);
+    doc.text(`Total Credit: ${formatCurrency(totalCredit)}`, 80, 39);
+    doc.text(`Total Debit: ${formatCurrency(totalDebit)}`, 160, 39);
+    doc.text(`Total Sales: ${formatCurrency(totalSales)}`, 230, 39);
+
+    // Thin divider
+    doc.setDrawColor(200, 210, 230);
+    doc.setLineWidth(0.3);
+    doc.line(0, 44, pageWidth, 44);
 
     // ================= TABLE DATA =================
     const body = customers.map((c, index) => [
@@ -65,87 +105,101 @@ export default function CustomerReportPDF({ customers }: CustomerReportPDFProps)
     ]);
 
     autoTable(doc, {
-      startY: 28,
+      startY: 46,
       tableWidth: "auto",
 
       head: [[
         "#",
-        "Customer",
-        "Shop",
+        "Customer Name",
+        "Shop Name",
         "Contacts",
         "Area",
         "Credit",
         "Debit",
-        "Sales",
+        "Total Sales",
         "Remarks",
       ]],
 
       body,
 
-      // ================= GLOBAL TABLE STYLE =================
       styles: {
-        fontSize: 9,
-        cellPadding: 3.5,
+        fontSize: 8.5,
+        cellPadding: { top: 3.5, bottom: 3.5, left: 4, right: 4 },
         valign: "middle",
         overflow: "linebreak",
-        textColor: [40, 40, 40],
-        lineWidth: 0.25,                 // ✅ GRID LINE WIDTH
-        lineColor: [180, 180, 180],      // ✅ GRID LINE COLOR
+        textColor: [40, 40, 60],
+        lineWidth: 0.2,
+        lineColor: [200, 210, 230],
       },
 
-      // ================= HEADER STYLE =================
       headStyles: {
         fillColor: [30, 64, 175],
         textColor: 255,
         fontStyle: "bold",
         halign: "center",
-        lineWidth: 0.4,
-        lineColor: [30, 64, 175],
+        fontSize: 8,
+        cellPadding: { top: 4, bottom: 4, left: 4, right: 4 },
+        lineWidth: 0,
       },
 
-      // ================= ROW STYLING =================
       alternateRowStyles: {
-        fillColor: [245, 247, 250],
+        fillColor: [247, 249, 252],
       },
 
-      // ================= COLUMN WIDTHS =================
       columnStyles: {
-        0: { cellWidth: 8, halign: "center" },   // #
-        1: { cellWidth: 34 },                    // Customer
-        2: { cellWidth: 36 },                    // Shop
-        3: { cellWidth: 34 },                    // Contacts
-        4: { cellWidth: 24 },                    // Area
-        5: { cellWidth: 26, halign: "right" },   // Credit
-        6: { cellWidth: 26, halign: "right" },   // Debit
-        7: { cellWidth: 28, halign: "right" },   // Sales
-        8: { cellWidth: 35 },                    // Remarks
+        0: { cellWidth: 8, halign: "center", fontStyle: "bold", textColor: [120, 130, 160] },
+        1: { cellWidth: 34, fontStyle: "bold" },
+        2: { cellWidth: 36 },
+        3: { cellWidth: 32 },
+        4: { cellWidth: 24 },
+        5: { cellWidth: 26, halign: "right", textColor: [22, 163, 74] },
+        6: { cellWidth: 26, halign: "right", textColor: [220, 38, 38] },
+        7: { cellWidth: 28, halign: "right" },
+        8: { cellWidth: 34, textColor: [100, 100, 120] },
       },
 
-      margin: { left: 10, right: 10 },
+      margin: { left: 10, right: 10, top: 10 },
 
-      // ================= PAGE FOOTER =================
-      didDrawPage: () => {
-        const pageHeight = doc.internal.pageSize.getHeight();
+      didDrawPage: (data) => {
+        const pageNum = (doc as any).internal.getNumberOfPages();
 
-        doc.setFontSize(9);
-        doc.setTextColor(120);
+        // Footer strip
+        doc.setFillColor(245, 247, 250);
+        doc.rect(0, pageHeight - 12, pageWidth, 12, "F");
+
+        doc.setDrawColor(200, 210, 230);
+        doc.setLineWidth(0.3);
+        doc.line(0, pageHeight - 12, pageWidth, pageHeight - 12);
+
+        // Footer left
+        doc.setFontSize(8);
+        doc.setTextColor(130, 140, 160);
+        doc.setFont("helvetica", "normal");
+        doc.text("Ice Saathi — Confidential Customer Report", 14, pageHeight - 4);
+
+        // Footer right
         doc.text(
-          `Page ${doc.getNumberOfPages()}`,
-          pageWidth - 12,
-          pageHeight - 8,
+          `Page ${data.pageNumber} of ${pageNum}`,
+          pageWidth - 14,
+          pageHeight - 4,
           { align: "right" }
         );
       },
     });
 
-    doc.save("customer_report.pdf");
+    doc.save(`IceSaathi_Customer_Report_${new Date().toISOString().slice(0,10)}.pdf`);
   };
 
   return (
     <button
       onClick={generatePDF}
-      className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow hover:from-green-700 hover:to-emerald-800"
+      className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-700 px-5 py-2.5 text-sm font-semibold text-white shadow hover:from-green-700 hover:to-emerald-800 transition-all"
     >
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
       Download Customer Report
     </button>
   );
