@@ -2,13 +2,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  GET  /api/activity-logs
 //
-//  Returns paginated ActivityLog entries for the authenticated shop owner.
+//  Returns paginated ActivityLog entries.
+//
+//  Access rules:
+//    admin   → sees ALL logs (managers + delivery partners) for their shop
+//    manager → sees ONLY delivery_partner logs (never manager logs)
 //
 //  Query params:
 //    page        number   Page number, 1-based (default: 1)
 //    limit       number   Docs per page, max 100 (default: 30)
 //    category    string   Filter by category (order|customer|product|stock|bill|sticky_note|delivery)
-//    actorRole   string   Filter by role (manager|delivery_partner)
+//    actorRole   string   Admin only — filter by role (manager|delivery_partner)
 //    actorId     string   Filter by a specific actor's ObjectId
 //    action      string   Filter by a specific action enum value
 //    startDate   string   ISO date — only logs on or after this date
@@ -17,14 +21,14 @@
 //  Response:
 //    {
 //      logs:       IActivityLog[],
-//      total:      number,   // total matching documents (for pagination)
+//      total:      number,
 //      page:       number,
 //      totalPages: number,
 //    }
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from "next/server";
-import {connectDB} from "@/lib/mongodb";
+import { connectDB } from "@/lib/mongodb";
 import { verifyUserRequest } from "@/lib/userAuth";
 import ActivityLog, {
   ActivityCategoryType,
@@ -38,20 +42,20 @@ const DEFAULT_LIMIT = 30;
 
 export async function GET(req: NextRequest) {
   try {
-    // ── 1. Authenticate — must be the shop owner (admin role) ────────────────
-    //  verifyUserRequest returns AuthPayload on success, NextResponse on failure.
-    //  The instanceof guard narrows the type so TypeScript knows what we have.
+    // ── 1. Authenticate ──────────────────────────────────────────────────────
     const auth = await verifyUserRequest(req);
     if (auth instanceof NextResponse) return auth;
 
-    if (auth.role !== "admin") {
+    // Only admin and manager roles are allowed
+    if (auth.role !== "admin" && auth.role !== "manager") {
       return NextResponse.json(
-        { error: "Forbidden — only shop owners can view activity logs" },
+        { error: "Forbidden" },
         { status: 403 }
       );
     }
 
-    //  For admin tokens, auth.userId is the admin's own _id.
+    // For both admin and manager tokens, auth.userId is the shop-owner's _id.
+    // (Manager JWTs store adminId in the userId field so all data queries work.)
     const adminId = auth.userId;
 
     await connectDB();
@@ -65,21 +69,28 @@ export async function GET(req: NextRequest) {
 
     // ── 3. Build filter ──────────────────────────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const filter: Record<string, any> = {
-      adminId,
-    };
+    const filter: Record<string, any> = { adminId };
+
+    if (auth.role === "manager") {
+      // ── Manager view: ONLY delivery partner logs ─────────────────────────
+      // Managers must never see their own logs or any other manager's logs.
+      // This is enforced server-side — the client cannot override this.
+      filter.actorRole = "delivery_partner";
+    } else {
+      // ── Admin view: optional actorRole filter from query params ───────────
+      const actorRole = searchParams.get("actorRole");
+      if (actorRole) filter.actorRole = actorRole;
+    }
 
     const category  = searchParams.get("category")  as ActivityCategoryType | null;
-    const actorRole = searchParams.get("actorRole");
     const actorId   = searchParams.get("actorId");
     const action    = searchParams.get("action")    as ActivityActionType | null;
     const startDate = searchParams.get("startDate");
     const endDate   = searchParams.get("endDate");
 
-    if (category)  filter.category  = category;
-    if (actorRole) filter.actorRole = actorRole;
-    if (actorId)   filter.actorId   = actorId;
-    if (action)    filter.action    = action;
+    if (category) filter.category = category;
+    if (actorId)  filter.actorId  = actorId;
+    if (action)   filter.action   = action;
 
     if (startDate || endDate) {
       filter.createdAt = {};

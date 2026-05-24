@@ -205,10 +205,29 @@ export default function ActivityLogPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Viewer role — read once from localStorage ─────────────────────────────
+  // Admins see all logs (manager + delivery_partner).
+  // Managers see only delivery_partner logs (enforced server-side too).
+  const [viewerRole, setViewerRole] = useState<"admin" | "manager">("admin");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.role === "manager") setViewerRole("manager");
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
+
   // Filters
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<ActivityCategoryType | "">("");
+  // Managers cannot filter by manager role (they can never see manager logs).
+  // Allow only "" | "delivery_partner" for managers.
   const [roleFilter, setRoleFilter] = useState<ActorRole | "">("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -240,8 +259,10 @@ export default function ActivityLogPanel() {
       params.set("page", String(page));
       params.set("limit", String(PAGE_LIMIT));
       if (categoryFilter) params.set("category", categoryFilter);
-      if (roleFilter)     params.set("actorRole", roleFilter);
-      if (startDate)      params.set("startDate", new Date(startDate).toISOString());
+      // Only send actorRole filter to API for admin viewers.
+      // For managers, the API enforces delivery_partner-only server-side.
+      if (viewerRole === "admin" && roleFilter) params.set("actorRole", roleFilter);
+      if (startDate) params.set("startDate", new Date(startDate).toISOString());
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
@@ -260,7 +281,6 @@ export default function ActivityLogPanel() {
       const data: IActivityLogsResponse = await res.json();
 
       // Client-side search filter on message + actorName
-      // (server doesn't support full-text search yet)
       const q = debouncedSearch.toLowerCase().trim();
       const filtered = q
         ? data.logs.filter(
@@ -278,7 +298,7 @@ export default function ActivityLogPanel() {
     } finally {
       setLoading(false);
     }
-  }, [page, categoryFilter, roleFilter, startDate, endDate, debouncedSearch]);
+  }, [page, categoryFilter, roleFilter, viewerRole, startDate, endDate, debouncedSearch]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -304,7 +324,11 @@ export default function ActivityLogPanel() {
           <div>
             <h2 className="text-base font-bold text-slate-900 tracking-tight">Activity Log</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              {total > 0 ? `${total.toLocaleString()} actions recorded` : "Manager & delivery partner actions"}
+              {total > 0
+                ? `${total.toLocaleString()} actions recorded`
+                : viewerRole === "manager"
+                  ? "Delivery partner actions will appear here"
+                  : "Manager & delivery partner actions"}
             </p>
           </div>
           <button
@@ -316,6 +340,14 @@ export default function ActivityLogPanel() {
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
+
+        {/* Manager info banner */}
+        {viewerRole === "manager" && (
+          <div className="mb-3 px-3 py-2 rounded-lg bg-orange-50 border border-orange-100 text-xs text-orange-700 flex items-center gap-2">
+            <Truck className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>You can view delivery partner activity only. Manager logs are visible to the shop owner.</span>
+          </div>
+        )}
 
         {/* Search + Filter toggle */}
         <div className="flex gap-2">
@@ -377,21 +409,23 @@ export default function ActivityLogPanel() {
                 </select>
               </div>
 
-              {/* Role */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
-                  Actor Role
-                </label>
-                <select
-                  value={roleFilter}
-                  onChange={(e) => setRoleFilter(e.target.value as ActorRole | "")}
-                  className="w-full text-sm rounded-lg border border-slate-200 bg-white py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All roles</option>
-                  <option value="manager">Manager</option>
-                  <option value="delivery_partner">Delivery Partner</option>
-                </select>
-              </div>
+              {/* Role — admins can filter by any role; managers only see delivery_partner */}
+              {viewerRole === "admin" && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                    Actor Role
+                  </label>
+                  <select
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value as ActorRole | "")}
+                    className="w-full text-sm rounded-lg border border-slate-200 bg-white py-1.5 px-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All roles</option>
+                    <option value="manager">Manager</option>
+                    <option value="delivery_partner">Delivery Partner</option>
+                  </select>
+                </div>
+              )}
 
               {/* Start date */}
               <div>
@@ -429,7 +463,7 @@ export default function ActivityLogPanel() {
                     <button onClick={() => setCategoryFilter("")}><X className="w-3 h-3" /></button>
                   </span>
                 )}
-                {roleFilter && (
+                {roleFilter && viewerRole === "admin" && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-medium">
                     {ROLE_CONFIG[roleFilter].label}
                     <button onClick={() => setRoleFilter("")}><X className="w-3 h-3" /></button>
@@ -513,7 +547,9 @@ export default function ActivityLogPanel() {
             <p className="text-xs text-slate-400 mt-1">
               {activeFilterCount > 0 || search
                 ? "Try adjusting your filters or search query."
-                : "Manager and delivery partner actions will appear here."}
+                : viewerRole === "manager"
+                  ? "Delivery partner actions will appear here."
+                  : "Manager and delivery partner actions will appear here."}
             </p>
             {(activeFilterCount > 0 || search) && (
               <button
