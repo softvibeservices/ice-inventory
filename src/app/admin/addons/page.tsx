@@ -1,4 +1,3 @@
-
 // src/app/admin/addons/page.tsx
 "use client";
 
@@ -33,31 +32,32 @@ interface AddOn {
   manuallyGranted?: boolean;
 }
 
+// ── FIXED: Use correct AddOnType keys from AddOn.ts ──
 const ADDON_TYPES = [
-  "extra_100_invoices",
-  "extra_250_invoices",
-  "extra_500_invoices",
-  "extra_5_customers",
-  "extra_10_customers",
-  "extra_20_customers",
+  "extra_invoice_100",
+  "extra_invoice_300",
+  "extra_manager",
+  "extra_delivery",
+  "advanced_reports",
+  "setup_migration",
 ];
 
 const ADDON_LABELS: Record<string, string> = {
-  extra_100_invoices: "+100 Invoices/mo",
-  extra_250_invoices: "+250 Invoices/mo",
-  extra_500_invoices: "+500 Invoices/mo",
-  extra_5_customers: "+5 Customers",
-  extra_10_customers: "+10 Customers",
-  extra_20_customers: "+20 Customers",
+  extra_invoice_100: "+100 Invoices/Month",
+  extra_invoice_300: "+300 Invoices/Month",
+  extra_manager: "+1 Manager Seat",
+  extra_delivery: "+3 Delivery Partners",
+  advanced_reports: "Advanced Reports",
+  setup_migration: "Setup & Migration",
 };
 
 const ADDON_COLORS: Record<string, string> = {
-  extra_100_invoices: "#3b82f6",
-  extra_250_invoices: "#6366f1",
-  extra_500_invoices: "#8b5cf6",
-  extra_5_customers: "#10b981",
-  extra_10_customers: "#059669",
-  extra_20_customers: "#047857",
+  extra_invoice_100: "#3b82f6",
+  extra_invoice_300: "#6366f1",
+  extra_manager: "#10b981",
+  extra_delivery: "#059669",
+  advanced_reports: "#8b5cf6",
+  setup_migration: "#f59e0b",
 };
 
 function formatDate(d?: string) {
@@ -126,8 +126,8 @@ export default function AdminAddonsPage() {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
-        ...(typeFilter && { addonType: typeFilter }),
-        ...(activeOnly && { isActive: "true" }),
+        ...(typeFilter && { type: typeFilter }), // Changed from addonType to type
+        ...(activeOnly && { active: "true" }),
         ...(debouncedSearch && { userSearch: debouncedSearch }),
         ...(expiryFilter === "7days" && {
           expiryBefore: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -167,7 +167,8 @@ export default function AdminAddonsPage() {
   const startItem = (page - 1) * limit + 1;
   const endItem = Math.min(page * limit, total);
 
-  const handleDeactivate = async (addOnId: string) => {
+  // ── FIXED VUL-02: Use 'addonId' instead of 'addOnId' ──
+  const handleDeactivate = async (addonId: string) => {
     if (!confirm("Deactivate this add-on?")) return;
     try {
       const token = localStorage.getItem("token");
@@ -177,7 +178,7 @@ export default function AdminAddonsPage() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ addOnId, isActive: false }),
+        body: JSON.stringify({ addonId, isActive: false }),
       });
       if (!res.ok) throw new Error("Failed to deactivate");
       fetchAddons();
@@ -186,7 +187,8 @@ export default function AdminAddonsPage() {
     }
   };
 
-  const handleExtend = async (addOnId: string) => {
+  // ── FIXED VUL-02: Use 'addonId' instead of 'addOnId' ──
+  const handleExtend = async (addonId: string) => {
     if (!extendDate) return;
     setExtendLoading(true);
     try {
@@ -197,7 +199,7 @@ export default function AdminAddonsPage() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ addOnId, expiresAt: extendDate }),
+        body: JSON.stringify({ addonId, expiresAt: extendDate }),
       });
       if (!res.ok) throw new Error("Failed to extend");
       setExtendId(null);
@@ -210,11 +212,31 @@ export default function AdminAddonsPage() {
     }
   };
 
+  // ── FIXED VUL-03: Send userId instead of userEmail ──
+  // First lookup the user by email to get userId
   const handleGrant = async () => {
     setGrantLoading(true);
     setGrantError("");
     try {
       const token = localStorage.getItem("token");
+      
+      // Step 1: Look up user by email to get userId
+      const userLookupRes = await fetch(`/api/admin/users?email=${encodeURIComponent(grantForm.userEmail)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (!userLookupRes.ok) {
+        throw new Error("User not found with that email");
+      }
+      
+      const userData = await userLookupRes.json();
+      if (!userData.users || userData.users.length === 0) {
+        throw new Error("No user found with that email address");
+      }
+      
+      const userId = userData.users[0]._id;
+      
+      // Step 2: Grant the addon using userId
       const res = await fetch("/api/admin/addons", {
         method: "POST",
         headers: {
@@ -222,10 +244,9 @@ export default function AdminAddonsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userEmail: grantForm.userEmail,
-          addonType: grantForm.addonType,
+          userId, // Use userId instead of userEmail
+          type: grantForm.addonType, // Use 'type' not 'addonType'
           quantity: parseInt(grantForm.quantity),
-          manuallyGranted: true,
         }),
       });
 
@@ -248,7 +269,7 @@ export default function AdminAddonsPage() {
 
   const TABLE_HEADERS = [
     "User", "Type", "Qty", "Status",
-    "Anchor Day", "Expires", "Created", "Source", "Actions",
+    "Anchor Day", "Expires", "Created", "Actions",
   ];
 
   return (
@@ -487,7 +508,7 @@ export default function AdminAddonsPage() {
               {/* Loading */}
               {loading && (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center">
+                  <td colSpan={8} className="py-10 text-center">
                     <div className="flex items-center justify-center gap-2.5 text-gray-600 text-[13px]">
                       <div className="w-4 h-4 border-2 border-[#1e2530] border-t-blue-500 rounded-full animate-spin" />
                       Loading...
@@ -499,7 +520,7 @@ export default function AdminAddonsPage() {
               {/* Empty */}
               {!loading && addons.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center">
+                  <td colSpan={8} className="py-10 text-center">
                     <div className="flex flex-col items-center justify-center gap-2.5 text-gray-600 text-[13px]">
                       <Package size={22} />
                       <p>No add-ons found</p>
@@ -617,21 +638,6 @@ export default function AdminAddonsPage() {
                       {/* Created */}
                       <td className="px-3.5 py-[11px] text-xs text-gray-600 whitespace-nowrap">
                         {formatDate(a.createdAt)}
-                      </td>
-
-                      {/* Source */}
-                      <td className="px-3.5 py-[11px]">
-                        <span
-                          className="text-[11px] font-semibold px-[7px] py-[2px] rounded-[4px] whitespace-nowrap"
-                          style={{
-                            background: a.manuallyGranted
-                              ? "rgba(236,72,153,0.1)"
-                              : "rgba(59,130,246,0.1)",
-                            color: a.manuallyGranted ? "#f472b6" : "#60a5fa",
-                          }}
-                        >
-                          {a.manuallyGranted ? "Manual" : "Payment"}
-                        </span>
                       </td>
 
                       {/* Actions */}

@@ -219,13 +219,14 @@ export default function DashboardPage() {
   // ========= DERIVE LIMIT WARNING DATA ─────────────────────────────────────
   //  Compute the values PlanLimitWarning needs from the live subscription data.
   //  Using server-side counts (subscription.usage) keeps these accurate.
-  const invoicesUsed = subscription
+  //  ✅ FIXED: Added proper null/undefined checks for subscription.usage
+  const invoicesUsed = subscription && subscription.usage
     ? (subscription.planId === "free_trial"
         ? subscription.usage.invoicesUsedTotal
         : subscription.usage.invoicesUsedThisMonth)
     : null;
 
-  const invoicesLimit = subscription
+  const invoicesLimit = subscription && subscription.effectiveLimits
     ? (subscription.planId === "free_trial"
         ? subscription.effectiveLimits.invoicesTotal
         : subscription.effectiveLimits.invoicesPerMonth)
@@ -241,7 +242,7 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
 
           {/* ── PHASE 8: Plan limit warning at top of dashboard ───────────── */}
-          {subscription && (
+          {subscription && subscription.usage && subscription.effectiveLimits && (
             <PlanLimitWarning
               invoicesUsed={invoicesUsed}
               invoicesLimit={invoicesLimit}
