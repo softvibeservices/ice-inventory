@@ -14,7 +14,7 @@ type ActivityCategoryType =
   | "order" | "customer" | "product" | "stock"
   | "bill" | "sticky_note" | "delivery";
 
-type ActorRole = "manager" | "delivery_partner";
+type ActorRole = "admin" | "manager" | "delivery_partner";
 
 type QuickFilter = "today" | "yesterday" | "week" | "month" | "";
 
@@ -99,6 +99,7 @@ const CATEGORY_CONFIG: Record<
 };
 
 const ROLE_CONFIG: Record<ActorRole, { label: string; short: string; bg: string; text: string; avatarBg: string; avatarText: string }> = {
+  admin:            { label: "Admin",            short: "Adm", bg: "bg-rose-100",   text: "text-rose-800",   avatarBg: "bg-rose-100",   avatarText: "text-rose-800"   },
   manager:          { label: "Manager",          short: "Mgr", bg: "bg-violet-100", text: "text-violet-800", avatarBg: "bg-violet-100", avatarText: "text-violet-800" },
   delivery_partner: { label: "Delivery Partner", short: "Dlv", bg: "bg-blue-100",   text: "text-blue-800",   avatarBg: "bg-blue-100",   avatarText: "text-blue-800"   },
 };
@@ -308,7 +309,10 @@ export default function ActivityLogPanel() {
       params.set("page", String(page));
       params.set("limit", String(PAGE_LIMIT));
       if (categoryFilter) params.set("category", categoryFilter);
-      if (viewerRole === "admin" && roleFilter) params.set("actorRole", roleFilter);
+      // NOTE for backend: when no actorRole filter is sent, the API must return
+      // logs for ALL roles including "admin". Do NOT hardcode a filter that
+      // excludes admin — admins must see their own actions.
+      if (roleFilter) params.set("actorRole", roleFilter);
 
       // Date range: quick filter takes priority over manual dates
       const qfDates = quickFilter ? getQuickFilterDates(quickFilter) : null;
@@ -356,8 +360,9 @@ export default function ActivityLogPanel() {
 
   // ── Derived stats ─────────────────────────────────────────────────────────
   const todayCount = allLogs.filter((l) => isToday(l.createdAt)).length;
-  const mgrCount = allLogs.filter((l) => l.actorRole === "manager").length;
-  const dlvCount = allLogs.filter((l) => l.actorRole === "delivery_partner").length;
+  const adminCount = allLogs.filter((l) => l.actorRole === "admin").length;
+  const mgrCount   = allLogs.filter((l) => l.actorRole === "manager").length;
+  const dlvCount   = allLogs.filter((l) => l.actorRole === "delivery_partner").length;
 
   // ── Filter helpers ────────────────────────────────────────────────────────
   const activeFilterCount = [
@@ -395,10 +400,6 @@ export default function ActivityLogPanel() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
-
-     
-
-    
 
       {/* ── Manager info banner ──────────────────────────────────────────── */}
       {viewerRole === "manager" && (
@@ -447,6 +448,7 @@ export default function ActivityLogPanel() {
               className="text-sm rounded-lg border border-slate-200 bg-slate-50 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
             >
               <option value="">All roles</option>
+              <option value="admin">Admin</option>
               <option value="manager">Manager</option>
               <option value="delivery_partner">Delivery Partner</option>
             </select>
@@ -564,7 +566,7 @@ export default function ActivityLogPanel() {
                     <button onClick={() => setCategoryFilter("")}><X className="w-3 h-3" /></button>
                   </span>
                 )}
-                {roleFilter && viewerRole === "admin" && (
+                {roleFilter && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 text-xs font-medium">
                     {ROLE_CONFIG[roleFilter].label}
                     <button onClick={() => setRoleFilter("")}><X className="w-3 h-3" /></button>
