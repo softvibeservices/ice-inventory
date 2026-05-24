@@ -1,12 +1,18 @@
 // src/lib/createLog.ts
 // ─────────────────────────────────────────────────────────────────────────────
-//  createLog      — writes one ActivityLog document (fire-and-forget safe)
-//  getManagerActor — resolves actor fields for a manager from AuthPayload
-//  getDeliveryActor — resolves actor fields for a delivery partner by partnerId
+//  createLog     — writes one ActivityLog document (fire-and-forget safe)
+//  getActor      — NEW unified helper: resolves actor for ADMIN or MANAGER
+//  getManagerActor — kept for backward compat (calls getActor internally)
+//  getDeliveryActor — resolves actor for a delivery partner by partnerId
+//
+//  ROOT CAUSE FIX:
+//    Previously getManagerActor() returned null for auth.role === "admin",
+//    so every admin action silently skipped logging.
+//    Now getActor() handles both roles and always returns a LogActor.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import mongoose from "mongoose";
-import {connectDB} from "@/lib/mongodb";
+import { connectDB } from "@/lib/mongodb";
 import User from "@/models/User";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import ActivityLog, {
@@ -27,23 +33,14 @@ export interface CreateLogInput {
   actorId:    mongoose.Types.ObjectId | string;
   actorModel: "User" | "DeliveryPartner";
   actorName:  string;
-  actorRole:  "manager" | "delivery_partner";
+  // ─── FIX: "admin" added so admin log writes are accepted by the schema ────
+  actorRole:  "admin" | "manager" | "delivery_partner";
   action:     ActivityActionType;
   metadata:   IActivityLogMeta;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helper — resolve manager actor fields from AuthPayload
-//
-//  Returns null when the caller is an admin (shop owner doing their own work)
-//  so callers can simply do:
-//
-//    const actor = await getManagerActor(auth);
-//    if (!actor) return; // admin action — nothing to log
-//
-//  For managers:
-//    auth.userId    = adminId  (shop owner's _id — always, by JWT design)
-//    auth.managerId = manager's actual User._id
+//  LogActor — resolved actor fields ready to spread into CreateLogInput
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface LogActor {
@@ -51,35 +48,74 @@ export interface LogActor {
   actorId:    string;
   actorName:  string;
   actorModel: "User" | "DeliveryPartner";
-  actorRole:  "manager" | "delivery_partner";
+  // ─── FIX: "admin" added ───────────────────────────────────────────────────
+  actorRole:  "admin" | "manager" | "delivery_partner";
 }
 
-export async function getManagerActor(auth: AuthPayload): Promise<LogActor | null> {
-  // Only log actions performed by managers, not by the shop owner themselves
-  if (auth.role !== "manager" || !auth.managerId) return null;
+// ─────────────────────────────────────────────────────────────────────────────
+//  getActor  ← NEW UNIFIED HELPER  (use this everywhere going forward)
+//
+//  Resolves actor fields for BOTH admin and manager callers.
+//
+//  JWT layout (set by your auth middleware):
+//    admin   token: { userId: adminId,   role: "admin",   managerId: undefined }
+//    manager token: { userId: adminId,   role: "manager", managerId: managerUserId }
+//
+//  Returns null ONLY on DB error so callers can safely guard with `if (actor)`.
+// ─────────────────────────────────────────────────────────────────────────────
 
+export async function getActor(auth: AuthPayload): Promise<LogActor | null> {
   try {
     await connectDB();
-    const user = await User.findById(auth.managerId).select("name").lean() as { name?: string } | null;
-    return {
-      adminId:    auth.userId,           // auth.userId is always adminId for managers
-      actorId:    auth.managerId,
-      actorName:  user?.name ?? "Manager",
-      actorModel: "User",
-      actorRole:  "manager",
-    };
+
+    if (auth.role === "admin") {
+      // ── Admin: actorId = adminId (shop owner acting themselves) ──────────
+      const user = await User.findById(auth.userId).select("name").lean() as { name?: string } | null;
+      return {
+        adminId:    auth.userId,
+        actorId:    auth.userId,          // admin IS the shop owner
+        actorName:  user?.name ?? "Admin",
+        actorModel: "User",
+        actorRole:  "admin",
+      };
+    }
+
+    if (auth.role === "manager" && auth.managerId) {
+      // ── Manager: actorId = manager's own User._id ────────────────────────
+      //    auth.userId is ALWAYS adminId for manager JWTs (by your JWT design)
+      const user = await User.findById(auth.managerId).select("name").lean() as { name?: string } | null;
+      return {
+        adminId:    auth.userId,           // adminId stored in userId field
+        actorId:    auth.managerId,
+        actorName:  user?.name ?? "Manager",
+        actorModel: "User",
+        actorRole:  "manager",
+      };
+    }
+
+    // Delivery partners use getDeliveryActor() — not handled here
+    return null;
   } catch {
     return null;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Helper — resolve delivery partner actor fields by partnerId
+//  getManagerActor — kept for backward compatibility
 //
-//  Usage in delivery routes (verifyDeliveryAuth only gives partnerId):
-//
-//    const actor = await getDeliveryActor(partnerId);
-//    if (!actor) return; // couldn't resolve — skip logging silently
+//  ⚠️  DEPRECATED: Use getActor() in new code.
+//      This now delegates to getActor() so existing call-sites keep working
+//      AND admin actions are now logged (previously they were silently dropped).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getManagerActor(auth: AuthPayload): Promise<LogActor | null> {
+  // FIX: previously this returned null for admin — now it correctly resolves
+  // both admin and manager actors via the unified getActor() helper.
+  return getActor(auth);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  getDeliveryActor — resolves delivery partner actor fields by partnerId
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getDeliveryActor(partnerId: string): Promise<LogActor | null> {
@@ -141,11 +177,15 @@ const ACTION_CATEGORY_MAP: Record<ActivityActionType, ActivityCategoryType> = {
 
 function buildMessage(
   actorName: string,
-  actorRole: "manager" | "delivery_partner",
+  actorRole: "admin" | "manager" | "delivery_partner",
   action:    ActivityActionType,
   m:         IActivityLogMeta
 ): string {
-  const label = actorRole === "manager" ? "Manager" : "Partner";
+  // ─── FIX: "admin" now gets a proper label in log messages ────────────────
+  const label =
+    actorRole === "admin"            ? "Admin"   :
+    actorRole === "manager"          ? "Manager" : "Partner";
+
   const actor = `${label} ${actorName}`;
   const fmt   = (n?: number) => n !== undefined ? `₹${n.toLocaleString("en-IN")}` : "₹?";
 
@@ -205,9 +245,6 @@ function buildMessage(
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  createLog — public API
-//
-//  Fire-and-forget safe: catches all errors internally.
-//  Await it if you need the write confirmed before responding to the client.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function createLog(input: CreateLogInput): Promise<void> {
