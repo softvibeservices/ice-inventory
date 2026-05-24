@@ -7,6 +7,11 @@ import StickyNote from "@/models/StickyNote";
 import User from "@/models/User";
 import { verifyUserRequest } from "@/lib/userAuth";
 
+// ── Activity Log ──────────────────────────────────────────────────────────────
+import { createLog, getManagerActor } from "@/lib/createLog";
+import { ActivityAction } from "@/models/ActivityLog";
+// ─────────────────────────────────────────────────────────────────────────────
+
 function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
   if (!id) return undefined;
   if (!mongoose.Types.ObjectId.isValid(id)) return undefined;
@@ -97,6 +102,22 @@ export async function POST(req: Request) {
       creatorName,
       creatorRole,
     });
+
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.STICKY_NOTE_CREATED,
+        metadata: {
+          noteId:        note._id.toString(),
+          customerName:  note.customerName,
+          itemCount:     note.items.length,
+          totalQuantity: note.totalQuantity,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json(note, { status: 201 });
   } catch (err: any) {
@@ -208,6 +229,20 @@ export async function PUT(req: Request) {
       );
     }
 
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.STICKY_NOTE_EDITED,
+        metadata: {
+          noteId:       updated._id.toString(),
+          customerName: updated.customerName,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return NextResponse.json(updated, { status: 200 });
   } catch (err: any) {
     console.error("PUT /api/sticky-notes error:", err);
@@ -244,6 +279,20 @@ export async function DELETE(req: Request) {
         { status: 404 }
       );
     }
+
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.STICKY_NOTE_DELETED,
+        metadata: {
+          noteId:       deleted._id.toString(),
+          customerName: deleted.customerName,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ success: true, id }, { status: 200 });
   } catch (err: any) {

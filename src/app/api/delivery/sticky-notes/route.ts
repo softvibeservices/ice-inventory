@@ -1,5 +1,4 @@
 // src/app/api/delivery/sticky-notes/route.ts
-// src/app/api/delivery/sticky-notes/route.ts
 
 import { NextResponse } from "next/server";
 import mongoose from "mongoose";
@@ -7,6 +6,11 @@ import { connectDB } from "@/lib/mongodb";
 import StickyNote from "@/models/StickyNote";
 import DeliveryPartner from "@/models/DeliveryPartner";
 import { verifyDeliveryAuth } from "@/lib/deliveryAuth";
+
+// ── Activity Log ──────────────────────────────────────────────────────────────
+import { createLog, getDeliveryActor } from "@/lib/createLog";
+import { ActivityAction } from "@/models/ActivityLog";
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface LeanDeliveryPartner {
   _id: mongoose.Types.ObjectId;
@@ -128,6 +132,22 @@ export async function POST(req: Request) {
       creatorRole: "delivery",
     });
 
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getDeliveryActor(partnerId);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.DELIVERY_STICKY_NOTE_CREATED,
+        metadata: {
+          noteId:        note._id.toString(),
+          customerName:  note.customerName,
+          itemCount:     note.items.length,
+          totalQuantity: note.totalQuantity,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return NextResponse.json(note, { status: 201 });
   } catch (err) {
     console.error("POST delivery sticky notes error:", err);
@@ -209,6 +229,20 @@ export async function PUT(req: Request) {
       { new: true, runValidators: true }
     );
 
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getDeliveryActor(partnerId);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.DELIVERY_STICKY_NOTE_EDITED,
+        metadata: {
+          noteId:       existingNote._id.toString(),
+          customerName: existingNote.customerName,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return NextResponse.json(updated, { status: 200 });
   } catch (err) {
     console.error("PUT delivery sticky notes error:", err);
@@ -248,6 +282,20 @@ export async function DELETE(req: Request) {
         { status: 404 }
       );
     }
+
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getDeliveryActor(partnerId);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.DELIVERY_STICKY_NOTE_DELETED,
+        metadata: {
+          noteId:       deleted._id.toString(),
+          customerName: deleted.customerName,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ success: true, id: noteId }, { status: 200 });
   } catch (err) {

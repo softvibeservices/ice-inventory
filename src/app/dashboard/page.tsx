@@ -17,14 +17,18 @@ import {
   TrendingUp,
   Users,
   TruckIcon,
+  Activity
 } from "lucide-react";
 
 import type { Order, Product, Customer } from "./types";
 import toast, { Toaster } from "react-hot-toast";
 import { StickyNotesPanel } from "./sticky-notes";
+import ActivityLogPanel from "./ActivityLog";
 import { useSubscription } from "@/hooks/useSubscription";
 
+// FIX 1: Added "activity-log" to TabType union
 type TabType =
+  | "activity-log"
   | "delivery"
   | "popular-products"
   | "customers"
@@ -108,6 +112,7 @@ export default function DashboardPage() {
 
   // ========= TAB CONFIGURATION =========
   const tabs = [
+    { id: "activity-log" as TabType, label: "Activity Log", icon: Activity, color: "slate" },
     {
       id: "delivery" as TabType,
       label: "Delivery Overview",
@@ -156,7 +161,11 @@ export default function DashboardPage() {
   const getButtonClasses = (tabId: TabType, color: string) => {
     const isActive = activeTab === tabId;
 
+    // FIX 3: Added "slate" color entry for the activity-log tab
     const colorClasses: Record<string, string> = {
+      slate: isActive
+        ? "bg-slate-700 text-white shadow-lg shadow-slate-200"
+        : "bg-white text-gray-700 hover:bg-slate-50 hover:text-slate-700 hover:border-slate-300",
       blue: isActive
         ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
         : "bg-white text-gray-700 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300",
@@ -174,9 +183,8 @@ export default function DashboardPage() {
         : "bg-white text-gray-700 hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-300",
     };
 
-    return `flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all border relative ${
-      colorClasses[color] ?? colorClasses.blue
-    }`;
+    return `flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all border relative ${colorClasses[color] ?? colorClasses.blue
+      }`;
   };
 
   // ========= RENDER TAB CONTENT =========
@@ -210,6 +218,8 @@ export default function DashboardPage() {
             <StickyNotesPanel />
           </div>
         );
+      case "activity-log":
+        return <ActivityLogPanel />;
 
       default:
         return null;
@@ -222,14 +232,14 @@ export default function DashboardPage() {
   //  ✅ FIXED: Added proper null/undefined checks for subscription.usage
   const invoicesUsed = subscription && subscription.usage
     ? (subscription.planId === "free_trial"
-        ? subscription.usage.invoicesUsedTotal
-        : subscription.usage.invoicesUsedThisMonth)
+      ? subscription.usage.invoicesUsedTotal
+      : subscription.usage.invoicesUsedThisMonth)
     : null;
 
   const invoicesLimit = subscription && subscription.effectiveLimits
     ? (subscription.planId === "free_trial"
-        ? subscription.effectiveLimits.invoicesTotal
-        : subscription.effectiveLimits.invoicesPerMonth)
+      ? subscription.effectiveLimits.invoicesTotal
+      : subscription.effectiveLimits.invoicesPerMonth)
     : null;
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -271,18 +281,22 @@ export default function DashboardPage() {
                   >
                     <Icon className="w-4 h-4" />
                     <span className="hidden sm:inline">{tab.label}</span>
+
+                    {/* FIX 2: Added "activity-log" case to the mobile label switch */}
                     <span className="sm:hidden">
-                      {tab.id === "delivery"
-                        ? "Delivery"
-                        : tab.id === "popular-products"
-                        ? "Popular"
-                        : tab.id === "customers"
-                        ? "Customers"
-                        : tab.id === "delivery-partners"
-                        ? "Partners"
-                        : tab.id === "low-stock"
-                        ? "Stock"
-                        : "Notes"}
+                      {tab.id === "activity-log"
+                        ? "Activity"
+                        : tab.id === "delivery"
+                          ? "Delivery"
+                          : tab.id === "popular-products"
+                            ? "Popular"
+                            : tab.id === "customers"
+                              ? "Customers"
+                              : tab.id === "delivery-partners"
+                                ? "Partners"
+                                : tab.id === "low-stock"
+                                  ? "Stock"
+                                  : "Notes"}
                     </span>
 
                     {/* Badge for low stock count */}

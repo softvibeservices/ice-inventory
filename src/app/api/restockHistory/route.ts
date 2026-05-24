@@ -5,7 +5,13 @@ import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import RestockHistory from "@/models/RestockHistory";
 import "@/models/Product";
+import Product from "@/models/Product";
 import { verifyUserRequest } from "@/lib/userAuth";
+
+// ── Activity Log ──────────────────────────────────────────────────────────────
+import { createLog, getManagerActor } from "@/lib/createLog";
+import { ActivityAction } from "@/models/ActivityLog";
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
   const auth = await verifyUserRequest(req);
@@ -30,6 +36,48 @@ export async function POST(req: Request) {
       userId: new mongoose.Types.ObjectId(auth.userId),
       items,
     });
+
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      if (items.length === 1) {
+        // Single product restock — fetch name for a readable message
+        let productName = "Unknown Product";
+        try {
+          const prod = await Product
+            .findById(items[0].productId)
+            .select("name quantity")
+            .lean() as { name?: string; quantity?: number } | null;
+          productName = prod?.name ?? productName;
+        } catch { /* non-fatal */ }
+
+        await createLog({
+          ...actor,
+          action: ActivityAction.PRODUCT_RESTOCKED,
+          metadata: {
+            productId:     items[0].productId?.toString(),
+            productName,
+            quantityAdded: items[0].quantity,
+            note:          items[0].note,
+          },
+        });
+      } else {
+        // Bulk restock across multiple products
+        const totalUnitsAdded = items.reduce(
+          (sum: number, it: { quantity: number }) => sum + (it.quantity || 0),
+          0
+        );
+        await createLog({
+          ...actor,
+          action: ActivityAction.PRODUCT_BULK_RESTOCKED,
+          metadata: {
+            productCount:    items.length,
+            totalUnitsAdded,
+          },
+        });
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json(history, { status: 201 });
   } catch (err) {

@@ -20,6 +20,9 @@ import { verifyUserRequest } from "@/lib/userAuth";
 //    conditional MongoDB findOneAndUpdate, making it race-condition proof.
 import { atomicCheckAndIncrementInvoice } from "@/lib/subscriptionGuard";
 
+import { createLog, getManagerActor } from "@/lib/createLog";
+import { ActivityAction } from "@/models/ActivityLog";
+
 function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
   if (!id) return undefined;
   if (!mongoose.Types.ObjectId.isValid(id)) return undefined;
@@ -176,6 +179,22 @@ export async function POST(req: NextRequest) {
     // ── The counter was already atomically incremented by
     // ── atomicCheckAndIncrementInvoice() at the top of this handler.
     // ── Calling it again would double-count the invoice.
+
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.ORDER_CREATED,
+        metadata: {
+          orderId:      order.orderId,
+          orderTotal:   order.total,
+          customerId:   order.customerId?.toString(),
+          customerName: order.customerName,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ success: true, order }, { status: 201 });
   } catch (err: any) {
@@ -365,6 +384,22 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
+      // ── Activity Log ───────────────────────────────────────────────────────
+      const actor = await getManagerActor(auth);
+      if (actor) {
+        await createLog({
+          ...actor,
+          action: ActivityAction.ORDER_DELIVERY_STATUS_CHANGED,
+          metadata: {
+            orderId:           order.orderId,
+            oldDeliveryStatus: oldStatus,
+            newDeliveryStatus: deliveryStatus,
+            customerName:      order.customerName,
+          },
+        });
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
       return NextResponse.json(
         {
           success: true,
@@ -439,6 +474,21 @@ export async function PATCH(req: NextRequest) {
         session.endSession();
       }
 
+      // ── Activity Log ───────────────────────────────────────────────────────
+      const actor = await getManagerActor(auth);
+      if (actor) {
+        await createLog({
+          ...actor,
+          action: ActivityAction.ORDER_DISCARDED,
+          metadata: {
+            orderId:      order.orderId,
+            orderTotal:   order.total,
+            customerName: order.customerName,
+          },
+        });
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
       return NextResponse.json({ success: true, order }, { status: 200 });
     }
 
@@ -464,6 +514,7 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
+      // Debt settlement — no payment activity log needed per spec
       if (method === "Debt") {
         order.status = "settled";
         order.settlementMethod = "Debt";
@@ -562,6 +613,25 @@ export async function PATCH(req: NextRequest) {
         session.endSession();
       }
 
+      // ── Activity Log ───────────────────────────────────────────────────────
+      const actor = await getManagerActor(auth);
+      if (actor) {
+        await createLog({
+          ...actor,
+          action: method === "Cash"
+            ? ActivityAction.ORDER_SETTLED_CASH
+            : ActivityAction.ORDER_SETTLED_BANK_UPI,
+          metadata: {
+            orderId:          order.orderId,
+            amountPaid:       payAmount,
+            settlementMethod: method,
+            orderTotal:       billTotal,
+            customerName:     order.customerName,
+          },
+        });
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
       return NextResponse.json({ success: true, order }, { status: 200 });
     }
 
@@ -651,6 +721,23 @@ export async function PATCH(req: NextRequest) {
       } finally {
         session.endSession();
       }
+
+      // ── Activity Log ───────────────────────────────────────────────────────
+      const actor = await getManagerActor(auth);
+      if (actor) {
+        await createLog({
+          ...actor,
+          action: ActivityAction.ORDER_DEBT_SETTLED,
+          metadata: {
+            orderId:          order.orderId,
+            amountPaid:       payAmount,
+            settlementMethod: method,
+            remainingBalance: Math.max(0, billTotal - newTotalPaid),
+            customerName:     order.customerName,
+          },
+        });
+      }
+      // ───────────────────────────────────────────────────────────────────────
 
       return NextResponse.json({ success: true, order }, { status: 200 });
     }

@@ -27,6 +27,11 @@ import admin from "@/lib/firebase-admin";
 //    conditional MongoDB findOneAndUpdate, making it race-condition proof.
 import { atomicCheckAndIncrementInvoice } from "@/lib/subscriptionGuard";
 
+// ── Activity Log ──────────────────────────────────────────────────────────────
+import { createLog, getManagerActor } from "@/lib/createLog";
+import { ActivityAction } from "@/models/ActivityLog";
+// ─────────────────────────────────────────────────────────────────────────────
+
 function toObjectId(id: string | undefined): mongoose.Types.ObjectId | undefined {
   if (!id) return undefined;
   if (!mongoose.Types.ObjectId.isValid(id)) return undefined;
@@ -371,6 +376,22 @@ export async function POST(req: Request) {
       nextMo.toString().padStart(2, "0") +
       nextSeq.toString().padStart(4, "0");
 
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.BILL_GENERATED,
+        metadata: {
+          billSerialNumber: bill.serialNumber,
+          billTotal:        bill.grandTotal,
+          customerName:     bill.billingCustomer?.name,
+          orderId:          order.orderId,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     return NextResponse.json(
       { bill, order, nextSerialPreview },
       { status: 201 }
@@ -623,6 +644,22 @@ export async function PUT(req: Request) {
     } finally {
       session.endSession();
     }
+
+    // ── Activity Log ─────────────────────────────────────────────────────────
+    const actor = await getManagerActor(auth);
+    if (actor) {
+      await createLog({
+        ...actor,
+        action: ActivityAction.ORDER_EDITED,
+        metadata: {
+          orderId:          existingOrder.orderId,
+          customerName:     existingBill.billingCustomer?.name,
+          billSerialNumber: existingBill.serialNumber,
+          orderTotal:       existingOrder.total,
+        },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json(
       { success: true, bill: existingBill, order: existingOrder },
