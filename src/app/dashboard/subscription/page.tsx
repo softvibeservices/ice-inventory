@@ -1,9 +1,12 @@
 // src/app/dashboard/subscription/page.tsx
 //
-// ✅ FIXED: Added full billing period support (monthly, 6 months, yearly)
-// ✅ FIXED: Billing period selector on upgrade cards
-// ✅ FIXED: Proper payment integration for all billing periods
-// ✅ FIXED: Savings badges for 6-month and yearly plans
+// ─────────────────────────────────────────────────────────────────────────────
+//  TRIAL PRICING CHANGE:
+//    Launch plan monthly price updated: ₹499 → ₹149 (trial period)
+//    All other plans and billing periods unchanged.
+//    Also update PLAN_PRICING in src/app/api/payment/create-order/route.ts
+//    to match (see separate file).
+// ─────────────────────────────────────────────────────────────────────────────
 
 "use client";
 
@@ -142,17 +145,22 @@ const PLAN_DISPLAY: Record<
   },
 };
 
-// ✅ FIXED: Added all billing period prices with savings
+// ─────────────────────────────────────────────────────────────────────────────
+//  UPGRADE_PLANS
+//  ✅ TRIAL CHANGE: Launch monthly price changed from ₹499 → ₹149
+//     Remember to mirror this in create-order/route.ts → PLAN_PRICING
+// ─────────────────────────────────────────────────────────────────────────────
 const UPGRADE_PLANS = [
   {
     id: "launch",
     name: "Launch",
     tagline: "For small shop owners",
     highlight: false,
+    trialBadge: true, // shows the "Trial Price" badge on monthly card
     pricing: {
-      monthly: { price: 499, save: "" },
-      sixmonths: { price: 2499, save: "Save ₹495" },
-      yearly: { price: 4999, save: "Save ₹989" },
+      monthly: { price: 149, save: "", trialNote: "Trial price — was ₹499" },
+      sixmonths: { price: 2499, save: "Save ₹495", trialNote: "" },
+      yearly: { price: 4999, save: "Save ₹989", trialNote: "" },
     },
     features: [
       "120 invoices / month",
@@ -168,10 +176,11 @@ const UPGRADE_PLANS = [
     name: "Scale",
     tagline: "For growing distributors",
     highlight: true,
+    trialBadge: false,
     pricing: {
-      monthly: { price: 1499, save: "" },
-      sixmonths: { price: 7999, save: "Save ₹995" },
-      yearly: { price: 14999, save: "Save ₹2,989" },
+      monthly: { price: 1499, save: "", trialNote: "" },
+      sixmonths: { price: 7999, save: "Save ₹995", trialNote: "" },
+      yearly: { price: 14999, save: "Save ₹2,989", trialNote: "" },
     },
     features: [
       "400 invoices / month",
@@ -187,10 +196,11 @@ const UPGRADE_PLANS = [
     name: "Business",
     tagline: "For high-volume operations",
     highlight: false,
+    trialBadge: false,
     pricing: {
-      monthly: { price: 2499, save: "" },
-      sixmonths: { price: 13499, save: "Save ₹1,495" },
-      yearly: { price: 24999, save: "Save ₹4,989" },
+      monthly: { price: 2499, save: "", trialNote: "" },
+      sixmonths: { price: 13499, save: "Save ₹1,495", trialNote: "" },
+      yearly: { price: 24999, save: "Save ₹4,989", trialNote: "" },
     },
     features: [
       "1,500 invoices / month",
@@ -242,7 +252,6 @@ const ADDON_DISPLAY: Record<string, { label: string; desc: string; price: string
   },
 };
 
-// ✅ FIXED: Billing period display labels
 const BILLING_PERIOD_LABELS: Record<BillingPeriod, string> = {
   monthly: "Monthly",
   sixmonths: "6 Months",
@@ -439,7 +448,6 @@ export default function SubscriptionPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
-  // ✅ FIXED: Added billing period state
   const [selectedPeriod, setSelectedPeriod] = useState<BillingPeriod>("monthly");
 
   const [modal, setModal] = useState<{
@@ -509,7 +517,7 @@ export default function SubscriptionPage() {
     fetchData();
   }, [fetchData]);
 
-  // ── ✅ FIXED: Handle plan upgrade with selected billing period ────────────
+  // ── Handle plan upgrade ────────────────────────────────────────────────────
   const handleUpgradePlan = async (planId: string, billingPeriod: BillingPeriod) => {
     if (!razorpayLoaded) {
       setModal({
@@ -522,7 +530,7 @@ export default function SubscriptionPage() {
     }
 
     setCheckoutLoading(true);
-    
+
     try {
       const token = localStorage.getItem("token");
 
@@ -573,9 +581,9 @@ export default function SubscriptionPage() {
 
             invalidateSubscriptionCache();
             await fetchData();
-            
+
             setCheckoutLoading(false);
-            
+
             setModal({
               open: true,
               title: "Payment Successful!",
@@ -584,7 +592,7 @@ export default function SubscriptionPage() {
             });
           } catch (verifyErr) {
             setCheckoutLoading(false);
-            
+
             setModal({
               open: true,
               title: "Verification Failed",
@@ -608,7 +616,7 @@ export default function SubscriptionPage() {
       rzp.open();
     } catch (err) {
       setCheckoutLoading(false);
-      
+
       setModal({
         open: true,
         title: "Payment Failed",
@@ -631,7 +639,7 @@ export default function SubscriptionPage() {
     }
 
     setCheckoutLoading(true);
-    
+
     try {
       const token = localStorage.getItem("token");
 
@@ -680,9 +688,9 @@ export default function SubscriptionPage() {
 
             invalidateSubscriptionCache();
             await fetchData();
-            
+
             setCheckoutLoading(false);
-            
+
             setModal({
               open: true,
               title: "Add-on Activated!",
@@ -691,7 +699,7 @@ export default function SubscriptionPage() {
             });
           } catch (verifyErr) {
             setCheckoutLoading(false);
-            
+
             setModal({
               open: true,
               title: "Verification Failed",
@@ -715,7 +723,7 @@ export default function SubscriptionPage() {
       rzp.open();
     } catch (err) {
       setCheckoutLoading(false);
-      
+
       setModal({
         open: true,
         title: "Payment Failed",
@@ -984,7 +992,9 @@ export default function SubscriptionPage() {
             </div>
           )}
 
-          {/* ✅ FIXED: Upgrade Plans with Billing Period Selector */}
+          {/* ─────────────────────────────────────────────────────────────────
+              Upgrade / Choose Plans  with Billing Period Selector
+              ───────────────────────────────────────────────────────────────── */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-semibold text-gray-900">
@@ -998,7 +1008,7 @@ export default function SubscriptionPage() {
               Select a billing period and plan to upgrade instantly.
             </p>
 
-            {/* ✅ FIXED: Billing Period Toggle */}
+            {/* Billing Period Toggle */}
             <div className="flex flex-wrap items-center gap-4 mb-6">
               <div
                 className="inline-flex items-center bg-gray-100 rounded-xl p-1"
@@ -1035,12 +1045,12 @@ export default function SubscriptionPage() {
               </p>
             </div>
 
-            {/* ✅ FIXED: Plan Cards with Dynamic Pricing */}
+            {/* Plan Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {UPGRADE_PLANS.map((plan) => {
                 const isCurrent = sub.planId === plan.id && !isExpired;
                 const billing = plan.pricing[selectedPeriod];
-                
+
                 return (
                   <article
                     key={plan.id}
@@ -1061,20 +1071,36 @@ export default function SubscriptionPage() {
                       </span>
                     )}
 
+                    {/* ✅ TRIAL BADGE: shown on Launch card only when monthly is selected */}
+                    {plan.trialBadge && selectedPeriod === "monthly" && !isCurrent && (
+                      <span className="absolute -top-2.5 left-4 bg-orange-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+                        TRIAL PRICE
+                      </span>
+                    )}
+
                     <div>
                       <p className="text-sm font-bold text-gray-900">{plan.name}</p>
                       <p className="text-xs text-gray-500 mt-0.5">{plan.tagline}</p>
                     </div>
 
-                    {/* ✅ FIXED: Dynamic Price Display */}
+                    {/* Price */}
                     <div>
                       <div className="text-2xl font-extrabold text-gray-900">
                         ₹{formatPrice(billing.price)}
                         <span className="text-xs font-normal text-gray-400 ml-1">
-                          {selectedPeriod === "monthly" ? "/mo" : selectedPeriod === "sixmonths" ? "/6mo" : "/yr"}
+                          {selectedPeriod === "monthly"
+                            ? "/mo"
+                            : selectedPeriod === "sixmonths"
+                            ? "/6mo"
+                            : "/yr"}
                         </span>
                       </div>
-                      {billing.save ? (
+                      {/* Show trial note OR save badge */}
+                      {billing.trialNote ? (
+                        <p className="text-xs text-orange-600 font-medium mt-1">
+                          {billing.trialNote}
+                        </p>
+                      ) : billing.save ? (
                         <p className="text-xs text-green-600 font-medium mt-1">
                           {billing.save}
                         </p>
@@ -1092,7 +1118,6 @@ export default function SubscriptionPage() {
                       ))}
                     </ul>
 
-                    {/* ✅ FIXED: Pass selected period to upgrade handler */}
                     <button
                       onClick={() => {
                         if (!isCurrent) {

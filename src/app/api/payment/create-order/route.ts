@@ -11,6 +11,11 @@
 //    Razorpay order quotas.
 //    Fix: 5 order creations per user per 10 minutes.
 //
+//  TRIAL PRICING CHANGE:
+//    Launch monthly price changed from ₹499 → ₹149 for the trial period.
+//    Mirror this change in subscription/page.tsx → UPGRADE_PLANS.
+//    When the trial ends, revert both files back to ₹499.
+//
 //  ALL OTHER LOGIC IS UNCHANGED:
 //    - Server-side pricing (PLAN_PRICING) — amount is NEVER taken from client
 //    - Manager role blocked
@@ -31,13 +36,16 @@ export const dynamic = "force-dynamic";
 // ─────────────────────────────────────────────────────────────────────────────
 //  PLAN_PRICING — server-side authoritative pricing in RUPEES.
 //  NEVER accept an amount from the client body.
+//
+//  ✅ TRIAL CHANGE: launch.monthly ₹499 → ₹149
+//     Revert to 499 when the trial period ends.
 // ─────────────────────────────────────────────────────────────────────────────
 const PLAN_PRICING: Record<
   Exclude<PlanId, "free_trial" | "customize">,
   Record<BillingPeriod, number>
 > = {
   launch: {
-    monthly:   499,
+    monthly:   149,   // ← TRIAL PRICE (was 499) — revert when trial ends
     sixmonths: 2499,
     yearly:    4999,
   },
@@ -143,17 +151,15 @@ export async function POST(req: Request): Promise<NextResponse> {
     await connectDB();
 
     // ── 6. Create Razorpay order ──────────────────────────────────────────────
-    //  FIX: Shortened receipt format to stay under Razorpay's 40-character limit
-    //  Format: s_{last10ofUserId}_{timestamp}
-    //  Example: s_9cd799439011_1716789012345 = 30 chars (well under 40)
+    //  Receipt format: s_{last10ofUserId}_{timestamp}
+    //  Example: s_9cd799439011_1716789012345 = 30 chars (well under Razorpay's 40-char limit)
     let razorpayOrder: RazorpayOrder;
 
     try {
       const userIdStr = userId.toString();
       const timestamp = Date.now().toString();
-      // Use last 10 chars of userId + full timestamp = max 24 chars + prefix = 26 chars total
       const receipt = `s_${userIdStr.slice(-10)}_${timestamp}`;
-      
+
       razorpayOrder = await createOrder({
         amount:   amountInPaise,
         currency: "INR",
