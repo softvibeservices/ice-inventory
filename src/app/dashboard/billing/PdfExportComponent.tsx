@@ -16,8 +16,6 @@ type Customer = {
   shopAddress?: string;
 };
 
-
-
 type SellerDetails = {
   _id?: string;
   sellerName?: string;
@@ -165,8 +163,11 @@ export default forwardRef(function PdfExportComponent(
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
+      // ── Section heights ─────────────────────────────────────────────────
+      // boxHeight = header(16) + 4 lines×13 + padding(10) = 78pt
+      // margin.top = seller branding(~110) + boxHeight(78) + gap(12) = 200pt
       const margin = {
-        top: 190,
+        top: 210,
         bottom: 140,
         left: 40,
         right: 40,
@@ -174,9 +175,16 @@ export default forwardRef(function PdfExportComponent(
 
       const tableTop = margin.top + 18;
 
+      // ────────────────────────────────────────────────────────────────────
+      // HEADER — drawn on every page
+      // Section 1: Seller branding (logo + name + address + GSTIN)
+      // Section 2: Bill meta (serial, date, page)
+      // Section 3: Billing & Shipping address boxes
+      // ────────────────────────────────────────────────────────────────────
       const drawHeader = (pageNumber: number, totalPages: number) => {
         const topY = 30;
 
+        // ── Section 1: Seller Branding ──────────────────────────────────
         if (logoDataUrl) {
           try {
             doc.addImage(logoDataUrl, "PNG", margin.left, topY - 10, 60, 60);
@@ -210,20 +218,21 @@ export default forwardRef(function PdfExportComponent(
           });
         }
 
-      // ✅ AFTER
-if (seller?.compositionLine && seller.compositionLine.trim()) {
-  doc.setFont("helvetica", "italic").setFontSize(9);
-  doc.text(seller.compositionLine, pageWidth / 2, topY + 66, {
-    align: "center",
-    maxWidth: pageWidth - 100,
-  });
-}
+        if (seller?.compositionLine && seller.compositionLine.trim()) {
+          doc.setFont("helvetica", "italic").setFontSize(9);
+          doc.text(seller.compositionLine, pageWidth / 2, topY + 66, {
+            align: "center",
+            maxWidth: pageWidth - 100,
+          });
+        }
 
+        // ── Document title ──────────────────────────────────────────────
         doc.setFont("helvetica", "bold").setFontSize(14);
         doc.text("BILL OF SUPPLY", pageWidth / 2, topY + 82, {
           align: "center",
         });
 
+        // ── Section 2: Bill Meta (top-right) ───────────────────────────
         doc.setFont("helvetica", "normal").setFontSize(9);
         doc.text(`Serial: ${serialNo}`, pageWidth - margin.right, topY, {
           align: "right",
@@ -231,7 +240,6 @@ if (seller?.compositionLine && seller.compositionLine.trim()) {
         doc.text(`Date: ${date}`, pageWidth - margin.right, topY + 12, {
           align: "right",
         });
-
         doc.text(
           `Page ${pageNumber} / ${totalPages}`,
           pageWidth - margin.right,
@@ -239,61 +247,80 @@ if (seller?.compositionLine && seller.compositionLine.trim()) {
           { align: "right" }
         );
 
-        const boxTop = margin.top - 70;
-        const boxHeight = 70;
+        // ── Section 3: Billing & Shipping Address Boxes ─────────────────
+        const BOX_HEADER_H = 16;
+        const LINE_H = 13;
+        const BOX_PADDING_TOP = 6;
+        const BOX_CONTENT_LINES = 4;
+        const boxHeight = BOX_HEADER_H + BOX_PADDING_TOP + BOX_CONTENT_LINES * LINE_H + 8;
+        const boxTop = margin.top - boxHeight - 10;
         const gap = 12;
         const boxWidth = (pageWidth - margin.left - margin.right - gap) / 2;
 
         doc.setDrawColor(0);
         doc.setLineWidth(0.7);
-
         doc.rect(margin.left, boxTop, boxWidth, boxHeight);
         doc.rect(margin.left + boxWidth + gap, boxTop, boxWidth, boxHeight);
 
-        doc.setFont("helvetica", "bold").setFontSize(10);
-        doc.text("Billing Details", margin.left + 6, boxTop + 14);
+        // Box headers with light fill
+        doc.setFillColor(240, 240, 240);
+        doc.rect(margin.left, boxTop, boxWidth, BOX_HEADER_H, "F");
+        doc.rect(margin.left + boxWidth + gap, boxTop, boxWidth, BOX_HEADER_H, "F");
+
+        doc.setFont("helvetica", "bold").setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        doc.text("Billing Details", margin.left + 6, boxTop + 11);
         doc.text(
           "Shipping Details",
           margin.left + boxWidth + gap + 6,
-          boxTop + 14
+          boxTop + 11
         );
 
         doc.setFont("helvetica", "normal").setFontSize(9);
 
         const billShop = billingCustomer?.shopName || "-";
         const billName = billingCustomer?.name || "-";
-        const billAddr = billingCustomer?.address || billingCustomer?.shopAddress || "-";
+        const billAddrText = billingCustomer?.address || billingCustomer?.shopAddress || "-";
         const billContact = billingCustomer?.contact || "-";
 
         const shipShop = sameAsBilling ? billShop : shippingCustomer?.shopName || "-";
         const shipName = sameAsBilling ? billName : shippingCustomer?.name || "-";
         const shipAddr = sameAsBilling
-          ? billAddr
+          ? billAddrText
           : shippingCustomer?.address || shippingCustomer?.shopAddress || "-";
         const shipContact = sameAsBilling
           ? billContact
           : shippingCustomer?.contact || "-";
 
-        let y = boxTop + 28;
+        let y = boxTop + BOX_HEADER_H + BOX_PADDING_TOP + 8;
 
-        doc.text(`Shop: ${billShop}`, margin.left + 6, y);
-        y += 12;
-        doc.text(`Customer: ${billName}`, margin.left + 6, y);
-        y += 12;
-        doc.text(`Address: ${billAddr}`, margin.left + 6, y);
-        y += 12;
-        doc.text(`Contact: ${billContact}`, margin.left + 6, y);
-
-        let y2 = boxTop + 28;
+        // Truncate long text to fit within box width
+        const maxW = boxWidth - 14;
         const sx = margin.left + boxWidth + gap + 6;
-        doc.text(`Shop: ${shipShop}`, sx, y2);
-        y2 += 12;
-        doc.text(`Customer: ${shipName}`, sx, y2);
-        y2 += 12;
-        doc.text(`Address: ${shipAddr}`, sx, y2);
-        y2 += 12;
-        doc.text(`Contact: ${shipContact}`, sx, y2);
 
+        const truncate = (text: string, maxWidth: number): string => {
+          const lines = doc.splitTextToSize(text, maxWidth) as string[];
+          return lines[0] || text;
+        };
+
+        doc.text(truncate(`Shop: ${billShop}`, maxW), margin.left + 6, y);
+        doc.text(truncate(`Shop: ${shipShop}`, maxW), sx, y);
+        y += LINE_H;
+
+        doc.text(truncate(`Customer: ${billName}`, maxW), margin.left + 6, y);
+        doc.text(truncate(`Customer: ${shipName}`, maxW), sx, y);
+        y += LINE_H;
+
+        doc.text(truncate(`Address: ${billAddrText}`, maxW), margin.left + 6, y);
+        doc.text(truncate(`Address: ${shipAddr}`, maxW), sx, y);
+        y += LINE_H;
+
+        doc.text(truncate(`Contact: ${billContact}`, maxW), margin.left + 6, y);
+        doc.text(truncate(`Contact: ${shipContact}`, maxW), sx, y);
+
+        // ── Divider above table ─────────────────────────────────────────
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.7);
         doc.line(
           margin.left,
           tableTop - 10,
@@ -302,15 +329,28 @@ if (seller?.compositionLine && seller.compositionLine.trim()) {
         );
       };
 
+      // ────────────────────────────────────────────────────────────────────
+      // FOOTER — drawn on every page
+      // Section 4: Payment & Banking Details
+      // Section 5: QR Code (center)
+      // Section 6: Signature (right)
+      // Section 7: Slogan / thank-you line
+      // ────────────────────────────────────────────────────────────────────
       const drawFooter = () => {
         const footerTop = pageHeight - margin.bottom + 10;
 
+        // ── Top border of footer ────────────────────────────────────────
         doc.setDrawColor(0);
         doc.setLineWidth(0.6);
         doc.line(margin.left, footerTop, pageWidth - margin.right, footerTop);
 
-        doc.setFont("helvetica", "bold").setFontSize(11);
-        doc.text("Payment & Banking Details", margin.left, footerTop + 16);
+        // ── Light fill for footer section label ─────────────────────────
+        doc.setFillColor(245, 245, 245);
+        doc.rect(margin.left, footerTop + 1, pageWidth - margin.left - margin.right, 14, "F");
+
+        doc.setFont("helvetica", "bold").setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        doc.text("Payment & Banking Details", margin.left + 4, footerTop + 12);
 
         const bankNameText2 = bank?.bankName || seller.bankName || "-";
         const branchText2 = bank?.branchName || seller.branchName || "-";
@@ -318,9 +358,10 @@ if (seller?.compositionLine && seller.compositionLine.trim()) {
         const ifscText2 = bank?.ifscCode || (seller as any)?.ifscCode || "-";
         const inFavorText2 = bank?.bankingName || seller.bankingName || "-";
 
-        let lineY = footerTop + 32;
-        const lineGap = 12;
-        doc.setFont("helvetica", "normal").setFontSize(9);
+        // ── Section 4: Bank Details (left column) ──────────────────────
+        let lineY = footerTop + 28;
+        const lineGap = 11;
+        doc.setFont("helvetica", "normal").setFontSize(8.5);
         doc.text(`Bank: ${bankNameText2}`, margin.left, lineY);
         lineY += lineGap;
         doc.text(`Branch: ${branchText2}`, margin.left, lineY);
@@ -331,37 +372,53 @@ if (seller?.compositionLine && seller.compositionLine.trim()) {
         lineY += lineGap;
         doc.text(`In favour of: ${inFavorText2}`, margin.left, lineY);
 
+        // ── Section 5: QR Code (center) ─────────────────────────────────
         if (qrDataUrl) {
           doc.addImage(
             qrDataUrl,
             "PNG",
-            pageWidth / 2 - 35,
-            footerTop + 20,
-            70,
-            70
+            pageWidth / 2 - 30,
+            footerTop + 18,
+            60,
+            60
           );
+          doc.setFont("helvetica", "normal").setFontSize(7.5);
+          doc.text("Scan to Pay", pageWidth / 2, footerTop + 82, { align: "center" });
         }
 
+        // ── Section 6: Signature (right) ────────────────────────────────
         if (sigDataUrl) {
           const sigW = 110;
-          const sigH = 50;
+          const sigH = 45;
           const sigX = pageWidth - margin.right - sigW;
-          const sigY = footerTop + 26;
+          const sigY = footerTop + 22;
 
-          doc.addImage(sigDataUrl, "PNG", sigX, sigY, sigW, sigH);
           doc.setFont("helvetica", "italic").setFontSize(8);
           doc.text("Signature of the Supplier", sigX + sigW / 2, sigY - 4, {
             align: "center",
           });
+          doc.addImage(sigDataUrl, "PNG", sigX, sigY, sigW, sigH);
+          // Underline for signature
+          doc.setDrawColor(100, 100, 100);
+          doc.setLineWidth(0.4);
+          doc.line(sigX, sigY + sigH + 2, sigX + sigW, sigY + sigH + 2);
+          doc.setFont("helvetica", "normal").setFontSize(7.5);
+          doc.text("Authorized Signatory", sigX + sigW / 2, sigY + sigH + 10, { align: "center" });
         }
 
-        doc.setFont("helvetica", "normal").setFontSize(9);
+        // ── Section 7: Footer slogan ─────────────────────────────────────
+        doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.3);
+        doc.line(margin.left, pageHeight - 28, pageWidth - margin.right, pageHeight - 28);
+        doc.setFont("helvetica", "italic").setFontSize(8.5);
+        doc.setTextColor(80, 80, 80);
         doc.text(
           seller?.slogan || "Thank you for your business!",
           pageWidth / 2,
-          pageHeight - 22,
+          pageHeight - 16,
           { align: "center" }
         );
+        doc.setTextColor(0, 0, 0);
       };
 
       const tableBody = filledItems.map((it, idx) => [
@@ -464,11 +521,12 @@ if (seller?.compositionLine && seller.compositionLine.trim()) {
       doc.setPage(pages);
 
       if (remarks.trim()) {
-        const y = pageHeight - margin.bottom - 40;
-        doc.setFont("helvetica", "bold").setFontSize(10);
+        const y = pageHeight - margin.bottom - 44;
+        doc.setFont("helvetica", "bold").setFontSize(9);
+        doc.setTextColor(0, 0, 0);
         doc.text("Remarks:", margin.left, y);
-        doc.setFont("helvetica", "normal").setFontSize(9);
-        doc.text(remarks, margin.left, y + 14, {
+        doc.setFont("helvetica", "normal").setFontSize(8.5);
+        doc.text(remarks, margin.left, y + 13, {
           maxWidth: pageWidth - margin.left - margin.right,
         });
       }

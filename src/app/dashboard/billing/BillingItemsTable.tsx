@@ -136,7 +136,13 @@ export default function BillingItemsTable({
             {items.map((it, idx) => {
               const matched = findProductByName(it.productName);
               const stock = getProductStock(matched);
-              const isLastRow = idx === items.length - 1;
+              // ── CHANGE: warn if over stock but don't cap
+              const isOverStock =
+                typeof stock === "number" &&
+                !isNaN(stock) &&
+                it.quantity > stock &&
+                it.quantity > 0 &&
+                !it.free;
 
               // canEditRow logic: allow editing up to & including first incomplete row
               const firstIncomplete = items.findIndex(
@@ -145,7 +151,12 @@ export default function BillingItemsTable({
               const editable = firstIncomplete === -1 || idx <= firstIncomplete;
 
               return (
-                <tr key={idx} className="even:bg-white odd:bg-gray-50">
+                <tr
+                  key={idx}
+                  className={`even:bg-white odd:bg-gray-50 ${
+                    isOverStock ? "ring-1 ring-orange-300" : ""
+                  }`}
+                >
                   {/* ── Drag handle + row number ── */}
                   <td
                     draggable={!!it.productName && it.quantity > 0}
@@ -180,7 +191,13 @@ export default function BillingItemsTable({
                     {matched && typeof stock === "number" && (
                       <div className="mt-1 text-[10px] text-gray-500">
                         In stock:{" "}
-                        <span className="font-semibold">{stock}</span>
+                        <span
+                          className={`font-semibold ${
+                            stock === 0 ? "text-red-500" : stock < 10 ? "text-orange-500" : "text-green-600"
+                          }`}
+                        >
+                          {stock}
+                        </span>
                         {matched.packUnit && (
                           <>
                             {" "}
@@ -193,29 +210,90 @@ export default function BillingItemsTable({
                       </div>
                     )}
 
-                    {/* Product suggestions dropdown */}
+                    {/* ── Over-stock warning ── */}
+                    {isOverStock && (
+                      <div className="mt-0.5 text-[10px] text-orange-600 font-semibold flex items-center gap-0.5">
+                        ⚠ Qty exceeds stock ({stock} available)
+                      </div>
+                    )}
+
+                    {/* ── Product suggestions dropdown ── */}
                     {activeProductRow === idx &&
                       it.productName &&
                       getFilteredProducts(it.productName).length > 0 && (
-                        <div className="absolute z-30 mt-1 w-full bg-white border rounded-md shadow-lg max-h-56 overflow-auto">
-                          {getFilteredProducts(it.productName).map((p, i) => (
-                            <div
-                              key={p._id}
-                              onMouseDown={() =>
-                                onProductSuggestionSelect(idx, p)
-                              }
-                              className={`px-2 py-1 sm:px-3 sm:py-2 cursor-pointer text-xs sm:text-sm flex justify-between ${
-                                (productSuggestionIndex[idx] || 0) === i
-                                  ? "bg-blue-600 text-white"
-                                  : "hover:bg-blue-50"
-                              }`}
-                            >
-                              <span>{p.name}</span>
-                              <span className="text-xs opacity-70">
-                                {p.unit}
-                              </span>
-                            </div>
-                          ))}
+                        <div className="absolute z-30 mt-1 w-full min-w-[260px] bg-white border rounded-md shadow-lg max-h-64 overflow-auto">
+                          {getFilteredProducts(it.productName).map((p, i) => {
+                            const pStock = getProductStock(p);
+                            const pPrice =
+                              (p as any).sellingPrice ?? (p as any).price ?? 0;
+                            return (
+                              <div
+                                key={p._id}
+                                onMouseDown={() =>
+                                  onProductSuggestionSelect(idx, p)
+                                }
+                                className={`px-2 py-1.5 sm:px-3 sm:py-2 cursor-pointer text-xs sm:text-sm ${
+                                  (productSuggestionIndex[idx] || 0) === i
+                                    ? "bg-blue-600 text-white"
+                                    : "hover:bg-blue-50"
+                                }`}
+                              >
+                                {/* Row 1: Product name + unit */}
+                                <div className="flex justify-between items-center">
+                                  <span className="font-medium">{p.name}</span>
+                                  <span
+                                    className={`text-[10px] px-1 py-0.5 rounded ${
+                                      (productSuggestionIndex[idx] || 0) === i
+                                        ? "bg-blue-500 text-white"
+                                        : "bg-gray-100 text-gray-600"
+                                    }`}
+                                  >
+                                    {p.unit || "-"}
+                                  </span>
+                                </div>
+                                {/* Row 2: Price + Stock + Pack info */}
+                                <div
+                                  className={`flex flex-wrap gap-x-3 mt-0.5 text-[10px] ${
+                                    (productSuggestionIndex[idx] || 0) === i
+                                      ? "text-blue-100"
+                                      : "text-gray-500"
+                                  }`}
+                                >
+                                  {pPrice > 0 && (
+                                    <span>
+                                      Price: ₹{Number(pPrice).toFixed(2)}
+                                    </span>
+                                  )}
+                                  {typeof pStock === "number" && (
+                                    <span
+                                      className={
+                                        (productSuggestionIndex[idx] || 0) === i
+                                          ? "text-blue-100"
+                                          : pStock === 0
+                                          ? "text-red-500"
+                                          : pStock < 10
+                                          ? "text-orange-500"
+                                          : "text-green-600"
+                                      }
+                                    >
+                                      Stock: {pStock}
+                                    </span>
+                                  )}
+                                  {p.packQuantity && p.packUnit && (
+                                    <span>
+                                      Pack: {p.packQuantity} {p.packUnit}
+                                    </span>
+                                  )}
+                                  {(p as any).mrp && (
+                                    <span>MRP: ₹{Number((p as any).mrp).toFixed(2)}</span>
+                                  )}
+                                  {(p as any).category && (
+                                    <span>Cat: {(p as any).category}</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                   </td>
@@ -238,22 +316,25 @@ export default function BillingItemsTable({
                         }
                         onFocus={(e) => onQtyFocus(idx, e)}
                         onKeyDown={(e) => onQtyKeyDown(idx, e)}
-                        className="w-16 sm:w-20 border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-center text-xs sm:text-sm text-gray-900"
+                        className={`w-16 sm:w-20 border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-center text-xs sm:text-sm text-gray-900 ${
+                          isOverStock ? "border-orange-400 bg-orange-50" : ""
+                        }`}
                         placeholder="0"
                       />
                       {matched && typeof stock === "number" && (
                         <span className="mt-1 text-[10px] text-gray-500 block">
-                          In stock:{" "}
-                          <span className="font-semibold">{stock}</span>
-                          {matched.packUnit && (
-                            <>
-                              {" "}
-                              | Pack:{" "}
-                              <span className="font-semibold">
-                                {matched.packUnit}
-                              </span>
-                            </>
-                          )}
+                          Stock:{" "}
+                          <span
+                            className={`font-semibold ${
+                              stock === 0
+                                ? "text-red-500"
+                                : stock < 10
+                                ? "text-orange-500"
+                                : "text-green-600"
+                            }`}
+                          >
+                            {stock}
+                          </span>
                         </span>
                       )}
                     </div>
@@ -358,7 +439,6 @@ export default function BillingItemsTable({
           <p className="text-[10px] sm:text-xs text-gray-500">
             ✨ <strong>New:</strong> Press Enter after quantity on the last row
             to auto-add a new line. Selecting a product auto-fills price/unit.
-            Quantity is limited to stock.
           </p>
         </div>
       </div>

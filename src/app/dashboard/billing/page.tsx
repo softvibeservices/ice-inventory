@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
@@ -13,7 +14,6 @@ import BillingCustomerSection from "./BillingCustomerSection";
 import BillingItemsTable from "./BillingItemsTable";
 import BillingConfirmDialog from "./BillingConfirmDialog";
 
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 import type {
   Customer,
@@ -23,15 +23,158 @@ import type {
   BillItem,
 } from "./billing.types";
 
+// ── Draft key ─────────────────────────────────────────────────────────────────
+const DRAFT_KEY = "billing-draft";
+
+// ── Profile-incomplete dialog ─────────────────────────────────────────────────
+type ProfileDialogProps = {
+  missingItems: string[];
+  onGoToProfile: () => void;
+  onClose: () => void;
+};
+function ProfileIncompleteDialog({
+  missingItems,
+  onGoToProfile,
+  onClose,
+}: ProfileDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-2xl">⚠️</span>
+          <h2 className="text-base font-bold text-gray-900">
+            Profile Incomplete
+          </h2>
+        </div>
+        <p className="text-sm text-gray-700 mb-3">
+          The following required details are missing from your seller profile.
+          Please complete them before generating a bill or PDF.
+        </p>
+        <ul className="mb-4 space-y-1">
+          {missingItems.map((item) => (
+            <li
+              key={item}
+              className="flex items-center gap-2 text-sm text-red-600"
+            >
+              <span>✗</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onGoToProfile}
+            className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+          >
+            Go to Profile
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Draft-recovery dialog ─────────────────────────────────────────────────────
+type DraftDialogProps = {
+  onContinue: () => void;
+  onStartNew: () => void;
+  draftDate: string;
+};
+function DraftRecoveryDialog({
+  onContinue,
+  onStartNew,
+  draftDate,
+}: DraftDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-2xl">📋</span>
+          <h2 className="text-base font-bold text-gray-900">Unsaved Draft Found</h2>
+        </div>
+        <p className="text-sm text-gray-700 mb-1">
+          You have an unsaved bill draft from{" "}
+          <span className="font-semibold">{draftDate}</span>.
+        </p>
+        <p className="text-sm text-gray-500 mb-4">
+          Would you like to continue with it or start a fresh bill?
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onStartNew}
+            className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Start New Bill
+          </button>
+          <button
+            onClick={onContinue}
+            className="px-3 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+          >
+            Continue Draft
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Reset-confirmation dialog ─────────────────────────────────────────────────
+type ResetDialogProps = {
+  onConfirm: () => void;
+  onCancel: () => void;
+};
+function ResetConfirmDialog({ onConfirm, onCancel }: ResetDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-xs w-full p-5">
+        <h2 className="text-base font-bold text-gray-900 mb-2">Reset Bill?</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          This will clear all entered data including customers, products,
+          discount and remarks. This action cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
+  const router = useRouter();
+
   // ── Edit mode ──────────────────────────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [hasLoadedEditData, setHasLoadedEditData] = useState(false);
   const [loadedFromStickyNote, setLoadedFromStickyNote] = useState(false);
+
+  // ── Dialog states ──────────────────────────────────────────────────────────
+  const [showDraftDialog, setShowDraftDialog] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState("");
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [profileMissingItems, setProfileMissingItems] = useState<string[]>([]);
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   // ── Suggestion control ─────────────────────────────────────────────────────
   const [customerSuggestionIndex, setCustomerSuggestionIndex] = useState(0);
@@ -90,6 +233,198 @@ export default function BillingPage() {
   const [remarks, setRemarks] = useState<string>("");
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PROFILE VALIDATION HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Returns a list of missing profile fields.
+   * Empty array = profile is complete.
+   */
+  const getMissingProfileFields = (): string[] => {
+    const missing: string[] = [];
+    if (!seller) {
+      missing.push("Seller profile not loaded");
+      return missing;
+    }
+    if (!seller.qrCodeUrl) missing.push("QR Code (for payment)");
+    if (!seller.signatureUrl) missing.push("Signature image");
+    if (!seller.logoUrl) missing.push("Business logo");
+
+    const bankName = bank?.bankName || seller.bankName;
+    const accNo =
+      bank?.accountNumber ||
+      (seller as any)?.accountNumber ||
+      (seller as any)?.accountNo;
+    const ifsc = bank?.ifscCode || (seller as any)?.ifscCode;
+    const inFavor = bank?.bankingName || seller.bankingName;
+
+    if (!bankName) missing.push("Bank name");
+    if (!accNo) missing.push("Account number");
+    if (!ifsc) missing.push("IFSC code");
+    if (!inFavor) missing.push("Account holder name (In favour of)");
+
+    return missing;
+  };
+
+  const isProfileComplete = () => getMissingProfileFields().length === 0;
+  const hasCustomers = () => customers.length > 0;
+
+  // ── Check profile and show dialog or proceed ────────────────────────────────
+  const guardedAction = (action: () => void) => {
+    const missing = getMissingProfileFields();
+    if (missing.length > 0) {
+      setProfileMissingItems(missing);
+      setShowProfileDialog(true);
+      return;
+    }
+    if (!hasCustomers()) {
+      toast.error(
+        "No customers found. Please add a customer from the Customers page first."
+      );
+      return;
+    }
+    action();
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  DRAFT HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const hasMeaningfulData = () => {
+    const filledItems = items.filter(
+      (it) => it.productName?.trim() && it.quantity > 0
+    );
+    return (
+      filledItems.length > 0 ||
+      !!billingCustomer ||
+      !!customerInput.trim()
+    );
+  };
+
+  const saveDraft = () => {
+    if (!hasMeaningfulData()) return;
+    try {
+      const draft = {
+        savedAt: new Date().toISOString(),
+        billingCustomer,
+        shippingCustomer,
+        sameAsBilling,
+        customerInput,
+        shippingInput,
+        items,
+        discountPercent,
+        remarks,
+        serialNo,
+        date,
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      toast.success("Draft saved!", { duration: 1500 });
+    } catch {
+      // localStorage might be full — fail silently
+    }
+  };
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {}
+  };
+
+  const loadDraft = () => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft.billingCustomer) setBillingCustomer(draft.billingCustomer);
+      if (draft.shippingCustomer) setShippingCustomer(draft.shippingCustomer);
+      setSameAsBilling(draft.sameAsBilling ?? false);
+      if (draft.customerInput) setCustomerInput(draft.customerInput);
+      if (draft.shippingInput) setShippingInput(draft.shippingInput);
+      if (Array.isArray(draft.items)) setItems(draft.items);
+      if (typeof draft.discountPercent === "number")
+        setDiscountPercent(draft.discountPercent);
+      if (typeof draft.remarks === "string") setRemarks(draft.remarks);
+      clearDraft();
+      toast.success("Draft restored!", { duration: 2000 });
+    } catch {
+      clearDraft();
+    }
+  };
+
+  // ── Auto-save draft on meaningful changes ──────────────────────────────────
+  // We debounce so we don't thrash localStorage on every keystroke.
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    // Don't auto-save during edit mode (server-side data)
+    if (isEditMode) return;
+
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(() => {
+      if (hasMeaningfulData()) {
+        try {
+          const draft = {
+            savedAt: new Date().toISOString(),
+            billingCustomer,
+            shippingCustomer,
+            sameAsBilling,
+            customerInput,
+            shippingInput,
+            items,
+            discountPercent,
+            remarks,
+            serialNo,
+            date,
+          };
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        } catch {}
+      }
+    }, 1500);
+
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    billingCustomer,
+    shippingCustomer,
+    sameAsBilling,
+    customerInput,
+    shippingInput,
+    items,
+    discountPercent,
+    remarks,
+  ]);
+
+  // ── Check for draft on mount ───────────────────────────────────────────────
+  useEffect(() => {
+    if (isEditMode) return;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (!draft.savedAt) return;
+      // Only prompt if draft has meaningful data
+      const filledItems = (draft.items || []).filter(
+        (it: BillItem) => it.productName?.trim() && it.quantity > 0
+      );
+      if (filledItems.length === 0 && !draft.billingCustomer) return;
+
+      const savedDate = new Date(draft.savedAt);
+      const formatted = savedDate.toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setDraftSavedAt(formatted);
+      setShowDraftDialog(true);
+    } catch {
+      clearDraft();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  HELPERS
@@ -163,6 +498,23 @@ export default function BillingPage() {
     }).format(num);
   };
 
+  // ── FULL RESET ─────────────────────────────────────────────────────────────
+  const resetForm = () => {
+    setBillingCustomer(null);
+    setShippingCustomer(null);
+    setSameAsBilling(false);
+    setCustomerInput("");
+    setShippingInput("");
+    setItems(Array.from({ length: 15 }, blankItem));
+    setDiscountPercent(0);
+    setRemarks("");
+    setShowCustomerSuggestions(false);
+    setShowShippingSuggestions(false);
+    updateDateToToday();
+    clearDraft();
+    toast.success("Bill form has been reset.", { duration: 1500 });
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  ITEM MUTATION HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
@@ -192,20 +544,34 @@ export default function BillingPage() {
       item.quantity = Number(item.quantity || 0);
       item.price = Number(item.price || 0);
 
+      // ── CHANGE: warn on over-stock but allow it (don't cap) ──────────
       if (changes.quantity !== undefined) {
         const matched = findProductByName(item.productName);
         const stock = getProductStock(matched);
         if (
           typeof stock === "number" &&
           !isNaN(stock) &&
-          item.quantity > stock
+          item.quantity > stock &&
+          item.quantity > 0
         ) {
-          item.quantity = stock;
-          toast.error(
-            `Only ${stock} ${matched?.unit || "units"} available in stock for ${
-              matched?.name || "this product"
-            }`
-          );
+          // Show warning toast (once per update — not on every keystroke)
+          // We use a short debounce via setTimeout to avoid spamming
+          setTimeout(() => {
+            toast(
+              `⚠ Quantity (${item.quantity}) exceeds available stock (${stock}) for "${
+                matched?.name || "this product"
+              }"`,
+              {
+                duration: 3000,
+                icon: "⚠️",
+                style: {
+                  background: "#fff7ed",
+                  border: "1px solid #fdba74",
+                  color: "#9a3412",
+                },
+              }
+            );
+          }, 0);
         }
       }
 
@@ -708,7 +1074,7 @@ export default function BillingPage() {
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  PRODUCT ROW HANDLERS  (passed to BillingItemsTable)
+  //  PRODUCT ROW HANDLERS
   // ═══════════════════════════════════════════════════════════════════════════
 
   const firstIncompleteRow = () =>
@@ -849,9 +1215,25 @@ export default function BillingPage() {
   };
 
   const handlePrepareBillClick = () => {
+    const missing = getMissingProfileFields();
+    if (missing.length > 0) {
+      setProfileMissingItems(missing);
+      setShowProfileDialog(true);
+      return;
+    }
     if (!validateBeforeSave()) return;
     toast.success("Bill is ready! Click OK to save.", { duration: 2000 });
     setShowConfirm(true);
+  };
+
+  const handlePdfExportClick = () => {
+    const missing = getMissingProfileFields();
+    if (missing.length > 0) {
+      setProfileMissingItems(missing);
+      setShowProfileDialog(true);
+      return;
+    }
+    pdfExportRef.current?.exportPDF();
   };
 
   const confirmSaveBill = async () => {
@@ -971,7 +1353,8 @@ export default function BillingPage() {
         if (cachedPreview) setSerialNo(cachedPreview);
       }
 
-      // Reset form
+      // Reset form & clear draft
+      clearDraft();
       setBillingCustomer(null);
       setShippingCustomer(null);
       setSameAsBilling(false);
@@ -991,6 +1374,19 @@ export default function BillingPage() {
     }
   };
 
+  // ── Derived flags for button disabling ─────────────────────────────────────
+  const profileComplete = isProfileComplete();
+  const customersExist = hasCustomers();
+  // Buttons that require profile + customers
+  const canUseBillingActions = profileComplete && customersExist;
+
+  // ── Tooltip text when buttons are disabled ─────────────────────────────────
+  const getDisabledReason = () => {
+    if (!profileComplete) return "Complete your seller profile first";
+    if (!customersExist) return "Add at least one customer first";
+    return "";
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  RENDER
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1007,6 +1403,48 @@ export default function BillingPage() {
           <h1 className="text-2xl sm:text-3xl font-bold text-center mb-4 sm:mb-6">
             BILL OF SUPPLY
           </h1>
+
+          {/* ── Profile / customer warning banners ──────────────── */}
+          {!profileComplete && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+              <span className="text-lg mt-0.5">⚠️</span>
+              <div>
+                <p className="text-sm font-semibold text-red-800">
+                  Seller profile incomplete
+                </p>
+                <p className="text-xs text-red-700 mt-0.5">
+                  Missing:{" "}
+                  {getMissingProfileFields().join(", ")}.{" "}
+                  <button
+                    className="underline font-semibold"
+                    onClick={() => {
+                      setProfileMissingItems(getMissingProfileFields());
+                      setShowProfileDialog(true);
+                    }}
+                  >
+                    Complete Profile →
+                  </button>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!customersExist && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
+              <span className="text-lg mt-0.5">👥</span>
+              <div>
+                <p className="text-sm font-semibold text-yellow-800">
+                  No customers found
+                </p>
+                <p className="text-xs text-yellow-700 mt-0.5">
+                  Please add customers before creating a bill.{" "}
+                  <a href="/dashboard/customers" className="underline font-semibold">
+                    Add Customers →
+                  </a>
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Edit mode banner */}
           {isEditMode && (
@@ -1153,33 +1591,111 @@ export default function BillingPage() {
           />
 
           {/* ── Actions ──────────────────────────────────────────── */}
-          <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-end gap-2 sm:gap-3">
-            <button
-              onClick={handlePrepareBillClick}
-              className="px-3 sm:px-4 py-1 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm"
-            >
-              ✅ {isEditMode ? "Update Bill" : "Prepare Bill"}
-            </button>
-            <PdfExportComponent
-              ref={pdfExportRef}
-              items={items}
-              billingCustomer={billingCustomer}
-              shippingCustomer={shippingCustomer}
-              sameAsBilling={sameAsBilling}
-              seller={seller}
-              bank={bank}
-              serialNo={serialNo}
-              date={date}
-              discountPercent={discountPercent}
-              remarks={remarks}
-            />
+          <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
+            {/* Left side: Reset + Save Draft */}
+            <div className="flex items-center gap-2">
+              {/* Reset button — NOT in PDF (UI only) */}
+              <button
+                onClick={() => setShowResetDialog(true)}
+                className="px-3 sm:px-4 py-1 sm:py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 text-xs sm:text-sm"
+                title="Clear all entered data and start fresh"
+              >
+                🔄 Reset Form
+              </button>
+
+              {/* Save as Draft button */}
+              <button
+                onClick={saveDraft}
+                className="px-3 sm:px-4 py-1 sm:py-2 bg-amber-500 text-white rounded hover:bg-amber-600 text-xs sm:text-sm"
+                title="Save current bill as a draft to continue later"
+              >
+                💾 Save Draft
+              </button>
+            </div>
+
+            {/* Right side: Prepare Bill + Export PDF */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePrepareBillClick}
+                disabled={!canUseBillingActions}
+                title={!canUseBillingActions ? getDisabledReason() : ""}
+                className="px-3 sm:px-4 py-1 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ✅ {isEditMode ? "Update Bill" : "Prepare Bill"}
+              </button>
+
+              {/* PDF Export — guarded */}
+              <button
+                onClick={handlePdfExportClick}
+                disabled={!canUseBillingActions}
+                title={!canUseBillingActions ? getDisabledReason() : ""}
+                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
+              >
+                📄 Export PDF
+              </button>
+
+              {/* Hidden PDF ref component (still used programmatically) */}
+              <div className="hidden">
+                <PdfExportComponent
+                  ref={pdfExportRef}
+                  items={items}
+                  billingCustomer={billingCustomer}
+                  shippingCustomer={shippingCustomer}
+                  sameAsBilling={sameAsBilling}
+                  seller={seller}
+                  bank={bank}
+                  serialNo={serialNo}
+                  date={date}
+                  discountPercent={discountPercent}
+                  remarks={remarks}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </main>
 
       <Footer />
 
-      {/* ── Confirm dialog ────────────────────────────────────── */}
+      {/* ── Draft recovery dialog ─────────────────────────────── */}
+      {showDraftDialog && (
+        <DraftRecoveryDialog
+          draftDate={draftSavedAt}
+          onContinue={() => {
+            setShowDraftDialog(false);
+            loadDraft();
+          }}
+          onStartNew={() => {
+            setShowDraftDialog(false);
+            clearDraft();
+          }}
+        />
+      )}
+
+      {/* ── Reset confirmation dialog ─────────────────────────── */}
+      {showResetDialog && (
+        <ResetConfirmDialog
+          onConfirm={() => {
+            setShowResetDialog(false);
+            resetForm();
+          }}
+          onCancel={() => setShowResetDialog(false)}
+        />
+      )}
+
+      {/* ── Profile incomplete dialog ─────────────────────────── */}
+      {showProfileDialog && (
+        <ProfileIncompleteDialog
+          missingItems={profileMissingItems}
+          onClose={() => setShowProfileDialog(false)}
+          onGoToProfile={() => {
+            setShowProfileDialog(false);
+            router.push("/dashboard/profile");
+          }}
+        />
+      )}
+
+      {/* ── Confirm save dialog ───────────────────────────────── */}
       {showConfirm && (
         <BillingConfirmDialog
           isEditMode={isEditMode}
