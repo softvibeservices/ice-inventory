@@ -102,8 +102,15 @@ export async function PUT(req: Request) {
       );
     }
 
-    // Remove userId from updates — never let client override it
+    // Remove server-managed fields — never let the client override these
     delete updates.userId;
+    delete updates.totalSales; // totalSales is read-only; it is managed by the order/billing system
+
+    // ── Fetch old document BEFORE updating (needed to diff changes) ─────────
+    const oldDoc = await Customer.findOne({
+      _id: id,
+      userId: new mongoose.Types.ObjectId(auth.userId),
+    }).lean();
 
     const updated = await Customer.findOneAndUpdate(
       { _id: id, userId: new mongoose.Types.ObjectId(auth.userId) },
@@ -121,6 +128,76 @@ export async function PUT(req: Request) {
     // ── Activity Log ─────────────────────────────────────────────────────────
     const actor = await getManagerActor(auth);
     if (actor) {
+      // ── Build changedFields diff ─────────────────────────────────────────
+      const TRACKED_FIELDS: Record<string, string> = {
+        name:        "Customer Name",
+        shopName:    "Shop Name",
+        shopAddress: "Shop Address",
+        area:        "Area",
+        remarks:     "Remarks",
+        credit:      "Credit",
+        debit:       "Debit",
+        // totalSales is intentionally excluded — it is read-only and managed
+        // by the order/billing system, not editable by admin or manager.
+      };
+
+      const changedFields: Record<string, { before: unknown; after: unknown }> = {};
+
+      if (oldDoc) {
+        for (const [field, label] of Object.entries(TRACKED_FIELDS)) {
+          const before = (oldDoc as Record<string, unknown>)[field];
+          const after  = (updated as unknown as Record<string, unknown>)[field];
+
+          // Stringify for stable comparison (handles number vs string edge cases)
+          if (String(before ?? "") !== String(after ?? "")) {
+            changedFields[label] = { before: before ?? "", after: after ?? "" };
+          }
+        }
+
+        // Track contacts array separately
+        const oldContacts = ((oldDoc as Record<string, unknown>).contacts as string[]) ?? [];
+        const newContacts = (updated.contacts as string[]) ?? [];
+        if (JSON.stringify(oldContacts) !== JSON.stringify(newContacts)) {
+          changedFields["Contacts"] = {
+            before: oldContacts.join(", ") || "—",
+            after:  newContacts.join(", ")  || "—",
+          };
+        }
+
+        // ── Track GPS location ──────────────────────────────────────────────
+        // Only log a GPS change when BOTH lat and lng are valid finite numbers.
+        // If either side has no real coordinates (null / undefined / NaN),
+        // treat it as "no location" so we don't produce "undefined, undefined".
+        const oldLoc = (oldDoc as Record<string, unknown>).location as
+          | { latitude?: number; longitude?: number }
+          | null
+          | undefined;
+        const newLoc = updated.location as
+          | { latitude?: number; longitude?: number }
+          | null
+          | undefined;
+
+        const isValidCoord = (
+          loc: { latitude?: number; longitude?: number } | null | undefined
+        ): loc is { latitude: number; longitude: number } =>
+          loc != null &&
+          typeof loc.latitude  === "number" && isFinite(loc.latitude) &&
+          typeof loc.longitude === "number" && isFinite(loc.longitude);
+
+        const oldGPS = isValidCoord(oldLoc)
+          ? `${oldLoc.latitude}, ${oldLoc.longitude}`
+          : "—";
+        const newGPS = isValidCoord(newLoc)
+          ? `${newLoc.latitude}, ${newLoc.longitude}`
+          : "—";
+
+        // Only record the diff if the GPS string actually changed
+        if (oldGPS !== newGPS) {
+          changedFields["GPS Location"] = { before: oldGPS, after: newGPS };
+        }
+        // ───────────────────────────────────────────────────────────────────
+      }
+
       await createLog({
         ...actor,
         action: ActivityAction.CUSTOMER_EDITED,
@@ -128,6 +205,8 @@ export async function PUT(req: Request) {
           customerId:   updated._id.toString(),
           customerName: updated.name,
           shopName:     updated.shopName,
+          // Only include changedFields if we actually found differences
+          ...(Object.keys(changedFields).length > 0 && { changedFields }),
         },
       });
     }
