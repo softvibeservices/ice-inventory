@@ -3,7 +3,7 @@
 
 import {
   X, Trash2, MapPin, Phone, Building2, StickyNote,
-  History, ExternalLink, DollarSign, ArrowUpRight
+  History, ExternalLink, Zap, ArrowUpRight
 } from "lucide-react";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -46,7 +46,10 @@ export default function CustomerViewModal({ customer, onClose, onDelete, onSettl
     router.push(`/dashboard/customers/${customer._id}/history`);
   };
 
-  const canSettle = typeof customer.debit === "number" && customer.debit > 0;
+  // Quick Settlement is only available when BOTH credit AND debit > 0
+  const canQuickSettle =
+    typeof customer.credit === "number" && customer.credit > 0 &&
+    typeof customer.debit === "number" && customer.debit > 0;
 
   return (
     <div
@@ -209,25 +212,15 @@ export default function CustomerViewModal({ customer, onClose, onDelete, onSettl
           </button>
 
           <div className="flex items-center gap-2">
-            {onSettle && (
-              canSettle ? (
-                <button
-                  onClick={() => { onClose(); onSettle(customer); }}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition"
-                >
-                  <DollarSign size={14} />
-                  Settle
-                </button>
-              ) : (
-                <button
-                  onClick={() => { onClose(); onSettle(customer); }}
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition"
-                  title="Add credit to this customer"
-                >
-                  <DollarSign size={14} />
-                  Add Credit
-                </button>
-              )
+            {/* Quick Settle button — only visible when both credit AND debit > 0 */}
+            {onSettle && canQuickSettle && (
+              <button
+                onClick={() => { onClose(); onSettle(customer); }}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition"
+              >
+                <Zap size={14} />
+                Quick Settle
+              </button>
             )}
 
             <button
