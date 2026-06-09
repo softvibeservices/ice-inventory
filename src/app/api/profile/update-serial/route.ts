@@ -3,6 +3,8 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Counter from "@/models/Counter";
+import Bill from "@/models/Bill";
+import Order from "@/models/Order";
 import { verifyUserRequest } from "@/lib/userAuth";
 import mongoose from "mongoose";
 
@@ -60,6 +62,43 @@ export async function PUT(req: Request) {
 
     // 4. Use auth.userId — never trust userId from body
     const userObjectId = new mongoose.Types.ObjectId(auth.userId);
+
+    // 5. ─── DUPLICATE CHECK ──────────────────────────────────────────────────
+    //    The user wants to set the counter to `serialNumber`, meaning the NEXT
+    //    bill will get `serialNumber + 1`.  However, we must also block setting
+    //    the counter to `serialNumber` itself if that exact serial already
+    //    exists in a Bill or Order — because the counter value IS the last-used
+    //    serial (the next bill will be seq+1), so if `serialNumber` is already
+    //    taken the counter would wrongly imply it is free.
+    //
+    //    More critically: when seq is set to N, the NEXT bill becomes N+1.
+    //    But we must prevent the user from setting seq to N where N itself
+    //    already exists as a bill serial (they'd be re-using a taken number as
+    //    the "current" pointer, which corrupts the sequence display).
+    //
+    //    Rule applied here:
+    //      - If `serialNumber` (the value the user typed) already exists in
+    //        Bill.serialNumber or Order.serialNumber for this user → BLOCK.
+    //    ─────────────────────────────────────────────────────────────────────
+
+    const [billExists, orderExists] = await Promise.all([
+      Bill.exists({ userId: userObjectId, serialNumber }),
+      Order.exists({ userId: userObjectId, serialNumber }),
+    ]);
+
+    if (billExists || orderExists) {
+      const source = billExists ? "a settled/unsettled bill" : "an order (settled, unsettled, or debt)";
+      return NextResponse.json(
+        {
+          error: `Serial number ${serialNumber} already exists in ${source}. Please choose a different serial number.`,
+          conflictingSerial: serialNumber,
+          conflict: true,
+        },
+        { status: 409 }
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     await Counter.findOneAndUpdate(
       { userId: userObjectId, year, month },

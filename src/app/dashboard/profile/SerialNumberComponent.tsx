@@ -15,6 +15,7 @@ export default function SerialNumberComponent({ userId }: SerialNumberComponentP
   const [saving, setSaving] = useState(false);
   const [prefix, setPrefix] = useState<string>("");
   const [userDigits, setUserDigits] = useState<string>("    ");
+  const [conflictError, setConflictError] = useState<string | null>(null);
   const digitRefs = useRef<(HTMLInputElement | null)[]>([null, null, null, null]);
 
   useEffect(() => {
@@ -28,9 +29,9 @@ export default function SerialNumberComponent({ userId }: SerialNumberComponentP
     setLoadingSerial(true);
     try {
       const token = localStorage.getItem("token");
-const res = await fetch(`/api/bills/next-serial?userId=${encodeURIComponent(userId)}`, {
-  headers: { "Authorization": `Bearer ${token}` },
-});
+      const res = await fetch(`/api/bills/next-serial?userId=${encodeURIComponent(userId)}`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
       const data = await res.json();
       if (res.ok && data.nextSerial?.length === 8) {
         setCurrentSerial(data.nextSerial);
@@ -50,6 +51,11 @@ const res = await fetch(`/api/bills/next-serial?userId=${encodeURIComponent(user
   useEffect(() => {
     if (showDialog) fetchCurrentSerial();
   }, [showDialog, userId]);
+
+  // Clear conflict error whenever the user changes the digits
+  useEffect(() => {
+    if (conflictError) setConflictError(null);
+  }, [userDigits]);
 
   const handleDigitInput = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -99,19 +105,34 @@ const res = await fetch(`/api/bills/next-serial?userId=${encodeURIComponent(user
     if (!allFilled) { toast.error("Please fill all 4 sequence digits"); return; }
     const seqValue = parseInt(cleanDigits, 10);
     if (seqValue < 1 || seqValue > 9999) { toast.error("Sequence must be between 0001 and 9999"); return; }
+
+    // Clear any previous conflict error
+    setConflictError(null);
     setSaving(true);
+
     try {
-    const token = localStorage.getItem("token");
-const res = await fetch("/api/profile/update-serial", {
-  method: "PUT",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
-  },
-  body: JSON.stringify({ serialNumber: fullSerial }),  // userId removed
-});
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/profile/update-serial", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ serialNumber: fullSerial }),
+      });
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update");
+
+      if (!res.ok) {
+        // ── Conflict: serial already exists in a bill/order ──────────────
+        if (res.status === 409 && data.conflict) {
+          setConflictError(data.error);
+          // Don't close the dialog — let the user correct the value
+          return;
+        }
+        throw new Error(data.error || "Failed to update");
+      }
+
       toast.success("Serial number updated successfully ✅");
       setCurrentSerial(fullSerial);
       sessionStorage.setItem("billing-serial-preview", fullSerial);
@@ -127,6 +148,7 @@ const res = await fetch("/api/profile/update-serial", {
     setShowDialog(false);
     setUserDigits("    ");
     setCurrentSerial("");
+    setConflictError(null);
   };
 
   // A single digit cell — locked (grey) or editable (blue)
@@ -238,15 +260,40 @@ const res = await fetch("/api/profile/update-serial", {
                         onKeyDown={(e) => handleDigitKeyDown(i, e)}
                         onFocus={handleDigitFocus}
                         placeholder="0"
-                        className="w-12 h-12 text-center font-mono text-lg font-bold rounded-xl border-2 border-blue-400 bg-white text-gray-900 placeholder-gray-200 focus:outline-none focus:border-blue-600 focus:ring-4 focus:ring-blue-50 hover:border-blue-500 transition-all"
+                        className={`w-12 h-12 text-center font-mono text-lg font-bold rounded-xl border-2 bg-white text-gray-900 placeholder-gray-200 focus:outline-none focus:ring-4 transition-all ${
+                          conflictError
+                            ? "border-red-400 focus:border-red-600 focus:ring-red-50 hover:border-red-500"
+                            : "border-blue-400 focus:border-blue-600 focus:ring-blue-50 hover:border-blue-500"
+                        }`}
                       />
-                      <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">
+                      <span className={`text-[10px] font-semibold uppercase tracking-wide ${conflictError ? "text-red-400" : "text-blue-400"}`}>
                         {i + 1}
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
+
+              {/* ── Conflict error banner ─────────────────────────────────────── */}
+              {conflictError && (
+                <div className="mb-5 flex items-start gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200">
+                  <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-red-500 font-bold text-sm">✕</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-red-600 uppercase tracking-wide mb-0.5">
+                      Serial Number Already In Use
+                    </p>
+                    <p className="text-sm text-red-700 leading-snug">
+                      {conflictError}
+                    </p>
+                    <p className="text-xs text-red-500 mt-1">
+                      Please enter a different sequence number that hasn&apos;t been used in any bill or order.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {/* ──────────────────────────────────────────────────────────────── */}
 
               {/* Legend row */}
               <div className="flex items-center gap-2 mb-5 text-xs text-gray-400 flex-wrap">
@@ -263,8 +310,8 @@ const res = await fetch("/api/profile/update-serial", {
                 <span>Next bill = your value + 1</span>
               </div>
 
-              {/* Preview — only shown when all filled */}
-              <div className={`mb-5 rounded-xl border overflow-hidden transition-all duration-200 ${allFilled ? "opacity-100" : "opacity-40"}`}
+              {/* Preview — only shown when all filled and no conflict */}
+              <div className={`mb-5 rounded-xl border overflow-hidden transition-all duration-200 ${allFilled && !conflictError ? "opacity-100" : "opacity-40"}`}
                 style={{ borderColor: "#e9d5ff", background: "linear-gradient(135deg, #faf5ff 0%, #eff6ff 100%)" }}
               >
                 <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
@@ -299,7 +346,7 @@ const res = await fetch("/api/profile/update-serial", {
                   {saving ? (
                     <>
                       <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                      Saving...
+                      Checking...
                     </>
                   ) : (
                     "Save Serial Number"
