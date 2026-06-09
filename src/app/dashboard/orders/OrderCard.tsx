@@ -80,7 +80,7 @@ export default function OrderCard({
     });
   };
 
-  // ✅ NEW: Check if the bill was edited after creation (updatedAt meaningfully differs from createdAt)
+  // ✅ Check if the bill was edited after creation (updatedAt meaningfully differs from createdAt)
   const wasEdited = (): boolean => {
     if (!order.updatedAt || !order.createdAt) return false;
     const created = new Date(order.createdAt).getTime();
@@ -90,6 +90,20 @@ export default function OrderCard({
   };
 
   const isEditDisabled = () => order.deliveryStatus === "Delivered";
+
+  // ── CHANGE 2: Discard is blocked when delivery is Delivered or On the Way ──
+  const isDiscardDisabled = () =>
+    order.deliveryStatus === "Delivered" ||
+    order.deliveryStatus === "On the Way";
+
+  const getDiscardDisabledTitle = () => {
+    if (order.deliveryStatus === "Delivered")
+      return "Cannot discard a delivered order. Revert delivery first.";
+    if (order.deliveryStatus === "On the Way")
+      return 'Cannot discard an order that is "On the Way". Change delivery status first.';
+    return "";
+  };
+  // ─────────────────────────────────────────────────────────────────────────
 
   const fmt = (n: number) => {
     const num = Number(n || 0);
@@ -132,7 +146,7 @@ export default function OrderCard({
 
                 <DeliveryStatusBadge status={order.deliveryStatus} />
 
-                {/* ✅ NEW: Edited badge */}
+                {/* ✅ Edited badge */}
                 {edited && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 text-violet-700 text-[11px] font-semibold px-2.5 py-1">
                     <PencilLine className="w-3 h-3" />
@@ -229,7 +243,7 @@ export default function OrderCard({
             </div>
           </div>
 
-          {/* ✅ NEW: Last Edited row — only shown when the bill was actually edited */}
+          {/* ✅ Last Edited row — only shown when the bill was actually edited */}
           {edited && (
             <div className="flex items-center gap-2 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-xs text-violet-700">
               <PencilLine className="w-3.5 h-3.5 shrink-0" />
@@ -300,12 +314,20 @@ export default function OrderCard({
 
               {tab === "Unsettled" && (
                 <>
+                  {/* ── CHANGE 2: Discard disabled for Delivered / On the Way ── */}
                   <button
-                    onClick={() => onDiscard(order)}
-                    className="min-h-[40px] px-3 py-2 text-sm font-medium rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 transition"
+                    onClick={() => !isDiscardDisabled() && onDiscard(order)}
+                    disabled={isDiscardDisabled()}
+                    title={isDiscardDisabled() ? getDiscardDisabledTitle() : "Discard Order"}
+                    className={`min-h-[40px] px-3 py-2 text-sm font-medium rounded-lg border transition ${
+                      isDiscardDisabled()
+                        ? "border-gray-200 text-gray-400 bg-gray-100 cursor-not-allowed"
+                        : "border-red-200 text-red-700 bg-red-50 hover:bg-red-100"
+                    }`}
                   >
                     Discard
                   </button>
+                  {/* ─────────────────────────────────────────────────────── */}
 
                   <button
                     onClick={() => onOpenSettle(order)}
@@ -398,7 +420,7 @@ export default function OrderCard({
                             viewBox="0 0 20 20"
                           >
                             <path
-                              fillRule="evenodd"
+              fillRule="evenodd"
                               d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
                               clipRule="evenodd"
                             />
