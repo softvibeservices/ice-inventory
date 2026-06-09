@@ -1,126 +1,221 @@
 // src/app/dashboard/billing/page.tsx
 "use client";
+
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
 import PdfExportComponent from "./PdfExportComponent";
 
-type Customer = {
-  _id: string;
-  name: string;
-  contact?: string;
-  address?: string;
-  contacts?: string[];
-  shopName?: string;
-  shopAddress?: string;
-};
+// ── Sub-components ────────────────────────────────────────────────────────────
+import BillingHeader from "./BillingHeader";
+import BillingCustomerSection from "./BillingCustomerSection";
+import BillingItemsTable from "./BillingItemsTable";
+import BillingConfirmDialog from "./BillingConfirmDialog";
 
-type Product = {
-  _id: string;
-  name: string;
-  unit?: string;
-  sellingPrice?: number;
-  price?: number;
-  currentStock?: number;
-  stock?: number;
-  stockQty?: number;
-  availableQty?: number;
-  quantityInStock?: number;
-  quantity?: number;
-  packQuantity?: number;
-  packUnit?: string;
-};
+// ── Types ─────────────────────────────────────────────────────────────────────
+import type {
+  Customer,
+  Product,
+  SellerDetails,
+  BankDetails,
+  BillItem,
+} from "./billing.types";
 
-type SellerDetails = {
-  _id?: string;
-  sellerName?: string;
-  gstNumber?: string;
-  fullAddress?: string;
-  contact?: string;
-  slogan?: string;
-  logoUrl?: string;
-  qrCodeUrl?: string;
-  signatureUrl?: string;
-  bankName?: string;
-  branchName?: string;
-  accountNumber?: string;
-  ifscCode?: string;
-  bankingName?: string;
-  compositionLine?: string;
-};
+// ── Draft key ─────────────────────────────────────────────────────────────────
+const DRAFT_KEY = "billing-draft";
 
-type BankDetails = {
-  bankName?: string;
-  branchName?: string;
-  accountNumber?: string;
-  ifscCode?: string;
-  bankingName?: string;
+// ── Profile-incomplete dialog ─────────────────────────────────────────────────
+type ProfileDialogProps = {
+  missingItems: string[];
+  onGoToProfile: () => void;
+  onClose: () => void;
 };
+function ProfileIncompleteDialog({
+  missingItems,
+  onGoToProfile,
+  onClose,
+}: ProfileDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-2xl">⚠️</span>
+          <h2 className="text-base font-bold text-gray-900">
+            Profile Incomplete
+          </h2>
+        </div>
+        <p className="text-sm text-gray-700 mb-3">
+          The following required details are missing from your seller profile.
+          Please complete them before generating a bill or PDF.
+        </p>
+        <ul className="mb-4 space-y-1">
+          {missingItems.map((item) => (
+            <li
+              key={item}
+              className="flex items-center gap-2 text-sm text-red-600"
+            >
+              <span>✗</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onGoToProfile}
+            className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+          >
+            Go to Profile
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-type BillItem = {
-  productName: string;
-  quantity: number;
-  unit: string;
-  price: number;
-  total: number;
-  free: boolean;
+// ── Draft-recovery dialog ─────────────────────────────────────────────────────
+type DraftDialogProps = {
+  onContinue: () => void;
+  onStartNew: () => void;
+  draftDate: string;
 };
+function DraftRecoveryDialog({
+  onContinue,
+  onStartNew,
+  draftDate,
+}: DraftDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-2xl">📋</span>
+          <h2 className="text-base font-bold text-gray-900">Unsaved Draft Found</h2>
+        </div>
+        <p className="text-sm text-gray-700 mb-1">
+          You have an unsaved bill draft from{" "}
+          <span className="font-semibold">{draftDate}</span>.
+        </p>
+        <p className="text-sm text-gray-500 mb-4">
+          Would you like to continue with it or start a fresh bill?
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onStartNew}
+            className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Start New Bill
+          </button>
+          <button
+            onClick={onContinue}
+            className="px-3 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+          >
+            Continue Draft
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-type QuantitySummary = Record<string, number>;
+// ── Reset-confirmation dialog ─────────────────────────────────────────────────
+type ResetDialogProps = {
+  onConfirm: () => void;
+  onCancel: () => void;
+};
+function ResetConfirmDialog({ onConfirm, onCancel }: ResetDialogProps) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-xs w-full p-5">
+        <h2 className="text-base font-bold text-gray-900 mb-2">Reset Bill?</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          This will clear all entered data including customers, products,
+          discount and remarks. This action cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-3 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
-  // At the top, add new state for editing mode
+  const router = useRouter();
+
+  // ── Edit mode ──────────────────────────────────────────────────────────────
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [hasLoadedEditData, setHasLoadedEditData] = useState(false);
-  // ✅ NEW: Add state for sticky note loaded indicator
   const [loadedFromStickyNote, setLoadedFromStickyNote] = useState(false);
 
-  // suggestion control
+  // ── Dialog states ──────────────────────────────────────────────────────────
+  const [showDraftDialog, setShowDraftDialog] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState("");
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [profileMissingItems, setProfileMissingItems] = useState<string[]>([]);
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
+
+  // ── Suggestion control ─────────────────────────────────────────────────────
   const [customerSuggestionIndex, setCustomerSuggestionIndex] = useState(0);
   const [shippingSuggestionIndex, setShippingSuggestionIndex] = useState(0);
   const [productSuggestionIndex, setProductSuggestionIndex] = useState<number[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-
-  // Control when suggestions appear
   const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
   const [showShippingSuggestions, setShowShippingSuggestions] = useState(false);
-
-  // Product suggestion dropdown (UI based)
   const [activeProductRow, setActiveProductRow] = useState<number | null>(null);
 
-  // seller + bank
+  // ── Remote data ────────────────────────────────────────────────────────────
   const [seller, setSeller] = useState<SellerDetails | null>(null);
   const [bank, setBank] = useState<BankDetails | null>(null);
-
-  // customers & products
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-
-  // logged in user
   const [userId, setUserId] = useState<string | null>(null);
 
-  // billing/shipping customer selection
+  // ── Customer selection ─────────────────────────────────────────────────────
   const [billingCustomer, setBillingCustomer] = useState<Customer | null>(null);
   const [shippingCustomer, setShippingCustomer] = useState<Customer | null>(null);
   const [sameAsBilling, setSameAsBilling] = useState(false);
   const [customerInput, setCustomerInput] = useState<string>("");
   const [shippingInput, setShippingInput] = useState<string>("");
 
-  // Refs for focus control
+  // ── Refs ───────────────────────────────────────────────────────────────────
   const shippingInputRef = useRef<HTMLInputElement | null>(null);
   const billingInputRef = useRef<HTMLInputElement | null>(null);
+  const productRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const quantityRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const pdfExportRef = useRef<any>(null);
 
-  // bill meta
+  // ── Bill meta ──────────────────────────────────────────────────────────────
   const [serialNo, setSerialNo] = useState<string>("");
   const [date, setDate] = useState<string>(() => {
     const now = new Date();
-    return `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
+    return `${String(now.getDate()).padStart(2, "0")}-${String(
+      now.getMonth() + 1
+    ).padStart(2, "0")}-${now.getFullYear()}`;
   });
 
-  // items (start with 15 blank lines)
+  // ── Items ──────────────────────────────────────────────────────────────────
   const blankItem = (): BillItem => ({
     productName: "",
     quantity: 0,
@@ -133,28 +228,428 @@ export default function BillingPage() {
     Array.from({ length: 15 }, blankItem)
   );
 
-  // discount & remarks
+  // ── Discount / remarks / dialogs ───────────────────────────────────────────
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [remarks, setRemarks] = useState<string>("");
-
-  // confirm dialog
   const [showConfirm, setShowConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // refs for keyboard navigation (product -> quantity -> next product)
-  const productRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const quantityRefs = useRef<(HTMLInputElement | null)[]>([]);
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PROFILE VALIDATION HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  const pdfExportRef = useRef<any>(null);
+  /**
+   * Returns a list of missing profile fields.
+   * Empty array = profile is complete.
+   */
+  const getMissingProfileFields = (): string[] => {
+    const missing: string[] = [];
+    if (!seller) {
+      missing.push("Seller profile not loaded");
+      return missing;
+    }
+    if (!seller.qrCodeUrl) missing.push("QR Code (for payment)");
+    if (!seller.signatureUrl) missing.push("Signature image");
+    if (!seller.logoUrl) missing.push("Business logo");
 
-  // ✅ NEW: Fetch the next available serial number from the server
-  // This is a pure preview — it does NOT consume a slot.
-  // The real serial is assigned only when POST /api/bills is called.
+    const bankName = bank?.bankName || seller.bankName;
+    const accNo =
+      bank?.accountNumber ||
+      (seller as any)?.accountNumber ||
+      (seller as any)?.accountNo;
+    const ifsc = bank?.ifscCode || (seller as any)?.ifscCode;
+    const inFavor = bank?.bankingName || seller.bankingName;
+
+    if (!bankName) missing.push("Bank name");
+    if (!accNo) missing.push("Account number");
+    if (!ifsc) missing.push("IFSC code");
+    if (!inFavor) missing.push("Account holder name (In favour of)");
+
+    return missing;
+  };
+
+  const isProfileComplete = () => getMissingProfileFields().length === 0;
+  const hasCustomers = () => customers.length > 0;
+
+  // ── Check profile and show dialog or proceed ────────────────────────────────
+  const guardedAction = (action: () => void) => {
+    const missing = getMissingProfileFields();
+    if (missing.length > 0) {
+      setProfileMissingItems(missing);
+      setShowProfileDialog(true);
+      return;
+    }
+    if (!hasCustomers()) {
+      toast.error(
+        "No customers found. Please add a customer from the Customers page first."
+      );
+      return;
+    }
+    action();
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  DRAFT HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const hasMeaningfulData = () => {
+    const filledItems = items.filter(
+      (it) => it.productName?.trim() && it.quantity > 0
+    );
+    return (
+      filledItems.length > 0 ||
+      !!billingCustomer ||
+      !!customerInput.trim()
+    );
+  };
+
+  const saveDraft = () => {
+    if (!hasMeaningfulData()) return;
+    try {
+      const draft = {
+        savedAt: new Date().toISOString(),
+        billingCustomer,
+        shippingCustomer,
+        sameAsBilling,
+        customerInput,
+        shippingInput,
+        items,
+        discountPercent,
+        remarks,
+        serialNo,
+        date,
+      };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      toast.success("Draft saved!", { duration: 1500 });
+    } catch {
+      // localStorage might be full — fail silently
+    }
+  };
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {}
+  };
+
+  const loadDraft = () => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft.billingCustomer) setBillingCustomer(draft.billingCustomer);
+      if (draft.shippingCustomer) setShippingCustomer(draft.shippingCustomer);
+      setSameAsBilling(draft.sameAsBilling ?? false);
+      if (draft.customerInput) setCustomerInput(draft.customerInput);
+      if (draft.shippingInput) setShippingInput(draft.shippingInput);
+      if (Array.isArray(draft.items)) setItems(draft.items);
+      if (typeof draft.discountPercent === "number")
+        setDiscountPercent(draft.discountPercent);
+      if (typeof draft.remarks === "string") setRemarks(draft.remarks);
+      clearDraft();
+      toast.success("Draft restored!", { duration: 2000 });
+    } catch {
+      clearDraft();
+    }
+  };
+
+  // ── Auto-save draft on meaningful changes ──────────────────────────────────
+  // We debounce so we don't thrash localStorage on every keystroke.
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    // Don't auto-save during edit mode (server-side data)
+    if (isEditMode) return;
+
+    if (draftTimer.current) clearTimeout(draftTimer.current);
+    draftTimer.current = setTimeout(() => {
+      if (hasMeaningfulData()) {
+        try {
+          const draft = {
+            savedAt: new Date().toISOString(),
+            billingCustomer,
+            shippingCustomer,
+            sameAsBilling,
+            customerInput,
+            shippingInput,
+            items,
+            discountPercent,
+            remarks,
+            serialNo,
+            date,
+          };
+          localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        } catch {}
+      }
+    }, 1500);
+
+    return () => {
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    billingCustomer,
+    shippingCustomer,
+    sameAsBilling,
+    customerInput,
+    shippingInput,
+    items,
+    discountPercent,
+    remarks,
+  ]);
+
+  // ── Check for draft on mount ───────────────────────────────────────────────
+  useEffect(() => {
+    if (isEditMode) return;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (!draft.savedAt) return;
+      // Only prompt if draft has meaningful data
+      const filledItems = (draft.items || []).filter(
+        (it: BillItem) => it.productName?.trim() && it.quantity > 0
+      );
+      if (filledItems.length === 0 && !draft.billingCustomer) return;
+
+      const savedDate = new Date(draft.savedAt);
+      const formatted = savedDate.toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setDraftSavedAt(formatted);
+      setShowDraftDialog(true);
+    } catch {
+      clearDraft();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const safeJson = async (res: Response) => {
+    try {
+      return await res.json();
+    } catch {
+      return null;
+    }
+  };
+
+  const updateDateToToday = () => {
+    const now = new Date();
+    setDate(
+      `${String(now.getDate()).padStart(2, "0")}-${String(
+        now.getMonth() + 1
+      ).padStart(2, "0")}-${now.getFullYear()}`
+    );
+  };
+
+  const focusQuantity = (index: number) => {
+    quantityRefs.current[index]?.focus();
+  };
+
+  const focusProduct = (index: number) => {
+    productRefs.current[index]?.focus();
+  };
+
+  const getFilteredProducts = (query: string) => {
+    if (!query.trim()) return [];
+    return products
+      .filter((p) => p.name.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, 8);
+  };
+
+  const findProductByName = (name?: string | null) => {
+    if (!name) return undefined;
+    const cleaned = name.trim().toLowerCase();
+    if (!cleaned) return undefined;
+    return products.find((p) => p.name.trim().toLowerCase() === cleaned);
+  };
+
+  const getProductStock = (p?: Product) => {
+    if (!p) return undefined;
+    const anyP = p as any;
+    const stock =
+      anyP.currentStock ??
+      anyP.stock ??
+      anyP.stockQty ??
+      anyP.availableQty ??
+      anyP.quantityInStock ??
+      anyP.quantity;
+    return typeof stock === "number" && !isNaN(stock) ? stock : undefined;
+  };
+
+  const isBoxUnit = (unit?: string) => {
+    if (!unit) return false;
+    return unit.trim().toLowerCase().includes("box");
+  };
+
+  const fmt = (n: number) => {
+    const num = Number(n || 0);
+    if (Number.isNaN(num)) return "₹0.00";
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(num);
+  };
+
+  // ── FULL RESET ─────────────────────────────────────────────────────────────
+  const resetForm = () => {
+    setBillingCustomer(null);
+    setShippingCustomer(null);
+    setSameAsBilling(false);
+    setCustomerInput("");
+    setShippingInput("");
+    setItems(Array.from({ length: 15 }, blankItem));
+    setDiscountPercent(0);
+    setRemarks("");
+    setShowCustomerSuggestions(false);
+    setShowShippingSuggestions(false);
+    updateDateToToday();
+    clearDraft();
+    toast.success("Bill form has been reset.", { duration: 1500 });
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ITEM MUTATION HELPERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const updateItem = (index: number, changes: Partial<BillItem>) => {
+    setItems((prev) => {
+      const newItems = prev.map((it) => ({ ...it }));
+      const item = newItems[index];
+      if (!item) return prev;
+
+      Object.assign(item, changes);
+
+      if (
+        changes.productName !== undefined &&
+        typeof item.productName === "string" &&
+        item.productName.trim() !== ""
+      ) {
+        const matched = findProductByName(item.productName);
+        if (matched) {
+          const selling =
+            (matched as any).sellingPrice ?? (matched as any).price ?? 0;
+          item.price = Number(selling || 0);
+          item.unit = matched.unit ?? item.unit ?? "";
+        }
+      }
+
+      item.quantity = Number(item.quantity || 0);
+      item.price = Number(item.price || 0);
+
+      // ── CHANGE: warn on over-stock but allow it (don't cap) ──────────
+      if (changes.quantity !== undefined) {
+        const matched = findProductByName(item.productName);
+        const stock = getProductStock(matched);
+        if (
+          typeof stock === "number" &&
+          !isNaN(stock) &&
+          item.quantity > stock &&
+          item.quantity > 0
+        ) {
+          // Show warning toast (once per update — not on every keystroke)
+          // We use a short debounce via setTimeout to avoid spamming
+          setTimeout(() => {
+            toast(
+              `⚠ Quantity (${item.quantity}) exceeds available stock (${stock}) for "${
+                matched?.name || "this product"
+              }"`,
+              {
+                duration: 3000,
+                icon: "⚠️",
+                style: {
+                  background: "#fff7ed",
+                  border: "1px solid #fdba74",
+                  color: "#9a3412",
+                },
+              }
+            );
+          }, 0);
+        }
+      }
+
+      item.total = item.free
+        ? 0
+        : Number((item.price || 0) * (item.quantity || 0));
+
+      return newItems;
+    });
+  };
+
+  const toggleFree = (index: number, v: boolean) => {
+    setItems((prev) => {
+      const newItems = prev.map((it) => ({ ...it }));
+      const it = newItems[index];
+      if (!it) return prev;
+      it.free = v;
+      it.total = v ? 0 : Number((it.price || 0) * (it.quantity || 0));
+      return newItems;
+    });
+  };
+
+  const addLine = () => setItems((prev) => [...prev, blankItem()]);
+
+  const sortByUnitGroup = () => {
+    setItems((prev) => {
+      const filled = prev.filter((it) => it.productName && it.quantity > 0);
+      const empty = prev.filter((it) => !it.productName || it.quantity <= 0);
+
+      const grouped = filled.reduce((acc, it) => {
+        const unitKey = it.unit?.toLowerCase();
+        if (!unitKey) return acc;
+        if (!acc[unitKey]) acc[unitKey] = [];
+        acc[unitKey].push(it);
+        return acc;
+      }, {} as Record<string, BillItem[]>);
+
+      const knownUnitPriority = ["box", "litre", "kg", "gm", "ml", "piece"];
+      const orderedUnits = Object.keys(grouped).sort((a, b) => {
+        const ai = knownUnitPriority.indexOf(a);
+        const bi = knownUnitPriority.indexOf(b);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        return a.localeCompare(b);
+      });
+
+      const sortedFilled = orderedUnits.flatMap((unit) =>
+        grouped[unit].sort((a, b) => b.quantity - a.quantity)
+      );
+
+      return [...sortedFilled, ...empty];
+    });
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  COMPUTED TOTALS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const subTotal = items.reduce(
+    (acc, it) => acc + (it.free ? 0 : Number(it.total || 0)),
+    0
+  );
+  const totalQty = items.reduce((acc, it) => {
+    if (!isBoxUnit(it.unit)) return acc;
+    return acc + (Number(it.quantity) || 0);
+  }, 0);
+  const discounted = subTotal - (subTotal * (discountPercent || 0)) / 100;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  SERIAL NUMBER
+  // ═══════════════════════════════════════════════════════════════════════════
+
   const fetchNextSerialPreview = async (uid: string) => {
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`/api/bills/next-serial`, {
-        headers: { "Authorization": `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
         const data = await res.json();
@@ -168,88 +663,70 @@ export default function BillingPage() {
     }
   };
 
-  // ✅ NEW: Load sticky note data from sessionStorage
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  STICKY NOTE DATA LOADER
+  // ═══════════════════════════════════════════════════════════════════════════
+
   useEffect(() => {
-    // Only run if we have userId and data is loaded
     if (!userId || customers.length === 0 || products.length === 0) return;
 
     const stickyNoteData = sessionStorage.getItem("billFromStickyNote");
+    if (!stickyNoteData) return;
 
-    if (stickyNoteData) {
-      try {
-        const data = JSON.parse(stickyNoteData);
+    try {
+      const data = JSON.parse(stickyNoteData);
+      sessionStorage.removeItem("billFromStickyNote");
 
-        // Clear sessionStorage immediately
-        sessionStorage.removeItem("billFromStickyNote");
+      const matchedCustomer = customers.find(
+        (c) =>
+          c._id === data.customerId ||
+          (c.name.toLowerCase() === data.customerName.toLowerCase() &&
+            (c as any).shopName?.toLowerCase() === data.shopName.toLowerCase())
+      );
 
-        // Find customer by ID or match by name
-        const matchedCustomer = customers.find(
-          c => c._id === data.customerId ||
-            (c.name.toLowerCase() === data.customerName.toLowerCase() &&
-              (c as any).shopName?.toLowerCase() === data.shopName.toLowerCase())
-        );
-
-        if (matchedCustomer) {
-          setBillingCustomer(matchedCustomer);
-          setCustomerInput((matchedCustomer as any).shopName || matchedCustomer.name);
-        } else {
-          // Create a temporary customer object if not found
-          const tempCustomer: Customer = {
-            _id: data.customerId || "",
-            name: data.customerName,
-            shopName: data.shopName,
-          } as Customer;
-          setBillingCustomer(tempCustomer);
-          setCustomerInput(data.shopName || data.customerName);
-        }
-
-        // Set shipping same as billing
-        setSameAsBilling(true);
-
-        // Set line items
-        if (data.items && Array.isArray(data.items)) {
-          const formattedItems: BillItem[] = data.items.map((item: any) => ({
-            productName: item.productName || "",
-            quantity: item.quantity || 0,
-            unit: item.unit || "box",
-            price: item.price || 0,
-            total: item.total || 0,
-            free: item.free || false,
-          }));
-
-          // Fill with blank items to reach 15
-          while (formattedItems.length < 15) {
-            formattedItems.push({
-              productName: "",
-              quantity: 0,
-              unit: "",
-              price: 0,
-              total: 0,
-              free: false,
-            });
-          }
-
-          setItems(formattedItems);
-        }
-
-        // Removed toast - data loaded silently
-        setLoadedFromStickyNote(true);
-        setTimeout(() => setLoadedFromStickyNote(false), 3000);
-
-      } catch (err) {
-        console.error("Error loading sticky note data:", err);
-        toast.error("Failed to load sticky note data");
-        sessionStorage.removeItem("billFromStickyNote");
+      if (matchedCustomer) {
+        setBillingCustomer(matchedCustomer);
+        setCustomerInput((matchedCustomer as any).shopName || matchedCustomer.name);
+      } else {
+        const tempCustomer: Customer = {
+          _id: data.customerId || "",
+          name: data.customerName,
+          shopName: data.shopName,
+        } as Customer;
+        setBillingCustomer(tempCustomer);
+        setCustomerInput(data.shopName || data.customerName);
       }
+
+      setSameAsBilling(true);
+
+      if (data.items && Array.isArray(data.items)) {
+        const formattedItems: BillItem[] = data.items.map((item: any) => ({
+          productName: item.productName || "",
+          quantity: item.quantity || 0,
+          unit: item.unit || "box",
+          price: item.price || 0,
+          total: item.total || 0,
+          free: item.free || false,
+        }));
+        while (formattedItems.length < 15) formattedItems.push(blankItem());
+        setItems(formattedItems);
+      }
+
+      setLoadedFromStickyNote(true);
+      setTimeout(() => setLoadedFromStickyNote(false), 3000);
+    } catch (err) {
+      console.error("Error loading sticky note data:", err);
+      toast.error("Failed to load sticky note data");
+      sessionStorage.removeItem("billFromStickyNote");
     }
   }, [userId, customers, products]);
 
-  // ✅ FIXED: Load bill data if editing - only run once when all data is ready
-  useEffect(() => {
-    // Skip if we've already loaded the editing data
-    if (hasLoadedEditData) return;
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  EDIT MODE LOADER
+  // ═══════════════════════════════════════════════════════════════════════════
 
-    // Skip if we don't have the required data yet
+  useEffect(() => {
+    if (hasLoadedEditData) return;
     if (!userId || customers.length === 0 || products.length === 0) return;
 
     const checkForEditMode = async () => {
@@ -257,33 +734,25 @@ export default function BillingPage() {
         const editingData = sessionStorage.getItem("editingOrder");
         if (!editingData) return;
 
-        // ✅ Clear sessionStorage IMMEDIATELY and set flag to prevent re-runs
         sessionStorage.removeItem("editingOrder");
         setHasLoadedEditData(true);
 
-        const { orderId, _id } = JSON.parse(editingData);
-
-        // Fetch the bill data
+        const { orderId } = JSON.parse(editingData);
         const token = localStorage.getItem("token");
-const res = await fetch(`/api/bills?orderId=${orderId}`, {
-  headers: { "Authorization": `Bearer ${token}` },
-});
+        const res = await fetch(`/api/bills?orderId=${orderId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const billData = await res.json();
 
         if (!res.ok || billData.error) {
           throw new Error(billData.error || "Failed to load bill");
         }
 
-        // Set editing mode
         setIsEditMode(true);
         setEditingBillId(billData._id);
         setEditingOrderId(orderId);
-
-        // Populate form with bill data
         setSerialNo(billData.serialNumber);
 
-        // billDate now comes back as ISO string e.g. "2025-01-15T00:00:00.000Z"
-        // Convert back to DD-MM-YYYY for the form input
         const isoDate = new Date(billData.billDate);
         const dd = String(isoDate.getUTCDate()).padStart(2, "0");
         const mm = String(isoDate.getUTCMonth() + 1).padStart(2, "0");
@@ -294,23 +763,24 @@ const res = await fetch(`/api/bills?orderId=${orderId}`, {
         setRemarks(billData.remarks || "");
         setSameAsBilling(billData.sameAsBilling);
 
-        // Find and set billing customer
-        const billingCust = customers.find(c => c._id === billData.billingCustomer.customerId);
+        const billingCust = customers.find(
+          (c) => c._id === billData.billingCustomer.customerId
+        );
         if (billingCust) {
           setBillingCustomer(billingCust);
           setCustomerInput(billingCust.shopName || billingCust.name);
         }
 
-        // Find and set shipping customer
         if (!billData.sameAsBilling) {
-          const shippingCust = customers.find(c => c._id === billData.shippingCustomer.customerId);
+          const shippingCust = customers.find(
+            (c) => c._id === billData.shippingCustomer.customerId
+          );
           if (shippingCust) {
             setShippingCustomer(shippingCust);
             setShippingInput(shippingCust.shopName || shippingCust.name);
           }
         }
 
-        // Populate items
         const loadedItems = billData.items.map((item: any) => ({
           productName: item.productName,
           quantity: item.quantity,
@@ -319,12 +789,7 @@ const res = await fetch(`/api/bills?orderId=${orderId}`, {
           total: item.total,
           free: item.free,
         }));
-
-        // Fill with blank items to reach 15
-        while (loadedItems.length < 15) {
-          loadedItems.push(blankItem());
-        }
-
+        while (loadedItems.length < 15) loadedItems.push(blankItem());
         setItems(loadedItems);
 
         toast.success("Bill loaded for editing");
@@ -337,7 +802,10 @@ const res = await fetch(`/api/bills?orderId=${orderId}`, {
     checkForEditMode();
   }, [userId, customers, products, hasLoadedEditData]);
 
-  // ✅ UPDATED: Initial serial loading in useEffect
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  INITIAL DATA FETCH
+  // ═══════════════════════════════════════════════════════════════════════════
+
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (!stored) {
@@ -348,22 +816,21 @@ const res = await fetch(`/api/bills?orderId=${orderId}`, {
     const uid = parsed._id as string;
     setUserId(uid);
 
-    // --- Fetch Seller ---
     const token = localStorage.getItem("token");
+
+    // Seller
     fetch(`/api/seller-details`, {
-      headers: { "Authorization": `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => safeJson(r))
       .then((s) => {
-        if (s && !s.error) {
-          setSeller(s);
-        }
+        if (s && !s.error) setSeller(s);
       })
-      .catch(() => { });
+      .catch(() => {});
 
-    // --- Fetch Customers ---
+    // Customers
     fetch(`/api/customers`, {
-      headers: { "Authorization": `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => safeJson(r))
       .then((data) => {
@@ -390,38 +857,35 @@ const res = await fetch(`/api/bills?orderId=${orderId}`, {
           setCustomers(mapped);
         }
       })
-      .catch(() => { });
+      .catch(() => {});
 
-    // --- Fetch Products ---
+    // Products
     fetch(`/api/products`, {
-  headers: { "Authorization": `Bearer ${token}` },
-})
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then((r) => safeJson(r))
       .then((data) => {
         if (!data) return;
-        if (Array.isArray(data)) {
-          setProducts(data as Product[]);
-        } else if (Array.isArray((data as any).products)) {
+        if (Array.isArray(data)) setProducts(data as Product[]);
+        else if (Array.isArray((data as any).products))
           setProducts((data as any).products as Product[]);
-        } else {
+        else {
           const arr = Object.values(data)
             .filter((v) => Array.isArray(v))
             .flat();
           if (arr.length) setProducts(arr[0] as Product[]);
         }
       })
-      .catch(() => { });
+      .catch(() => {});
 
-    // --- Set Serial & Date (persist per tab using sessionStorage) ---
+    // Serial
     const initializeSerial = async () => {
       try {
-        // Check if we already have a preview serial for this session
         const cachedPreview = sessionStorage.getItem("billing-serial-preview");
         if (cachedPreview) {
           setSerialNo(cachedPreview);
           return;
         }
-        // ✅ Fetch serial preview from server (not generated client-side)
         await fetchNextSerialPreview(uid);
       } catch (err) {
         console.error("Error initializing serial:", err);
@@ -431,7 +895,7 @@ const res = await fetch(`/api/bills?orderId=${orderId}`, {
     updateDateToToday();
   }, []);
 
-  // --- Fetch Bank based on seller._id (or fallback from seller doc) ---
+  // ── Bank details (depends on seller) ──────────────────────────────────────
   useEffect(() => {
     if (!seller?._id) {
       if (
@@ -441,30 +905,30 @@ const res = await fetch(`/api/bills?orderId=${orderId}`, {
           (seller as any).accountNo ||
           (seller as any).ifscCode)
       ) {
-        const possibleBank: BankDetails = {
+        setBank({
           bankName: seller.bankName,
           branchName: seller.branchName,
           accountNumber:
             (seller as any).accountNumber ?? (seller as any).accountNo,
           ifscCode: seller.ifscCode,
           bankingName: seller.bankingName,
-        };
-        setBank(possibleBank);
+        });
       }
       return;
     }
 
     const token = localStorage.getItem("token");
-fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
-  headers: { "Authorization": `Bearer ${token}` },
-})
+    fetch(
+      `/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
       .then((r) => safeJson(r))
       .then((b) => {
         if (b && !b.error && Object.keys(b).length) {
           const bankObj: any = Array.isArray(b) ? b[0] ?? b : b;
           setBank(bankObj);
         } else {
-          const possibleBank: BankDetails = {
+          const possible: BankDetails = {
             bankName: seller.bankName,
             branchName: seller.branchName,
             accountNumber:
@@ -472,13 +936,11 @@ fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
             ifscCode: seller.ifscCode,
             bankingName: seller.bankingName,
           };
-          if (possibleBank.bankName || possibleBank.accountNumber) {
-            setBank(possibleBank);
-          }
+          if (possible.bankName || possible.accountNumber) setBank(possible);
         }
       })
       .catch(() => {
-        const possibleBank: BankDetails = {
+        const possible: BankDetails = {
           bankName: seller.bankName,
           branchName: seller.branchName,
           accountNumber:
@@ -486,22 +948,18 @@ fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
           ifscCode: seller.ifscCode,
           bankingName: seller.bankingName,
         };
-        if (possibleBank.bankName || possibleBank.accountNumber) {
-          setBank(possibleBank);
-        }
+        if (possible.bankName || possible.accountNumber) setBank(possible);
       });
   }, [seller]);
 
-  // Auto-check "Same as Billing" when both customers are the same
+  // ── Auto-check same-as-billing when both are the same customer ─────────────
   useEffect(() => {
     if (billingCustomer && shippingCustomer) {
-      if (billingCustomer._id === shippingCustomer._id) {
-        setSameAsBilling(true);
-      }
+      if (billingCustomer._id === shippingCustomer._id) setSameAsBilling(true);
     }
   }, [billingCustomer, shippingCustomer]);
 
-  // when sameAsBilling toggled on, copy billing -> shipping
+  // ── Copy billing -> shipping when sameAsBilling toggled on ─────────────────
   useEffect(() => {
     if (sameAsBilling && billingCustomer) {
       setShippingCustomer(billingCustomer);
@@ -509,174 +967,16 @@ fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
     }
   }, [sameAsBilling, billingCustomer]);
 
-  // ===== Helpers =====
-  const safeJson = async (res: Response) => {
-    try {
-      return await res.json();
-    } catch {
-      return null;
-    }
-  };
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  CUSTOMER INPUT HANDLERS
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  const updateDateToToday = () => {
-    const now = new Date();
-    const formatted = `${String(now.getDate()).padStart(2, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
-    setDate(formatted);
-  };
-
-  const focusQuantity = (index: number) => {
-    const el = quantityRefs.current[index];
-    if (el) el.focus();
-  };
-
-  const focusProduct = (index: number) => {
-    const el = productRefs.current[index];
-    if (el) el.focus();
-  };
-
-  // Product suggestion helper
-  const getFilteredProducts = (query: string) => {
-    if (!query.trim()) return [];
-    return products
-      .filter((p) =>
-        p.name.toLowerCase().includes(query.toLowerCase())
-      )
-      .slice(0, 8);
-  };
-
-  // ===== Utility helpers based on products =====
-  const findProductByName = (name?: string | null) => {
-    if (!name) return undefined;
-    const cleaned = name.trim().toLowerCase();
-    if (!cleaned) return undefined;
-    return products.find((p) => p.name.trim().toLowerCase() === cleaned);
-  };
-
-  const getProductStock = (p?: Product) => {
-    if (!p) return undefined;
-    const anyP = p as any;
-    const stock =
-      anyP.currentStock ??
-      anyP.stock ??
-      anyP.stockQty ??
-      anyP.availableQty ??
-      anyP.quantityInStock ??
-      anyP.quantity;
-    return typeof stock === "number" && !isNaN(stock) ? stock : undefined;
-  };
-
-  const isBoxUnit = (unit?: string) => {
-    if (!unit) return false;
-    const u = unit.trim().toLowerCase();
-    return u.includes("box");
-  };
-
-  // helper: rupee formatter
-  const fmt = (n: number) => {
-    const num = Number(n || 0);
-    if (Number.isNaN(num)) return "₹0.00";
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(num);
-  };
-
-  // ===== Update item safely (with stock limit) =====
-  const updateItem = (index: number, changes: Partial<BillItem>) => {
-    setItems((prev) => {
-      const newItems = prev.map((it) => ({ ...it }));
-      const item = newItems[index];
-      if (!item) return prev;
-
-      Object.assign(item, changes);
-
-      if (
-        changes.productName !== undefined &&
-        typeof item.productName === "string" &&
-        item.productName.trim() !== ""
-      ) {
-        const matched = findProductByName(item.productName);
-        if (matched) {
-          const selling =
-            (matched as any).sellingPrice ?? (matched as any).price ?? 0;
-          item.price = Number(selling || 0);
-          item.unit = matched.unit ?? item.unit ?? "";
-        }
-      }
-
-      item.quantity = Number(item.quantity || 0);
-      item.price = Number(item.price || 0);
-
-      if (changes.quantity !== undefined) {
-        const matched = findProductByName(item.productName);
-        const stock = getProductStock(matched);
-        if (
-          typeof stock === "number" &&
-          !isNaN(stock) &&
-          item.quantity > stock
-        ) {
-          item.quantity = stock;
-          toast.error(
-            `Only ${stock} ${matched?.unit || "units"} available in stock for ${matched?.name || "this product"
-            }`
-          );
-        }
-      }
-
-      item.total = item.free
-        ? 0
-        : Number((item.price || 0) * (item.quantity || 0));
-
-      return newItems;
-    });
-  };
-
-  const toggleFree = (index: number, v: boolean) => {
-    setItems((prev) => {
-      const newItems = prev.map((it) => ({ ...it }));
-      const it = newItems[index];
-      if (!it) return prev;
-      it.free = v;
-      it.total = v ? 0 : Number((it.price || 0) * (it.quantity || 0));
-      return newItems;
-    });
-  };
-
-  const addLine = () => setItems((prev) => [...prev, blankItem()]);
-
-  // totals
-  const subTotal = items.reduce(
-    (acc, it) => acc + (it.free ? 0 : Number(it.total || 0)),
-    0
-  );
-
-  // total boxes only
-  const totalQty = items.reduce((acc, it) => {
-    if (!isBoxUnit(it.unit)) return acc;
-    return acc + (Number(it.quantity) || 0);
-  }, 0);
-
-  const discounted = subTotal - (subTotal * (discountPercent || 0)) / 100;
-
-  // For line-wise product entry: determine first empty row
-  const firstIncompleteRow = () =>
-    items.findIndex((it) => !it.productName || it.quantity <= 0);
-
-  const canEditRow = (idx: number) => {
-    const first = firstIncompleteRow();
-    return first === -1 || idx <= first;
-  };
-
-  // customer suggestion handlers (use SHOP NAME for search & suggestions)
   const filteredCustomers = customers.filter((c) =>
     (c.shopName || c.name || "")
       .toLowerCase()
       .includes(customerInput.toLowerCase())
   );
 
-  // Shipping suggestions
   const filteredShippingCustomers = customers.filter((c) =>
     (c.shopName || c.name || "")
       .toLowerCase()
@@ -685,161 +985,223 @@ fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
 
   const onCustomerInputChange = (val: string) => {
     setCustomerInput(val);
-
-    // Show suggestions only when user starts typing
     setShowCustomerSuggestions(val.trim().length > 0);
-
     const cleaned = val.trim().toLowerCase();
-    if (!cleaned) {
-      setBillingCustomer(null);
-      return;
-    }
-
+    if (!cleaned) { setBillingCustomer(null); return; }
     const getKey = (c: Customer) =>
       (c.shopName || c.name || "").trim().toLowerCase();
-
     const exact = customers.find((c) => getKey(c) === cleaned);
-    if (exact) {
-      setBillingCustomer(exact);
-      return;
-    }
-
+    if (exact) { setBillingCustomer(exact); return; }
     const partial = customers.filter((c) => getKey(c).includes(cleaned));
-    if (partial.length === 1) {
-      setBillingCustomer(partial[0]);
-    } else {
-      setBillingCustomer(null);
-    }
+    setBillingCustomer(partial.length === 1 ? partial[0] : null);
   };
 
-  // Shipping input change handler
   const onShippingInputChange = (val: string) => {
     setShippingInput(val);
-
-    // Show suggestions only when user starts typing
     setShowShippingSuggestions(val.trim().length > 0);
-
-    // Uncheck "Same as Billing" if user types in shipping
-    if (sameAsBilling && val !== customerInput) {
-      setSameAsBilling(false);
-    }
-
+    if (sameAsBilling && val !== customerInput) setSameAsBilling(false);
     const cleaned = val.trim().toLowerCase();
-    if (!cleaned) {
-      setShippingCustomer(null);
-      return;
-    }
-
+    if (!cleaned) { setShippingCustomer(null); return; }
     const getKey = (c: Customer) =>
       (c.shopName || c.name || "").trim().toLowerCase();
-
     const exact = customers.find((c) => getKey(c) === cleaned);
-    if (exact) {
-      setShippingCustomer(exact);
+    if (exact) { setShippingCustomer(exact); return; }
+    const partial = customers.filter((c) => getKey(c).includes(cleaned));
+    setShippingCustomer(partial.length === 1 ? partial[0] : null);
+  };
+
+  const handleBillingCustomerSelect = (c: Customer) => {
+    setBillingCustomer(c);
+    setCustomerInput(c.shopName || c.name || "");
+    setShowCustomerSuggestions(false);
+    setTimeout(() => {
+      if (!sameAsBilling) shippingInputRef.current?.focus();
+      else focusProduct(0);
+    }, 0);
+  };
+
+  const handleShippingCustomerSelect = (c: Customer) => {
+    setShippingCustomer(c);
+    setShippingInput(c.shopName || c.name || "");
+    setShowShippingSuggestions(false);
+    setTimeout(() => focusProduct(0), 0);
+  };
+
+  const handleSameAsBillingChange = (checked: boolean) => {
+    setSameAsBilling(checked);
+    if (checked && billingCustomer) {
+      setShippingCustomer(billingCustomer);
+      setShippingInput(billingCustomer.shopName || billingCustomer.name || "");
+    }
+  };
+
+  const handleCustomerKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showCustomerSuggestions || !filteredCustomers.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setCustomerSuggestionIndex((i) =>
+        Math.min(i + 1, filteredCustomers.length - 1)
+      );
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setCustomerSuggestionIndex((i) => Math.max(i - 1, 0));
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const selected = filteredCustomers[customerSuggestionIndex];
+      if (selected) handleBillingCustomerSelect(selected);
+    }
+  };
+
+  const handleShippingKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showShippingSuggestions || !filteredShippingCustomers.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setShippingSuggestionIndex((i) =>
+        Math.min(i + 1, filteredShippingCustomers.length - 1)
+      );
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setShippingSuggestionIndex((i) => Math.max(i - 1, 0));
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const selected = filteredShippingCustomers[shippingSuggestionIndex];
+      if (selected) handleShippingCustomerSelect(selected);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PRODUCT ROW HANDLERS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const firstIncompleteRow = () =>
+    items.findIndex((it) => !it.productName || it.quantity <= 0);
+
+  const handleProductFocus = (idx: number) => {
+    const first = firstIncompleteRow();
+    if (first !== -1 && idx > first) {
+      toast.error("Please complete previous product line first");
+      focusProduct(first);
       return;
     }
-
-    const partial = customers.filter((c) => getKey(c).includes(cleaned));
-    if (partial.length === 1) {
-      setShippingCustomer(partial[0]);
-    } else {
-      setShippingCustomer(null);
-    }
+    setActiveProductRow(idx);
   };
 
-  // Handle Enter key on billing customer with proper focus flow
-  const handleBillingCustomerEnter = () => {
-    const selected = filteredCustomers[customerSuggestionIndex];
-    if (selected) {
-      setBillingCustomer(selected);
-      setCustomerInput(selected.shopName || selected.name || "");
-      setShowCustomerSuggestions(false);
-
-      // Smart focus handling based on "Same as Billing" checkbox
-      setTimeout(() => {
-        if (!sameAsBilling) {
-          // Focus shipping input if not same as billing
-          shippingInputRef.current?.focus();
-        } else {
-          // Focus first product row if same as billing
-          focusProduct(0);
-        }
-      }, 0);
-    }
+  const handleProductBlur = () => {
+    setTimeout(() => setActiveProductRow(null), 150);
   };
 
-  // Handle Enter key on shipping customer
-  const handleShippingCustomerEnter = () => {
-    const selected = filteredShippingCustomers[shippingSuggestionIndex];
-    if (selected) {
-      setShippingCustomer(selected);
-      setShippingInput(selected.shopName || selected.name || "");
-      setShowShippingSuggestions(false);
-
-      // Move to first product row
-      setTimeout(() => focusProduct(0), 0);
-    }
-  };
-
-  const sortByUnitGroup = () => {
-    setItems((prev) => {
-      // keep empty rows at bottom
-      const filled = prev.filter(
-        (it) => it.productName && it.quantity > 0
-      );
-      const empty = prev.filter(
-        (it) => !it.productName || it.quantity <= 0
-      );
-
-      const grouped = filled.reduce((acc, it) => {
-        const unitKey = it.unit?.toLowerCase();
-        if (!unitKey) return acc;
-
-        if (!acc[unitKey]) acc[unitKey] = [];
-        acc[unitKey].push(it);
-
-        return acc;
-      }, {} as Record<string, BillItem[]>);
-
-      // Dynamic sort: known units first in preferred order, unknown units appended alphabetically
-      const knownUnitPriority = ["box", "litre", "kg", "gm", "ml", "piece"];
-      const orderedUnits = Object.keys(grouped).sort((a, b) => {
-        const ai = knownUnitPriority.indexOf(a);
-        const bi = knownUnitPriority.indexOf(b);
-        if (ai !== -1 && bi !== -1) return ai - bi;   // both known → use priority order
-        if (ai !== -1) return -1;                      // only a is known → a comes first
-        if (bi !== -1) return 1;                       // only b is known → b comes first
-        return a.localeCompare(b);                     // both unknown → alphabetical
-      });
-
-      const sortedFilled = orderedUnits.flatMap((unit) =>
-        grouped[unit].sort(
-          (a, b) => b.quantity - a.quantity
-        )
-      );
-
-      return [...sortedFilled, ...empty];
+  const handleProductChange = (idx: number, value: string) => {
+    updateItem(idx, { productName: value });
+    setActiveProductRow(idx);
+    setProductSuggestionIndex((prev) => {
+      const copy = [...prev];
+      copy[idx] = 0;
+      return copy;
     });
   };
 
-  // Helper: basic validation before we open dialog / save
+  const handleProductKeyDown = (
+    idx: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    const first = firstIncompleteRow();
+    const editable = first === -1 || idx <= first;
+    if (!editable) return;
+    const matches = getFilteredProducts(items[idx].productName);
+    if (!matches.length) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setProductSuggestionIndex((prev) => {
+        const copy = [...prev];
+        copy[idx] = Math.min((copy[idx] || 0) + 1, matches.length - 1);
+        return copy;
+      });
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setProductSuggestionIndex((prev) => {
+        const copy = [...prev];
+        copy[idx] = Math.max((copy[idx] || 0) - 1, 0);
+        return copy;
+      });
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const selected = matches[productSuggestionIndex[idx] || 0];
+      if (selected) {
+        updateItem(idx, { productName: selected.name });
+        setActiveProductRow(null);
+        setTimeout(() => focusQuantity(idx), 0);
+      }
+    }
+  };
+
+  const handleProductSuggestionSelect = (idx: number, p: Product) => {
+    updateItem(idx, { productName: p.name });
+    setActiveProductRow(null);
+    setTimeout(() => focusQuantity(idx), 0);
+  };
+
+  const handleQtyChange = (idx: number, value: number) => {
+    updateItem(idx, { quantity: value });
+  };
+
+  const handleQtyFocus = (
+    idx: number,
+    e: React.FocusEvent<HTMLInputElement>
+  ) => {
+    const first = firstIncompleteRow();
+    const editable = first === -1 || idx <= first;
+    if (editable && (!items[idx].productName || !items[idx].productName.trim())) {
+      e.target.blur();
+      toast.error("Please select product name first for this line.");
+      focusProduct(idx);
+    }
+  };
+
+  const handleQtyKeyDown = (
+    idx: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    const first = firstIncompleteRow();
+    const editable = first === -1 || idx <= first;
+    if (!editable) return;
+    const isLastRow = idx === items.length - 1;
+    if (e.key === "Enter" || (e.key === "Tab" && !e.shiftKey)) {
+      e.preventDefault();
+      if (isLastRow && items[idx].productName && items[idx].quantity > 0) {
+        addLine();
+        setTimeout(() => focusProduct(idx + 1), 0);
+      } else {
+        if (idx + 1 < items.length) focusProduct(idx + 1);
+      }
+    }
+  };
+
+  const handlePriceChange = (idx: number, value: number) => {
+    updateItem(idx, { price: value });
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  VALIDATION & SAVE
+  // ═══════════════════════════════════════════════════════════════════════════
+
   const validateBeforeSave = () => {
     if (!billingCustomer || !billingCustomer.name?.trim()) {
       toast.error("Please select a Billing customer before saving bill.");
       return false;
     }
-    const addr =
-      billingCustomer.address || billingCustomer.shopAddress || "";
+    const addr = billingCustomer.address || billingCustomer.shopAddress || "";
     if (!addr.trim()) {
       toast.error("Billing address is required.");
       return false;
     }
     const filledItems = items.filter(
-      (it) =>
-        it.productName &&
-        it.productName.trim() !== "" &&
-        it.quantity &&
-        it.quantity > 0
+      (it) => it.productName?.trim() && it.quantity > 0
     );
     if (!filledItems.length) {
       toast.error("Add at least one product with quantity.");
@@ -853,19 +1215,32 @@ fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
   };
 
   const handlePrepareBillClick = () => {
+    const missing = getMissingProfileFields();
+    if (missing.length > 0) {
+      setProfileMissingItems(missing);
+      setShowProfileDialog(true);
+      return;
+    }
     if (!validateBeforeSave()) return;
     toast.success("Bill is ready! Click OK to save.", { duration: 2000 });
     setShowConfirm(true);
   };
 
-  // ✅ FINAL FIX: Use nextSerialNumber from backend response
-  // This completely eliminates race conditions
+  const handlePdfExportClick = () => {
+    const missing = getMissingProfileFields();
+    if (missing.length > 0) {
+      setProfileMissingItems(missing);
+      setShowProfileDialog(true);
+      return;
+    }
+    pdfExportRef.current?.exportPDF();
+  };
+
   const confirmSaveBill = async () => {
     if (!validateBeforeSave()) {
       setShowConfirm(false);
       return;
     }
-
     if (!billingCustomer || !userId) {
       setShowConfirm(false);
       return;
@@ -874,11 +1249,7 @@ fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
     setIsSaving(true);
     try {
       const filledItems = items.filter(
-        (it) =>
-          it.productName &&
-          it.productName.trim() !== "" &&
-          it.quantity &&
-          it.quantity > 0
+        (it) => it.productName?.trim() && it.quantity > 0
       );
 
       const allItems = filledItems.map((it) => {
@@ -894,7 +1265,10 @@ fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
         };
       });
 
-      const orderId = isEditMode && editingOrderId ? editingOrderId : `ORD-${Date.now()}`;
+      const orderId =
+        isEditMode && editingOrderId
+          ? editingOrderId
+          : `ORD-${Date.now()}`;
 
       const billingCustomerData = {
         customerId: billingCustomer._id,
@@ -907,16 +1281,16 @@ fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
       const shippingCustomerData = sameAsBilling
         ? billingCustomerData
         : {
-          customerId: shippingCustomer?._id,
-          name: shippingCustomer?.name || "",
-          shopName: shippingCustomer?.shopName || shippingCustomer?.name || "",
-          address: shippingCustomer?.address || shippingCustomer?.shopAddress || "",
-          contact: shippingCustomer?.contact || "",
-        };
+            customerId: shippingCustomer?._id,
+            name: shippingCustomer?.name || "",
+            shopName: shippingCustomer?.shopName || shippingCustomer?.name || "",
+            address:
+              shippingCustomer?.address ||
+              shippingCustomer?.shopAddress ||
+              "",
+            contact: shippingCustomer?.contact || "",
+          };
 
-      // ✅ serialNumber is intentionally NOT sent in POST payload —
-      //    the server generates it atomically from the Counter collection.
-      // For PUT (edits), the existing serial is sent to preserve it.
       const payload: any = {
         orderId,
         billDate: date,
@@ -932,25 +1306,24 @@ fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
 
       if (isEditMode && editingBillId) {
         payload.billId = editingBillId;
-        payload.serialNumber = serialNo; // preserve existing serial on edit
+        payload.serialNumber = serialNo;
       }
 
-      const method = isEditMode ? "PUT" : "POST";
-      const url = "/api/bills";
-
       const token = localStorage.getItem("token");
-const res = await fetch(url, {
-  method,
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${token}`,
-  },
-  body: JSON.stringify(payload),
-});
+      const res = await fetch("/api/bills", {
+        method: isEditMode ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
       const data = await res.json();
       if (!res.ok || data.error) {
-        throw new Error(data.error || `Failed to ${isEditMode ? "update" : "save"} bill`);
+        throw new Error(
+          data.error || `Failed to ${isEditMode ? "update" : "save"} bill`
+        );
       }
 
       toast.success(
@@ -962,102 +1335,68 @@ const res = await fetch(url, {
       }
 
       setShowConfirm(false);
-
       const wasEditMode = isEditMode;
-
       setIsEditMode(false);
       setEditingBillId(null);
       setEditingOrderId(null);
       setHasLoadedEditData(false);
 
       if (!wasEditMode && userId) {
-        // ✅ CRITICAL FIX: Use the nextSerialNumber from the backend response
-        // The backend has ALREADY calculated and returned the correct next serial
         if (data.nextSerialNumber) {
           setSerialNo(data.nextSerialNumber);
           sessionStorage.setItem("billing-serial-preview", data.nextSerialNumber);
         } else {
-          // Fallback: re-fetch preview from server
           await fetchNextSerialPreview(userId);
         }
-        // Reset form fields (but serial is already set above)
-        setBillingCustomer(null);
-        setShippingCustomer(null);
-        setSameAsBilling(false);
-        setCustomerInput("");
-        setShippingInput("");
-        setItems(Array.from({ length: 15 }, blankItem));
-        setDiscountPercent(0);
-        setRemarks("");
-        updateDateToToday();
       } else {
-        // This was an EDIT - clear form WITHOUT generating new serial
-        setBillingCustomer(null);
-        setShippingCustomer(null);
-        setSameAsBilling(false);
-        setCustomerInput("");
-        setShippingInput("");
-        setItems(Array.from({ length: 15 }, blankItem));
-        setDiscountPercent(0);
-        setRemarks("");
         const cachedPreview = sessionStorage.getItem("billing-serial-preview");
         if (cachedPreview) setSerialNo(cachedPreview);
-        updateDateToToday();
       }
+
+      // Reset form & clear draft
+      clearDraft();
+      setBillingCustomer(null);
+      setShippingCustomer(null);
+      setSameAsBilling(false);
+      setCustomerInput("");
+      setShippingInput("");
+      setItems(Array.from({ length: 15 }, blankItem));
+      setDiscountPercent(0);
+      setRemarks("");
+      updateDateToToday();
     } catch (err: any) {
       console.error(err);
-      toast.error(err?.message || `Failed to ${isEditMode ? "update" : "save"} bill.`);
+      toast.error(
+        err?.message || `Failed to ${isEditMode ? "update" : "save"} bill.`
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
-  // ===== UI =====
+  // ── Derived flags for button disabling ─────────────────────────────────────
+  const profileComplete = isProfileComplete();
+  const customersExist = hasCustomers();
+  // Buttons that require profile + customers
+  const canUseBillingActions = profileComplete && customersExist;
+
+  // ── Tooltip text when buttons are disabled ─────────────────────────────────
+  const getDisabledReason = () => {
+    if (!profileComplete) return "Complete your seller profile first";
+    if (!customersExist) return "Add at least one customer first";
+    return "";
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  RENDER
+  // ═══════════════════════════════════════════════════════════════════════════
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
       <DashboardNavbar />
 
-      <header className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-            <div className="flex items-center gap-4">
-              {seller?.logoUrl ? (
-                <img
-                  src={seller.logoUrl}
-                  alt="logo"
-                  className="h-16 w-auto object-contain"
-                />
-              ) : (
-                <div className="h-16 w-16 rounded-md bg-gray-100 flex items-center justify-center text-sm text-gray-500">
-                  No Logo
-                </div>
-              )}
-            </div>
-            <div className="flex-1 text-right text-sm sm:text-base">
-              <h2 className="text-lg sm:text-xl font-bold text-gray-700">
-                {seller?.sellerName || "Seller Name"}
-              </h2>
-              {seller?.contact && (
-                <p className="text-gray-700"> {seller.contact}</p>
-              )}
-              <p className="text-gray-700">{seller?.fullAddress || "-"}</p>
-              <p className="text-gray-800">GST: {seller?.gstNumber || "-"}</p>
-              {seller?.compositionLine && (
-                <div className="mt-1">
-                  <p className="text-gray-500 text-right text-xs sm:text-sm italic">
-                    {seller.compositionLine}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-          {seller?.slogan && (
-            <p className="text-gray-700 text-center text-xs sm:text-sm font-medium mt-3">
-              {seller.slogan}
-            </p>
-          )}
-        </div>
-      </header>
+      {/* ── Seller / logo header ──────────────────────────────── */}
+      <BillingHeader seller={seller} />
 
       <main className="flex-grow container mx-auto px-4 sm:px-6 py-4 sm:py-8">
         <div className="bg-white rounded-lg shadow p-4 sm:p-6 text-gray-900">
@@ -1065,12 +1404,64 @@ const res = await fetch(url, {
             BILL OF SUPPLY
           </h1>
 
-          {/* Update UI to show edit mode indicator */}
+          {/* ── Profile / customer warning banners ──────────────── */}
+          {!profileComplete && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+              <span className="text-lg mt-0.5">⚠️</span>
+              <div>
+                <p className="text-sm font-semibold text-red-800">
+                  Seller profile incomplete
+                </p>
+                <p className="text-xs text-red-700 mt-0.5">
+                  Missing:{" "}
+                  {getMissingProfileFields().join(", ")}.{" "}
+                  <button
+                    className="underline font-semibold"
+                    onClick={() => {
+                      setProfileMissingItems(getMissingProfileFields());
+                      setShowProfileDialog(true);
+                    }}
+                  >
+                    Complete Profile →
+                  </button>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!customersExist && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
+              <span className="text-lg mt-0.5">👥</span>
+              <div>
+                <p className="text-sm font-semibold text-yellow-800">
+                  No customers found
+                </p>
+                <p className="text-xs text-yellow-700 mt-0.5">
+                  Please add customers before creating a bill.{" "}
+                  <a href="/dashboard/customers" className="underline font-semibold">
+                    Add Customers →
+                  </a>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Edit mode banner */}
           {isEditMode && (
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                <svg
+                  className="w-5 h-5 text-blue-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
                 </svg>
                 <span className="text-sm font-semibold text-blue-900">
                   Editing Bill: {serialNo}
@@ -1079,12 +1470,22 @@ const res = await fetch(url, {
             </div>
           )}
 
-          {/* Sticky Note Loaded Indicator */}
+          {/* Sticky note loaded banner */}
           {loadedFromStickyNote && (
             <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
               <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg
+                  className="w-5 h-5 text-green-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
                 </svg>
                 <span className="text-sm font-semibold text-green-900">
                   Sticky note data loaded - Complete the remaining details
@@ -1093,749 +1494,215 @@ const res = await fetch(url, {
             </div>
           )}
 
-          {/* BILLING / SHIPPING */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
-            {/* BILLING DETAILS */}
-            <div>
-              <h3 className="text-sm font-semibold mb-1">Billing Details</h3>
-              <div className="flex gap-2">
-                <input
-                  ref={billingInputRef}
-                  suppressHydrationWarning
-                  value={customerInput}
-                  onChange={(e) => onCustomerInputChange(e.target.value)}
-                  onFocus={() => {
-                    if (customerInput.trim()) {
-                      setShowCustomerSuggestions(true);
-                    }
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => setShowCustomerSuggestions(false), 200);
-                  }}
-                  onKeyDown={(e) => {
-                    if (!showCustomerSuggestions || !filteredCustomers.length) return;
+          {/* ── Customer section ────────────────────────────────── */}
+          <BillingCustomerSection
+            billingCustomer={billingCustomer}
+            customerInput={customerInput}
+            showCustomerSuggestions={showCustomerSuggestions}
+            filteredCustomers={filteredCustomers}
+            customerSuggestionIndex={customerSuggestionIndex}
+            billingInputRef={billingInputRef}
+            shippingCustomer={shippingCustomer}
+            shippingInput={shippingInput}
+            showShippingSuggestions={showShippingSuggestions}
+            filteredShippingCustomers={filteredShippingCustomers}
+            shippingSuggestionIndex={shippingSuggestionIndex}
+            shippingInputRef={shippingInputRef}
+            sameAsBilling={sameAsBilling}
+            onCustomerInputChange={onCustomerInputChange}
+            onShippingInputChange={onShippingInputChange}
+            onBillingCustomerSelect={handleBillingCustomerSelect}
+            onShippingCustomerSelect={handleShippingCustomerSelect}
+            onSameAsBillingChange={handleSameAsBillingChange}
+            onClearBilling={() => {
+              setCustomerInput("");
+              setBillingCustomer(null);
+              setShowCustomerSuggestions(false);
+            }}
+            onClearShipping={() => {
+              setShippingInput("");
+              setShippingCustomer(null);
+              setShowShippingSuggestions(false);
+            }}
+            onCustomerKeyDown={handleCustomerKeyDown}
+            onShippingKeyDown={handleShippingKeyDown}
+            onBillingFocus={() => {
+              if (customerInput.trim()) setShowCustomerSuggestions(true);
+            }}
+            onShippingFocus={() => {
+              if (shippingInput.trim()) setShowShippingSuggestions(true);
+            }}
+            onBillingBlur={() =>
+              setTimeout(() => setShowCustomerSuggestions(false), 200)
+            }
+            onShippingBlur={() =>
+              setTimeout(() => setShowShippingSuggestions(false), 200)
+            }
+          />
 
-                    if (e.key === "ArrowDown") {
-                      e.preventDefault();
-                      setCustomerSuggestionIndex((i) =>
-                        Math.min(i + 1, filteredCustomers.length - 1)
-                      );
-                    }
-                    if (e.key === "ArrowUp") {
-                      e.preventDefault();
-                      setCustomerSuggestionIndex((i) => Math.max(i - 1, 0));
-                    }
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleBillingCustomerEnter();
-                    }
-                  }}
-                  placeholder="Type shop name..."
-                  className="w-full border p-2 rounded text-xs sm:text-sm text-gray-900"
-                />
-                <button
-                  onClick={() => {
-                    setCustomerInput("");
-                    setBillingCustomer(null);
-                    setShowCustomerSuggestions(false);
-                  }}
-                  className="px-2 sm:px-3 py-1 sm:py-2 bg-gray-200 rounded text-xs sm:text-sm"
-                >
-                  Clear
-                </button>
-              </div>
+          {/* ── Items table + footer ─────────────────────────────── */}
+          <BillingItemsTable
+            items={items}
+            products={products}
+            discountPercent={discountPercent}
+            remarks={remarks}
+            serialNo={serialNo}
+            date={date}
+            seller={seller}
+            bank={bank}
+            onUpdateItem={updateItem}
+            onToggleFree={toggleFree}
+            onAddLine={addLine}
+            onSortByUnit={sortByUnitGroup}
+            onDiscountChange={setDiscountPercent}
+            onRemarksChange={setRemarks}
+            dragIndex={dragIndex}
+            onDragStart={setDragIndex}
+            onDrop={(idx) => {
+              if (dragIndex === null || dragIndex === idx) return;
+              setItems((prev) => {
+                const copy = [...prev];
+                const [moved] = copy.splice(dragIndex, 1);
+                copy.splice(idx, 0, moved);
+                return copy;
+              });
+              setDragIndex(null);
+            }}
+            activeProductRow={activeProductRow}
+            productSuggestionIndex={productSuggestionIndex}
+            onProductFocus={handleProductFocus}
+            onProductBlur={handleProductBlur}
+            onProductChange={handleProductChange}
+            onProductKeyDown={handleProductKeyDown}
+            onProductSuggestionSelect={handleProductSuggestionSelect}
+            onQtyChange={handleQtyChange}
+            onQtyFocus={handleQtyFocus}
+            onQtyKeyDown={handleQtyKeyDown}
+            onPriceChange={handlePriceChange}
+            productRefs={productRefs}
+            quantityRefs={quantityRefs}
+            findProductByName={findProductByName}
+            getProductStock={getProductStock}
+            getFilteredProducts={getFilteredProducts}
+            fmt={fmt}
+            subTotal={subTotal}
+            totalQty={totalQty}
+            discounted={discounted}
+          />
 
-              {/* Custom dropdown - only show when typing */}
-              {showCustomerSuggestions && filteredCustomers.length > 0 && (
-                <div className="relative">
-                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-                    {filteredCustomers.map((c, i) => {
-                      const label = c.shopName && c.name
-                        ? `${c.shopName} - ${c.name}`
-                        : c.shopName || c.name;
-                      return (
-                        <div
-                          key={c._id}
-                          onMouseDown={() => {
-                            setBillingCustomer(c);
-                            setCustomerInput(c.shopName || c.name || "");
-                            setShowCustomerSuggestions(false);
-
-                            setTimeout(() => {
-                              if (!sameAsBilling) {
-                                shippingInputRef.current?.focus();
-                              } else {
-                                focusProduct(0);
-                              }
-                            }, 0);
-                          }}
-                          className={`px-3 py-2 cursor-pointer text-sm ${customerSuggestionIndex === i
-                              ? "bg-blue-600 text-white"
-                              : "hover:bg-blue-50"
-                            }`}
-                        >
-                          {label}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-2 text-xs sm:text-sm text-gray-800">
-                <div>
-                  <strong>Shop Name:</strong>{" "}
-                  {billingCustomer?.shopName || "-"}
-                </div>
-                <div>
-                  <strong>Customer Name:</strong>{" "}
-                  {billingCustomer?.name || "-"}
-                </div>
-                <div>
-                  <strong>Contact:</strong> {billingCustomer?.contact || "-"}
-                </div>
-                <div>
-                  <strong>Address:</strong>{" "}
-                  {billingCustomer?.address ||
-                    billingCustomer?.shopAddress ||
-                    "-"}
-                </div>
-              </div>
-            </div>
-
-            {/* SHIPPING DETAILS */}
-            <div>
-              <h3 className="text-sm font-semibold mb-1">Shipping Details</h3>
-              <label className="flex items-center gap-2 text-xs sm:text-sm mb-2">
-                <input
-                  type="checkbox"
-                  checked={sameAsBilling}
-                  onChange={(e) => {
-                    const isChecked = e.target.checked;
-                    setSameAsBilling(isChecked);
-                    if (isChecked && billingCustomer) {
-                      setShippingCustomer(billingCustomer);
-                      setShippingInput(billingCustomer.shopName || billingCustomer.name || "");
-                    }
-                  }}
-                />
-                Same as Billing
-              </label>
-
-              {!sameAsBilling && (
-                <>
-                  <div className="flex gap-2">
-                    <input
-                      ref={shippingInputRef}
-                      suppressHydrationWarning
-                      value={shippingInput}
-                      onChange={(e) => onShippingInputChange(e.target.value)}
-                      onFocus={() => {
-                        if (shippingInput.trim()) {
-                          setShowShippingSuggestions(true);
-                        }
-                      }}
-                      onBlur={() => {
-                        setTimeout(() => setShowShippingSuggestions(false), 200);
-                      }}
-                      onKeyDown={(e) => {
-                        if (!showShippingSuggestions || !filteredShippingCustomers.length) return;
-
-                        if (e.key === "ArrowDown") {
-                          e.preventDefault();
-                          setShippingSuggestionIndex((i) =>
-                            Math.min(i + 1, filteredShippingCustomers.length - 1)
-                          );
-                        }
-                        if (e.key === "ArrowUp") {
-                          e.preventDefault();
-                          setShippingSuggestionIndex((i) => Math.max(i - 1, 0));
-                        }
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleShippingCustomerEnter();
-                        }
-                      }}
-                      placeholder="Type shop name..."
-                      className="w-full border p-2 rounded text-xs sm:text-sm text-gray-900"
-                    />
-                    <button
-                      onClick={() => {
-                        setShippingInput("");
-                        setShippingCustomer(null);
-                        setShowShippingSuggestions(false);
-                      }}
-                      className="px-2 sm:px-3 py-1 sm:py-2 bg-gray-200 rounded text-xs sm:text-sm"
-                    >
-                      Clear
-                    </button>
-                  </div>
-
-                  {/* Shipping suggestions dropdown */}
-                  {showShippingSuggestions && filteredShippingCustomers.length > 0 && (
-                    <div className="relative">
-                      <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-                        {filteredShippingCustomers.map((c, i) => {
-                          const label = c.shopName && c.name
-                            ? `${c.shopName} - ${c.name}`
-                            : c.shopName || c.name;
-                          return (
-                            <div
-                              key={c._id}
-                              onMouseDown={() => {
-                                setShippingCustomer(c);
-                                setShippingInput(c.shopName || c.name || "");
-                                setShowShippingSuggestions(false);
-
-                                setTimeout(() => focusProduct(0), 0);
-                              }}
-                              className={`px-3 py-2 cursor-pointer text-sm ${shippingSuggestionIndex === i
-                                  ? "bg-blue-600 text-white"
-                                  : "hover:bg-blue-50"
-                                }`}
-                            >
-                              {label}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              <div className="mt-2 text-xs sm:text-sm text-gray-800">
-                <div>
-                  <strong>Shop Name:</strong>{" "}
-                  {sameAsBilling
-                    ? billingCustomer?.shopName || "-"
-                    : shippingCustomer?.shopName || "-"}
-                </div>
-                <div>
-                  <strong>Customer Name:</strong>{" "}
-                  {sameAsBilling
-                    ? billingCustomer?.name || "-"
-                    : shippingCustomer?.name || "-"}
-                </div>
-                <div>
-                  <strong>Contact:</strong>{" "}
-                  {sameAsBilling
-                    ? billingCustomer?.contact || "-"
-                    : shippingCustomer?.contact || "-"}
-                </div>
-                <div>
-                  <strong>Address:</strong>{" "}
-                  {sameAsBilling
-                    ? billingCustomer?.address ||
-                    billingCustomer?.shopAddress ||
-                    "-"
-                    : shippingCustomer?.address ||
-                    shippingCustomer?.shopAddress ||
-                    "-"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* SERIAL + DATE */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 text-xs sm:text-sm">
-            <div>
-              <strong>Serial No:</strong>{" "}
-              {serialNo || <span className="text-gray-400 italic">Loading...</span>}
-            </div>
-            <div>
-              <strong>Date:</strong> {date}
-            </div>
-          </div>
-
-          {/* PRODUCT TABLE */}
-          <div className="overflow-x-auto mb-4">
-            <table className="w-full table-auto border-collapse text-xs sm:text-sm">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border px-2 py-1 sm:px-3 sm:py-2">#</th>
-                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Product</th>
-                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Qty</th>
-                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Price</th>
-                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Total</th>
-                  <th className="border px-2 py-1 sm:px-3 sm:py-2">Free</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it, idx) => {
-                  const matched = findProductByName(it.productName);
-                  const stock = getProductStock(matched);
-                  const editable = canEditRow(idx);
-                  const isLastRow = idx === items.length - 1;
-
-                  return (
-                    <tr
-                      key={idx}
-                      className="even:bg-white odd:bg-gray-50"
-                    >
-                      <td
-                        draggable={!!it.productName && it.quantity > 0}
-                        onDragStart={() => setDragIndex(idx)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => {
-                          if (dragIndex === null || dragIndex === idx) return;
-                          setItems((prev) => {
-                            const copy = [...prev];
-                            const [moved] = copy.splice(dragIndex, 1);
-                            copy.splice(idx, 0, moved);
-                            return copy;
-                          });
-                          setDragIndex(null);
-                        }}
-                        className="cursor-grab border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-middle"
-                      >
-                        ≡ {idx + 1}
-                      </td>
-
-                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 align-top relative">
-                        <input
-                          value={it.productName}
-                          disabled={!editable}
-                          ref={(el) => {
-                            productRefs.current[idx] = el;
-                          }}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            updateItem(idx, { productName: value });
-                            setActiveProductRow(idx);
-                            setProductSuggestionIndex((prev) => {
-                              const copy = [...prev];
-                              copy[idx] = 0;
-                              return copy;
-                            });
-                          }}
-                          onFocus={() => {
-                            if (!canEditRow(idx)) {
-                              toast.error("Please complete previous product line first");
-                              focusProduct(firstIncompleteRow());
-                              return;
-                            }
-                            setActiveProductRow(idx);
-                          }}
-                          onBlur={() => {
-                            setTimeout(() => setActiveProductRow(null), 150);
-                          }}
-                          onKeyDown={(e) => {
-                            if (!editable) return;
-                            const matches = getFilteredProducts(it.productName);
-                            if (!matches.length) return;
-                            if (e.key === "ArrowDown") {
-                              e.preventDefault();
-                              setProductSuggestionIndex((prev) => {
-                                const copy = [...prev];
-                                copy[idx] = Math.min((copy[idx] || 0) + 1, matches.length - 1);
-                                return copy;
-                              });
-                            }
-                            if (e.key === "ArrowUp") {
-                              e.preventDefault();
-                              setProductSuggestionIndex((prev) => {
-                                const copy = [...prev];
-                                copy[idx] = Math.max((copy[idx] || 0) - 1, 0);
-                                return copy;
-                              });
-                            }
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              const selected = matches[productSuggestionIndex[idx] || 0];
-                              if (selected) {
-                                updateItem(idx, { productName: selected.name });
-                                setActiveProductRow(null);
-                                setTimeout(() => focusQuantity(idx), 0);
-                              }
-                            }
-                          }}
-                          className="w-full border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-xs sm:text-sm text-gray-900 focus:ring-2 focus:ring-blue-500"
-                          placeholder="Start typing product..."
-                        />
-                        {it.productName && (
-                          <div className="text-[10px] text-gray-400 mt-0.5">
-                            Start typing product name to see suggestions
-                          </div>
-                        )}
-                        {matched && typeof stock === "number" && (
-                          <div className="mt-1 text-[10px] text-gray-500">
-                            In stock:{" "}
-                            <span className="font-semibold">{stock}</span>
-                            {matched.packUnit && (
-                              <>
-                                {" "}
-                                | Pack:{" "}
-                                <span className="font-semibold">
-                                  {matched.packUnit}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        )}
-
-                        {activeProductRow === idx &&
-                          it.productName &&
-                          getFilteredProducts(it.productName).length > 0 && (
-                            <div className="absolute z-30 mt-1 w-full bg-white border rounded-md shadow-lg max-h-56 overflow-auto">
-                              {getFilteredProducts(it.productName).map((p, i) => (
-                                <div
-                                  key={p._id}
-                                  onMouseDown={() => {
-                                    updateItem(idx, { productName: p.name });
-                                    setActiveProductRow(null);
-                                    setTimeout(() => focusQuantity(idx), 0);
-                                  }}
-                                  className={`px-2 py-1 sm:px-3 sm:py-2 cursor-pointer text-xs sm:text-sm flex justify-between ${(productSuggestionIndex[idx] || 0) === i
-                                    ? "bg-blue-600 text-white"
-                                    : "hover:bg-blue-50"
-                                    }`}
-                                >
-                                  <span>{p.name}</span>
-                                  <span className="text-xs opacity-70">{p.unit}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                      </td>
-
-                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-top">
-                        <div className="flex flex-col items-center">
-                          <input
-                            suppressHydrationWarning
-                            type="number"
-                            min={0}
-                            step="any"
-                            disabled={!editable}
-                            ref={(el) => {
-                              quantityRefs.current[idx] = el;
-                            }}
-                            value={it.quantity === 0 ? "" : it.quantity}
-                            onChange={(e) =>
-                              updateItem(idx, {
-                                quantity: Number(e.target.value || 0),
-                              })
-                            }
-                            onFocus={(e) => {
-                              if (
-                                editable &&
-                                (!it.productName || !it.productName.trim())
-                              ) {
-                                e.target.blur();
-                                toast.error(
-                                  "Please select product name first for this line."
-                                );
-                                focusProduct(idx);
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (!editable) return;
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-
-                                // Auto-add line if on last row and has product + quantity
-                                if (isLastRow && it.productName && it.quantity > 0) {
-                                  addLine();
-                                  setTimeout(() => focusProduct(idx + 1), 0);
-                                } else {
-                                  const nextIndex = idx + 1;
-                                  if (nextIndex < items.length) {
-                                    focusProduct(nextIndex);
-                                  }
-                                }
-                              }
-                              if (e.key === "Tab" && !e.shiftKey) {
-                                e.preventDefault();
-
-                                // Same auto-add behavior for Tab
-                                if (isLastRow && it.productName && it.quantity > 0) {
-                                  addLine();
-                                  setTimeout(() => focusProduct(idx + 1), 0);
-                                } else {
-                                  const nextIndex = idx + 1;
-                                  if (nextIndex < items.length) {
-                                    focusProduct(nextIndex);
-                                  }
-                                }
-                              }
-                            }}
-                            className="w-16 sm:w-20 border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-center text-xs sm:text-sm text-gray-900"
-                            placeholder="0"
-                          />
-                          {matched && typeof stock === "number" && (
-                            <span className="mt-1 text-[10px] text-gray-500 block">
-                              In stock:{" "}
-                              <span className="font-semibold">{stock}</span>
-                              {matched.packUnit && (
-                                <>
-                                  {" "}
-                                  | Pack:{" "}
-                                  <span className="font-semibold">
-                                    {matched.packUnit}
-                                  </span>
-                                </>
-                              )}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-top">
-                        {it.free ? (
-                          <span className="font-semibold text-red-600 text-xs sm:text-sm">
-                            FREE
-                          </span>
-                        ) : (
-                          <div className="flex items-center justify-center gap-1 sm:gap-2">
-                            <input
-                              suppressHydrationWarning
-                              type="number"
-                              min={0}
-                              step="any"
-                              disabled={!editable}
-                              value={it.price || ""}
-                              onChange={(e) =>
-                                updateItem(idx, {
-                                  price: Number(e.target.value || 0),
-                                })
-                              }
-                              className="w-16 sm:w-24 border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-center text-xs sm:text-sm text-gray-900"
-                            />
-                            {it.unit ? (
-                              <span className="text-[10px] sm:text-xs text-gray-600">
-                                /{it.unit}
-                              </span>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-top">
-                        {it.free ? (
-                          <span className="font-semibold text-red-600 text-xs sm:text-sm">
-                            FREE
-                          </span>
-                        ) : (
-                          <span className="text-xs sm:text-sm">{fmt(it.total)}</span>
-                        )}
-                      </td>
-
-                      <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center align-top">
-                        <input
-                          type="checkbox"
-                          disabled={!editable}
-                          checked={it.free}
-                          onChange={(e) => toggleFree(idx, e.target.checked)}
-                          className="h-3.5 w-3.5 sm:h-4 sm:w-4"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                <tr className="bg-gray-100 font-semibold text-xs sm:text-sm">
-                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-right" colSpan={2}>
-                    Total Boxes
-                  </td>
-                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center">{totalQty}</td>
-                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1"></td>
-                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1 text-center">
-                    {fmt(subTotal)}
-                  </td>
-                  <td className="border px-1 py-0.5 sm:px-2 sm:py-1"></td>
-                </tr>
-              </tbody>
-            </table>
-
-            <p className="mt-1 text-[10px] sm:text-[11px] text-gray-500">
-              * Total Quantity counts only items whose unit is{" "}
-              <span className="font-semibold">box/boxes</span>. Units like ml /
-              litre / piece are not included.
-            </p>
-
-            <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-              <button
-                onClick={addLine}
-                className="px-3 sm:px-4 py-1 sm:py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-xs sm:text-sm"
-              >
-                + Add Line
-              </button>
-              <button
-                onClick={sortByUnitGroup}
-                className="px-3 sm:px-4 py-1 sm:py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-xs sm:text-sm"
-              >
-                Sort by Unit
-              </button>
-              <p className="text-[10px] sm:text-xs text-gray-500">
-                ✨ <strong>New:</strong> Press Enter after quantity on the last row to auto-add a new line.
-                Selecting a product auto-fills price/unit. Quantity is limited to stock.
-              </p>
-            </div>
-          </div>
-
-          {/* DISCOUNT / TOTAL */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-4 sm:mb-6">
+          {/* ── Actions ──────────────────────────────────────────── */}
+          <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
+            {/* Left side: Reset + Save Draft */}
             <div className="flex items-center gap-2">
-              <label className="text-xs sm:text-sm font-medium">Discount (%)</label>
-              <input
-                suppressHydrationWarning
-                type="number"
-                min={0}
-                max={100}
-                step="any"
-                value={discountPercent || ""}
-                onChange={(e) =>
-                  setDiscountPercent(Number(e.target.value || 0))
-                }
-                className="w-20 sm:w-28 border rounded px-1 py-0.5 sm:px-2 sm:py-1 text-xs sm:text-sm text-gray-900"
-              />
+              {/* Reset button — NOT in PDF (UI only) */}
+              <button
+                onClick={() => setShowResetDialog(true)}
+                className="px-3 sm:px-4 py-1 sm:py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 text-xs sm:text-sm"
+                title="Clear all entered data and start fresh"
+              >
+                🔄 Reset Form
+              </button>
+
+              {/* Save as Draft button */}
+              <button
+                onClick={saveDraft}
+                className="px-3 sm:px-4 py-1 sm:py-2 bg-amber-500 text-white rounded hover:bg-amber-600 text-xs sm:text-sm"
+                title="Save current bill as a draft to continue later"
+              >
+                💾 Save Draft
+              </button>
             </div>
 
-            <div className="text-right text-xs sm:text-sm">
-              <div>
-                Subtotal: <strong>{fmt(subTotal)}</strong>
-              </div>
-              <div className="text-base sm:text-lg font-bold">
-                Total after Discount: {fmt(discounted)}
-              </div>
-            </div>
-          </div>
+            {/* Right side: Prepare Bill + Export PDF */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePrepareBillClick}
+                disabled={!canUseBillingActions}
+                title={!canUseBillingActions ? getDisabledReason() : ""}
+                className="px-3 sm:px-4 py-1 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ✅ {isEditMode ? "Update Bill" : "Prepare Bill"}
+              </button>
 
-          {/* FOOTER - Payment & Banking */}
-          <div className="border-t pt-3 sm:pt-4">
-            <h3 className="text-xs sm:text-sm font-semibold mb-1 sm:mb-2">Payment & Banking</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
-              <div className="text-[10px] sm:text-xs">
-                <div>
-                  <strong>Bank:</strong>{" "}
-                  {bank?.bankName || seller?.bankName || "-"}
-                </div>
-                <div>
-                  <strong>Branch:</strong>{" "}
-                  {bank?.branchName || seller?.branchName || "-"}
-                </div>
-                <div>
-                  <strong>Account No:</strong>{" "}
-                  {bank?.accountNumber ||
-                    (seller as any)?.accountNumber ||
-                    (seller as any)?.accountNo ||
-                    "-"}
-                </div>
-                <div>
-                  <strong>IFSC:</strong>{" "}
-                  {bank?.ifscCode || (seller as any)?.ifscCode || "-"}
-                </div>
-                <div>
-                  <strong>In Favour of:</strong>{" "}
-                  {bank?.bankingName || seller?.bankingName || "-"}
-                </div>
-              </div>
+              {/* PDF Export — guarded */}
+              <button
+                onClick={handlePdfExportClick}
+                disabled={!canUseBillingActions}
+                title={!canUseBillingActions ? getDisabledReason() : ""}
+                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
+              >
+                📄 Export PDF
+              </button>
 
-              <div className="flex items-center justify-center">
-                {seller?.qrCodeUrl ? (
-                  <img
-                    src={seller.qrCodeUrl}
-                    alt="Payment QR"
-                    className="h-24 sm:h-32 object-contain"
-                  />
-                ) : (
-                  <div className="text-[10px] sm:text-xs text-gray-500">
-                    No payment QR available
-                  </div>
-                )}
-              </div>
-
-              <div className="text-right">
-                {seller?.signatureUrl ? (
-                  <img
-                    src={seller.signatureUrl}
-                    alt="Signature"
-                    className="h-12 sm:h-16 object-contain mx-auto"
-                  />
-                ) : (
-                  <div className="text-[10px] sm:text-xs text-gray-500">
-                    No signature uploaded
-                  </div>
-                )}
-                <div className="mt-1 sm:mt-2 text-[10px] sm:text-xs text-center">
-                  {seller?.slogan || ""}
-                </div>
+              {/* Hidden PDF ref component (still used programmatically) */}
+              <div className="hidden">
+                <PdfExportComponent
+                  ref={pdfExportRef}
+                  items={items}
+                  billingCustomer={billingCustomer}
+                  shippingCustomer={shippingCustomer}
+                  sameAsBilling={sameAsBilling}
+                  seller={seller}
+                  bank={bank}
+                  serialNo={serialNo}
+                  date={date}
+                  discountPercent={discountPercent}
+                  remarks={remarks}
+                />
               </div>
             </div>
-
-            <div className="mt-2 sm:mt-3">
-              <textarea
-                suppressHydrationWarning
-                placeholder="Remarks / Note (optional)"
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                className="w-full border rounded p-1 sm:p-2 text-[10px] sm:text-xs text-gray-900"
-                rows={2}
-              />
-            </div>
-          </div>
-
-          {/* ACTIONS */}
-          <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-end gap-2 sm:gap-3">
-            <button
-              onClick={handlePrepareBillClick}
-              className="px-3 sm:px-4 py-1 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm"
-            >
-              ✅ {isEditMode ? "Update Bill" : "Prepare Bill"}
-            </button>
-            <PdfExportComponent
-              ref={pdfExportRef}
-              items={items}
-              billingCustomer={billingCustomer}
-              shippingCustomer={shippingCustomer}
-              sameAsBilling={sameAsBilling}
-              seller={seller}
-              bank={bank}
-              serialNo={serialNo}
-              date={date}
-              discountPercent={discountPercent}
-              remarks={remarks}
-            />
           </div>
         </div>
       </main>
 
       <Footer />
 
-      {/* CONFIRM DIALOG */}
+      {/* ── Draft recovery dialog ─────────────────────────────── */}
+      {showDraftDialog && (
+        <DraftRecoveryDialog
+          draftDate={draftSavedAt}
+          onContinue={() => {
+            setShowDraftDialog(false);
+            loadDraft();
+          }}
+          onStartNew={() => {
+            setShowDraftDialog(false);
+            clearDraft();
+          }}
+        />
+      )}
+
+      {/* ── Reset confirmation dialog ─────────────────────────── */}
+      {showResetDialog && (
+        <ResetConfirmDialog
+          onConfirm={() => {
+            setShowResetDialog(false);
+            resetForm();
+          }}
+          onCancel={() => setShowResetDialog(false)}
+        />
+      )}
+
+      {/* ── Profile incomplete dialog ─────────────────────────── */}
+      {showProfileDialog && (
+        <ProfileIncompleteDialog
+          missingItems={profileMissingItems}
+          onClose={() => setShowProfileDialog(false)}
+          onGoToProfile={() => {
+            setShowProfileDialog(false);
+            router.push("/dashboard/profile");
+          }}
+        />
+      )}
+
+      {/* ── Confirm save dialog ───────────────────────────────── */}
       {showConfirm && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-2 sm:p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-xs sm:max-w-md w-full p-4 sm:p-6">
-            <h2 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2 text-gray-900">
-              Are you sure you want to {isEditMode ? "update" : "save"} this bill?
-            </h2>
-            <p className="text-[10px] sm:text-sm text-gray-700 mb-3 sm:mb-4">
-              On clicking <strong>OK</strong>, this bill will be {isEditMode ? "updated" : "saved"} to the Bill schema,
-              the order will be created, product stock will be reduced according to the
-              quantities in this bill, and the total will be added to this customer&apos;s
-              debit. After saving, the form will reset and the serial number will increment.
-            </p>
-            <div className="flex justify-end gap-2 sm:gap-3">
-              <button
-                onClick={() => {
-                  // Simply close the dialog without resetting the form
-                  setShowConfirm(false);
-                }}
-                className="px-3 sm:px-4 py-1 sm:py-2 rounded border border-gray-300 text-[10px] sm:text-sm text-gray-700 hover:bg-gray-50"
-                disabled={isSaving}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmSaveBill}
-                disabled={isSaving}
-                className="px-3 sm:px-4 py-1 sm:py-2 rounded bg-green-600 text-[10px] sm:text-sm text-white hover:bg-green-700 disabled:opacity-60"
-              >
-                {isSaving ? "Saving..." : "OK"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <BillingConfirmDialog
+          isEditMode={isEditMode}
+          isSaving={isSaving}
+          onConfirm={confirmSaveBill}
+          onCancel={() => setShowConfirm(false)}
+        />
       )}
     </div>
   );

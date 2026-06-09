@@ -419,6 +419,18 @@ export async function PATCH(req: NextRequest) {
         );
       }
 
+      // ── CHANGE 2: Block discard if delivery is Delivered or On the Way ──
+      const currentDelivery = order.deliveryStatus || "Pending";
+      if (currentDelivery === "Delivered" || currentDelivery === "On the Way") {
+        return NextResponse.json(
+          {
+            error: `Cannot discard this order because its delivery status is "${currentDelivery}". Only orders with "Pending" delivery status can be discarded.`,
+          },
+          { status: 400 }
+        );
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       const allItems = [
         ...(Array.isArray(order.items) ? order.items : []),
         ...(Array.isArray(order.freeItems) ? order.freeItems : []),
