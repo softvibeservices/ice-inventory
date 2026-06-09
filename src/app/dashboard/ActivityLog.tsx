@@ -154,24 +154,68 @@ function ActorAvatar({ name, role }: { name: string; role: ActorRole }) {
   );
 }
 
+function ChangedFieldsPill({
+  changedFields,
+}: {
+  changedFields?: Record<string, { before: unknown; after: unknown }>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (!changedFields || Object.keys(changedFields).length === 0) return null;
+
+  const entries = Object.entries(changedFields);
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+        className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-600 bg-violet-50 hover:bg-violet-100 border border-violet-200 px-2 py-0.5 rounded-full transition-colors"
+      >
+        <span>{entries.length} field{entries.length > 1 ? "s" : ""} changed</span>
+        <span className="text-[10px]">{expanded ? "▲" : "▼"}</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-2 rounded-lg border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100">
+          {entries.map(([field, diff]) => (
+            <div key={field} className="px-3 py-2 grid grid-cols-[auto_1fr_1fr] gap-x-3 items-start text-xs">
+              <span className="font-semibold text-slate-500 pt-0.5 whitespace-nowrap">{field}</span>
+              <span className="text-red-600 line-through break-words opacity-80">
+                {String(diff.before || "—")}
+              </span>
+              <span className="text-emerald-700 font-medium break-words">
+                {String(diff.after || "—")}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LogRow({ log }: { log: IActivityLogEntry }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const cfg = CATEGORY_CONFIG[log.category];
 
+  const changedFields = log.metadata?.changedFields as
+    | Record<string, { before: unknown; after: unknown }>
+    | undefined;
+
   return (
-    <div className="group grid grid-cols-[28px_1fr_auto] sm:grid-cols-[28px_1fr_180px_90px] gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 items-center">
+    <div className="group grid grid-cols-[28px_1fr_auto] sm:grid-cols-[28px_1fr_180px_90px] gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0 items-start">
 
       {/* Dot */}
-      <div className="flex justify-center pt-0.5">
+      <div className="flex justify-center pt-1.5">
         <span className={`block w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
       </div>
 
-      {/* Message + badge */}
+      {/* Message + badge + changed fields */}
       <div className="min-w-0">
         <p className="text-sm text-slate-800 leading-snug">{log.message}</p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           <CategoryBadge category={log.category} />
         </div>
+        <ChangedFieldsPill changedFields={changedFields} />
       </div>
 
       {/* Actor — hidden on mobile */}

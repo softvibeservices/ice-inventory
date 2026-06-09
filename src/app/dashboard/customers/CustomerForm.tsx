@@ -215,23 +215,20 @@ export default function CustomerForm({
             />
           </div>
 
-          {/* Total Sales */}
-          <div>
-            <label className="text-sm font-semibold text-slate-800">
-              Total Sales
-            </label>
-            <input
-              className={inputBase}
-              value={form.totalSales}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  totalSales: e.target.value.replace(/[^\d.-]/g, ""),
-                })
-              }
-              placeholder="0.00"
-            />
-          </div>
+          {/* Total Sales — read-only display when editing, hidden when adding */}
+          {editingId && (
+            <div>
+              <label className="text-sm font-semibold text-slate-800">
+                Total Sales
+              </label>
+              <div className="w-full border border-slate-200 rounded-lg px-3 py-2 bg-slate-50 text-slate-500 text-sm select-none cursor-not-allowed">
+                ₹{Number(form.totalSales || 0).toLocaleString("en-IN")}
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Auto-calculated from orders — not editable
+              </p>
+            </div>
+          )}
 
           {/* ================= ADDITIONAL CONTACTS ================= */}
           <div className="sm:col-span-2 xl:col-span-3">
@@ -290,15 +287,13 @@ export default function CustomerForm({
 
         {/* ================= ACTIONS ================= */}
         <div className="mt-5 flex justify-end gap-3">
-          {editingId && (
-            <button
+          <button
             onClick={onCancel}
-              type="button"
-              className="px-4 py-2 rounded-lg border border-slate-300 text-slate-800 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-          )}
+            type="button"
+            className="px-4 py-2 rounded-lg border border-slate-300 text-slate-800 hover:bg-slate-50"
+          >
+            {editingId ? "Cancel" : "Close"}
+          </button>
 
           <button
             type="submit"
