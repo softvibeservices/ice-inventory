@@ -4,10 +4,18 @@
 //  2. Add invoice usage display in the page header subtitle
 //  3. Add UpgradePromptModal state — shown when any mutation returns 403 upgradeRequired
 //  4. Import PlanLimitWarning and show it above the main card
+//
+// DEEP-LINK CHANGE (from Dashboard Delivery Overview):
+//  5. Import useSearchParams to read ?orderId=xxx from URL
+//  6. After all orders are loaded, if orderId param is present:
+//       a) Find the order across all tab buckets
+//       b) Switch to the matching tab (Unsettled / Debt / Settled / Discarded)
+//       c) Open the view modal for that order
+//       d) Clear the query param from the URL (replace state) so back/refresh works cleanly
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import PlanLimitWarning from "@/app/components/PlanLimitWarning";
@@ -125,6 +133,7 @@ function jsonAuthHeaders(): Record<string, string> {
 
 export default function OrdersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [userId, setUserId] = useState<string | null>(null);
   const [tab, setTab] = useState<TabFilter>("Unsettled");
@@ -159,17 +168,70 @@ export default function OrdersPage() {
   const [upgradeModal, setUpgradeModal] = useState(false);
 
   const invoicesUsed = subscription
-    ? (subscription.planId === "free_trial"
-        ? subscription.usage.invoicesUsedTotal
-        : subscription.usage.invoicesUsedThisMonth)
+    ? subscription.planId === "free_trial"
+      ? subscription.usage.invoicesUsedTotal
+      : subscription.usage.invoicesUsedThisMonth
     : null;
 
   const invoicesLimit = subscription
-    ? (subscription.planId === "free_trial"
-        ? subscription.effectiveLimits.invoicesTotal
-        : subscription.effectiveLimits.invoicesPerMonth)
+    ? subscription.planId === "free_trial"
+      ? subscription.effectiveLimits.invoicesTotal
+      : subscription.effectiveLimits.invoicesPerMonth
     : null;
   // ─────────────────────────────────────────────────────────────────────────
+
+  // ── DEEP-LINK: track whether we've already handled the ?orderId param ────
+  // We use a ref so we only auto-open once even if orders re-fetch.
+  const deepLinkHandled = useRef(false);
+
+  /**
+   * After every fetch that updates the four bucket arrays, check whether
+   * a ?orderId=xxx query param is present. If yes, find the order across
+   * all buckets, switch to the right tab, open the view modal, and clear
+   * the query param from the URL so refreshing/back doesn't re-trigger it.
+   */
+  const handleDeepLink = (
+    allUnsettled: Order[],
+    allSettled: Order[],
+    allDebt: Order[],
+    allDiscarded: Order[]
+  ) => {
+    if (deepLinkHandled.current) return;
+
+    const targetId = searchParams.get("orderId");
+    if (!targetId) return;
+
+    // Search across every bucket
+    const found =
+      allUnsettled.find((o) => o._id === targetId) ||
+      allDebt.find((o) => o._id === targetId) ||
+      allSettled.find((o) => o._id === targetId) ||
+      allDiscarded.find((o) => o._id === targetId);
+
+    if (!found) {
+      toast.error("Order not found. It may have been deleted.");
+      deepLinkHandled.current = true;
+      return;
+    }
+
+    // Determine which tab this order belongs to
+    let targetTab: TabFilter = "Unsettled";
+    if (allDiscarded.find((o) => o._id === targetId)) {
+      targetTab = "Discarded";
+    } else if (allDebt.find((o) => o._id === targetId)) {
+      targetTab = "Debt";
+    } else if (allSettled.find((o) => o._id === targetId)) {
+      targetTab = "Settled";
+    }
+
+    // Switch tab, open modal, clear the param
+    setTab(targetTab);
+    setViewOrder(found);
+    deepLinkHandled.current = true;
+
+    // Remove ?orderId from the URL without adding a new history entry
+    router.replace("/dashboard/orders");
+  };
 
   const handleEditOrder = async (order: Order) => {
     try {
@@ -221,7 +283,9 @@ export default function OrdersPage() {
     } catch (error: unknown) {
       console.error("Error changing delivery status:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to update delivery status"
+        error instanceof Error
+          ? error.message
+          : "Failed to update delivery status"
       );
     }
   };
@@ -288,7 +352,8 @@ export default function OrdersPage() {
         return;
       }
 
-      let packUnitVal: ReturnType<typeof parsePackUnit> | undefined = undefined;
+      let packUnitVal: ReturnType<typeof parsePackUnit> | undefined =
+        undefined;
 
       if (it.productId) {
         const prod = productsList.find((p) => p._id === it.productId);
@@ -466,6 +531,10 @@ export default function OrdersPage() {
       else if (tab === "Debt") setOrders(debt);
       else if (tab === "Discarded") setOrders(discarded);
       else setOrders(unsettled);
+
+      // ── DEEP-LINK: try to open the linked order after data is ready ──
+      handleDeepLink(unsettled, settled, debt, discarded);
+      // ─────────────────────────────────────────────────────────────────
     } catch (err: unknown) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to load orders");
@@ -542,7 +611,9 @@ export default function OrdersPage() {
       toast.success("Orders refreshed");
     } catch (err: unknown) {
       console.error(err);
-      toast.error(err instanceof Error ? err.message : "Failed to refresh orders");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to refresh orders"
+      );
     } finally {
       setLoading(false);
     }
@@ -760,7 +831,6 @@ export default function OrdersPage() {
 
       <main className="flex-grow">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
-
           {/* ── PHASE 8: Invoice limit warning above the main card ────────── */}
           {subscription && (
             <PlanLimitWarning
@@ -909,7 +979,9 @@ export default function OrdersPage() {
                         <option value="date-asc">Oldest first</option>
                       </optgroup>
                       <optgroup label="Last Edited">
-                        <option value="updated-desc">Recently edited first</option>
+                        <option value="updated-desc">
+                          Recently edited first
+                        </option>
                         <option value="updated-asc">Oldest edit first</option>
                       </optgroup>
                       <optgroup label="Amount">
