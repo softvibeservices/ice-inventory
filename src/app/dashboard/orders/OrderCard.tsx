@@ -4,13 +4,16 @@
 
 import { Order, TabFilter } from "@/types/orders.type";
 import DeliveryStatusBadge from "./DeliveryStatusBadge";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PencilLine } from "lucide-react";
 
 type OrderCardProps = {
   order: Order;
   area: string;
   tab: TabFilter;
+  // ── NEW: deep-link highlight ─────────────────────────────────────────────
+  isHighlighted?: boolean;
+  // ─────────────────────────────────────────────────────────────────────────
   onDiscard: (order: Order) => void;
   onOpenSettle: (order: Order) => void;
   onOpenDebtSettle: (order: Order) => void;
@@ -26,6 +29,7 @@ export default function OrderCard({
   order,
   area,
   tab,
+  isHighlighted = false,
   onDiscard,
   onOpenSettle,
   onOpenDebtSettle,
@@ -37,6 +41,36 @@ export default function OrderCard({
   const [selectedDeliveryStatus, setSelectedDeliveryStatus] = useState<
     "Pending" | "On the Way" | "Delivered"
   >("Pending");
+
+  // ── NEW: ref for scroll + highlight animation ─────────────────────────────
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [animating, setAnimating] = useState(false);
+
+  useEffect(() => {
+    if (!isHighlighted) return;
+
+    // Small delay so the modal closes first, then we scroll & animate
+    const scrollTimer = setTimeout(() => {
+      if (cardRef.current) {
+        cardRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+      setAnimating(true);
+    }, 350);
+
+    // Stop the animation after 3 s (matches CSS animation duration)
+    const clearTimer = setTimeout(() => {
+      setAnimating(false);
+    }, 3500);
+
+    return () => {
+      clearTimeout(scrollTimer);
+      clearTimeout(clearTimer);
+    };
+  }, [isHighlighted]);
+  // ──────────────────────────────────────────────────────────────────────────
 
   const formatQtySummary = (q?: Record<string, number>) => {
     if (!q) return "-";
@@ -80,18 +114,15 @@ export default function OrderCard({
     });
   };
 
-  // ✅ Check if the bill was edited after creation (updatedAt meaningfully differs from createdAt)
   const wasEdited = (): boolean => {
     if (!order.updatedAt || !order.createdAt) return false;
     const created = new Date(order.createdAt).getTime();
     const updated = new Date(order.updatedAt).getTime();
-    // Consider "edited" if updated more than 5 seconds after creation
     return updated - created > 5000;
   };
 
   const isEditDisabled = () => order.deliveryStatus === "Delivered";
 
-  // ── CHANGE 2: Discard is blocked when delivery is Delivered or On the Way ──
   const isDiscardDisabled = () =>
     order.deliveryStatus === "Delivered" ||
     order.deliveryStatus === "On the Way";
@@ -103,7 +134,6 @@ export default function OrderCard({
       return 'Cannot discard an order that is "On the Way". Change delivery status first.';
     return "";
   };
-  // ─────────────────────────────────────────────────────────────────────────
 
   const fmt = (n: number) => {
     const num = Number(n || 0);
@@ -134,7 +164,85 @@ export default function OrderCard({
 
   return (
     <>
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition-all">
+      {/*
+        Highlight: professional SaaS style (Linear / Notion / Jira approach).
+        - Warm amber left accent bar fades in and out
+        - Amber-tinted background wash that fully clears
+        - Micro-scale entrance (barely perceptible)
+        - Small "From Dashboard" pill top-right, fades away quietly
+        No rings, no banners, no blue. Total duration: 3.5 s.
+      */}
+      {animating && (
+        <style>{`
+          @keyframes oc-enter {
+            0%   { transform: scale(1); }
+            8%   { transform: scale(1.004); }
+            100% { transform: scale(1); }
+          }
+          @keyframes oc-wash {
+            0%   { background-color: rgba(254,243,199,0); }
+            12%  { background-color: rgba(254,243,199,0.65); }
+            60%  { background-color: rgba(254,243,199,0.3); }
+            100% { background-color: rgba(254,243,199,0); }
+          }
+          @keyframes oc-bar {
+            0%   { opacity: 0; transform: scaleY(0.4); }
+            10%  { opacity: 1; transform: scaleY(1); }
+            72%  { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          @keyframes oc-chip-in {
+            0%   { opacity: 0; transform: translateX(5px); }
+            100% { opacity: 1; transform: translateX(0); }
+          }
+          @keyframes oc-chip-out {
+            0%   { opacity: 1; }
+            100% { opacity: 0; }
+          }
+          .oc-highlighted {
+            animation: oc-enter 0.4s ease-out, oc-wash 3.5s ease-in-out;
+            border-color: #f59e0b !important;
+          }
+          .oc-bar { animation: oc-bar 3.5s ease-in-out; }
+          .oc-chip {
+            animation: oc-chip-in 0.2s ease-out,
+                       oc-chip-out 0.35s ease-in 2.9s forwards;
+          }
+        `}</style>
+      )}
+
+      <div
+        ref={cardRef}
+        className={`rounded-xl border bg-white shadow-sm hover:shadow-md transition-colors relative
+          ${animating ? "oc-highlighted border-amber-400" : "border-gray-200"}`}
+      >
+        {/* Left accent bar */}
+        {animating && (
+          <div
+            className="oc-bar absolute left-0 top-3 bottom-3 w-[3px] rounded-full bg-amber-400"
+            style={{ transformOrigin: "center" }}
+          />
+        )}
+
+        {/* "From Dashboard" pill — quiet, top-right, fades away */}
+        {animating && (
+          <div className="oc-chip absolute top-3 right-3 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-300">
+            <svg
+              className="w-2.5 h-2.5 text-amber-600 shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+            <span className="text-amber-700 text-[10px] font-semibold leading-none">
+              From Dashboard
+            </span>
+          </div>
+        )}
+
         <div className="p-4 space-y-3">
           {/* TOP ROW */}
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -146,7 +254,6 @@ export default function OrderCard({
 
                 <DeliveryStatusBadge status={order.deliveryStatus} />
 
-                {/* ✅ Edited badge */}
                 {edited && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 text-violet-700 text-[11px] font-semibold px-2.5 py-1">
                     <PencilLine className="w-3 h-3" />
@@ -243,7 +350,7 @@ export default function OrderCard({
             </div>
           </div>
 
-          {/* ✅ Last Edited row — only shown when the bill was actually edited */}
+          {/* Last Edited row */}
           {edited && (
             <div className="flex items-center gap-2 rounded-lg border border-violet-100 bg-violet-50 px-3 py-2 text-xs text-violet-700">
               <PencilLine className="w-3.5 h-3.5 shrink-0" />
@@ -314,7 +421,6 @@ export default function OrderCard({
 
               {tab === "Unsettled" && (
                 <>
-                  {/* ── CHANGE 2: Discard disabled for Delivered / On the Way ── */}
                   <button
                     onClick={() => !isDiscardDisabled() && onDiscard(order)}
                     disabled={isDiscardDisabled()}
@@ -327,7 +433,6 @@ export default function OrderCard({
                   >
                     Discard
                   </button>
-                  {/* ─────────────────────────────────────────────────────── */}
 
                   <button
                     onClick={() => onOpenSettle(order)}
@@ -420,7 +525,7 @@ export default function OrderCard({
                             viewBox="0 0 20 20"
                           >
                             <path
-              fillRule="evenodd"
+                              fillRule="evenodd"
                               d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
                               clipRule="evenodd"
                             />
