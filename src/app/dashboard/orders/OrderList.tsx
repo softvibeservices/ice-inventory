@@ -17,6 +17,9 @@ type OrderListProps = {
   sortMode: SortMode;
   loading: boolean;
   userId: string | null;
+  // ── NEW: deep-link highlight ─────────────────────────────────────────────
+  highlightOrderId?: string | null;
+  // ─────────────────────────────────────────────────────────────────────────
   onRefresh: () => void;
   onClearFilters: () => void;
   onSetSearch: (search: string) => void;
@@ -59,6 +62,7 @@ export default function OrderList({
   sortMode,
   loading,
   userId,
+  highlightOrderId,
   onRefresh,
   onClearFilters,
   onSetSearch,
@@ -96,7 +100,6 @@ export default function OrderList({
       return { order, customer: cust, area, areaLower: area.toLowerCase() };
     });
 
-    // Search comes from page.tsx only
     if (q) {
       list = list.filter(({ order, customer, areaLower }) => {
         const hay: string[] = [
@@ -134,7 +137,6 @@ export default function OrderList({
       });
     }
 
-    // Delivery filter lives here only
     if (deliveryFilter !== "All") {
       list = list.filter(({ order }) => {
         if (deliveryFilter === "Unassigned") return !order.deliveryPartnerId;
@@ -145,7 +147,6 @@ export default function OrderList({
       });
     }
 
-    // Sort — includes new updated-desc / updated-asc modes
     list.sort((a, b) => {
       const oa = a.order;
       const ob = b.order;
@@ -184,7 +185,6 @@ export default function OrderList({
           return cmpStr(oa.serialNumber, ob.serialNumber);
         case "serial-desc":
           return cmpStr(ob.serialNumber, oa.serialNumber);
-        // ✅ NEW sort modes — fall back to createdAt when updatedAt is absent
         case "updated-desc":
           return (
             new Date(ob.updatedAt || ob.createdAt || 0).getTime() -
@@ -200,8 +200,19 @@ export default function OrderList({
       }
     });
 
+    // ── DEEP-LINK: if a highlight target exists and it's in the list,
+    //    float it to position 0 so it's always visible on the first page
+    //    without the user having to hunt for it.
+    if (highlightOrderId) {
+      const idx = list.findIndex(({ order }) => order._id === highlightOrderId);
+      if (idx > 0) {
+        const [target] = list.splice(idx, 1);
+        list.unshift(target);
+      }
+    }
+
     return list;
-  }, [orders, customerById, search, deliveryFilter, sortMode]);
+  }, [orders, customerById, search, deliveryFilter, sortMode, highlightOrderId]);
 
   const totalPages = Math.ceil(displayOrders.length / ITEMS_PER_PAGE);
 
@@ -501,6 +512,8 @@ export default function OrderList({
             const canRevertDelivery =
               isDelivered && !!userId && canBeRevertedByTab;
 
+            const isHighlighted = highlightOrderId === order._id;
+
             return (
               <div key={order._id} className="relative">
                 <div className="absolute -left-2 -top-2 z-10">
@@ -509,10 +522,12 @@ export default function OrderList({
                   </div>
                 </div>
 
+                {/* ── NEW: pass isHighlighted down so OrderCard can animate ── */}
                 <OrderCard
                   order={order}
                   area={area}
                   tab={tab}
+                  isHighlighted={isHighlighted}
                   onDiscard={onDiscard}
                   onOpenSettle={onOpenSettle}
                   onOpenDebtSettle={onOpenDebtSettle}
@@ -520,6 +535,7 @@ export default function OrderList({
                   onEdit={onEdit}
                   onChangeDeliveryStatus={onChangeDeliveryStatus}
                 />
+                {/* ─────────────────────────────────────────────────────────── */}
 
                 {canRevertDelivery && (
                   <div className="mt-1.5 flex justify-end px-1">

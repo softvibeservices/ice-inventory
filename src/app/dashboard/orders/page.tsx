@@ -11,7 +11,8 @@
 //       a) Find the order across all tab buckets
 //       b) Switch to the matching tab (Unsettled / Debt / Settled / Discarded)
 //       c) Open the view modal for that order
-//       d) Clear the query param from the URL (replace state) so back/refresh works cleanly
+//       d) Set highlightOrderId so the card animates on scroll
+//       e) Clear the query param from the URL (replace state) so back/refresh works cleanly
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
@@ -163,6 +164,9 @@ export default function OrdersPage() {
   const [debtOrders, setDebtOrders] = useState<Order[]>([]);
   const [discardedOrders, setDiscardedOrders] = useState<Order[]>([]);
 
+  // ── DEEP-LINK: highlight state — cleared after animation completes ────────
+  const [highlightOrderId, setHighlightOrderId] = useState<string | null>(null);
+
   // ── PHASE 8: Subscription data ────────────────────────────────────────────
   const { subscription } = useSubscription();
   const [upgradeModal, setUpgradeModal] = useState(false);
@@ -181,14 +185,14 @@ export default function OrdersPage() {
   // ─────────────────────────────────────────────────────────────────────────
 
   // ── DEEP-LINK: track whether we've already handled the ?orderId param ────
-  // We use a ref so we only auto-open once even if orders re-fetch.
   const deepLinkHandled = useRef(false);
 
   /**
    * After every fetch that updates the four bucket arrays, check whether
    * a ?orderId=xxx query param is present. If yes, find the order across
-   * all buckets, switch to the right tab, open the view modal, and clear
-   * the query param from the URL so refreshing/back doesn't re-trigger it.
+   * all buckets, switch to the right tab, open the view modal, set the
+   * highlight ID so the card animates, and clear the query param from the
+   * URL so refreshing/back doesn't re-trigger it.
    */
   const handleDeepLink = (
     allUnsettled: Order[],
@@ -224,9 +228,16 @@ export default function OrdersPage() {
       targetTab = "Settled";
     }
 
-    // Switch tab, open modal, clear the param
+    // Switch tab, open modal, set highlight, clear the param
     setTab(targetTab);
     setViewOrder(found);
+
+    // ── NEW: set highlight so OrderCard can scroll + animate ──────────────
+    setHighlightOrderId(targetId);
+    // Auto-clear after 4 s (animation runs for 3 s, give 1 s buffer)
+    setTimeout(() => setHighlightOrderId(null), 4000);
+    // ──────────────────────────────────────────────────────────────────────
+
     deepLinkHandled.current = true;
 
     // Remove ?orderId from the URL without adding a new history entry
@@ -268,12 +279,10 @@ export default function OrdersPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        // ── PHASE 8: catch upgradeRequired on any PATCH ───────────────
         if (response.status === 403 && data?.upgradeRequired) {
           setUpgradeModal(true);
           return;
         }
-        // ─────────────────────────────────────────────────────────────
         toast.error(data.error || "Failed to update delivery status");
         return;
       }
@@ -1043,6 +1052,9 @@ export default function OrdersPage() {
                 debtOrders={debtOrders}
                 discardedOrders={discardedOrders}
                 userId={userId}
+                // ── NEW: deep-link highlight ───────────────────────────────
+                highlightOrderId={highlightOrderId}
+                // ──────────────────────────────────────────────────────────
               />
             </div>
           </div>

@@ -43,12 +43,10 @@ export default function DeliveryOverview({
   const ITEMS_PER_PAGE = 8;
 
   // ========= DERIVED DATA =========
-  // ✅ Filter out discarded orders
   const activeOrders = useMemo(() => {
     return orders.filter((o) => !o.discardedAt);
   }, [orders]);
 
-  // ✅ Unsettled Pending/On the Way orders
   const unsettledPendingOrOnTheWay = useMemo(() => {
     return activeOrders.filter(
       (o) =>
@@ -57,7 +55,6 @@ export default function DeliveryOverview({
     );
   }, [activeOrders]);
 
-  // ✅ Debt Pending/On the Way orders
   const debtPendingOrOnTheWay = useMemo(() => {
     return activeOrders.filter(
       (o) =>
@@ -67,7 +64,6 @@ export default function DeliveryOverview({
     );
   }, [activeOrders]);
 
-  // ✅ Delivered but Unsettled orders
   const deliveredButUnsettled = useMemo(() => {
     return activeOrders.filter(
       (o) =>
@@ -179,11 +175,6 @@ export default function DeliveryOverview({
   };
 
   // ========= NAVIGATE TO ORDER =========
-  /**
-   * Navigates to /dashboard/orders with the orderId as a query param.
-   * The Orders page reads this param on mount and opens the view modal
-   * for the matching order, jumping to the correct tab automatically.
-   */
   const handleViewOrder = (order: Order) => {
     router.push(`/dashboard/orders?orderId=${order._id}`);
   };
@@ -249,9 +240,9 @@ export default function DeliveryOverview({
         key={o._id}
         className="bg-white border border-gray-200 rounded-lg px-2.5 py-2 sm:px-3 sm:py-2.5 shadow-sm hover:shadow-md transition-shadow"
       >
-        {/* Top row: customer info + delivery status badge */}
-        <div className="flex justify-between items-start mb-1.5">
-          <div className="flex-1 min-w-0 pr-2">
+        {/* Top row: customer info + delivery status badge + view button */}
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex-1 min-w-0">
             <p className="text-[11px] sm:text-xs font-semibold text-gray-900 truncate">
               {o.customerName}
             </p>
@@ -259,13 +250,25 @@ export default function DeliveryOverview({
               {o.shopName}
             </p>
           </div>
-          <span className="flex-shrink-0 text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">
-            {o.deliveryStatus}
-          </span>
+
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">
+              {o.deliveryStatus}
+            </span>
+
+            {/* ── View Order: compact icon-only button with tooltip ── */}
+            <button
+              onClick={() => handleViewOrder(o)}
+              title="View order details"
+              className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-700 hover:bg-slate-800 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-1 flex-shrink-0"
+            >
+              <ExternalLink className="w-3 h-3" />
+            </button>
+          </div>
         </div>
 
         {/* Details */}
-        <div className="text-[9px] sm:text-[10px] text-gray-600 space-y-0.5">
+        <div className="text-[9px] sm:text-[10px] text-gray-600 space-y-0.5 mt-1.5">
           <p>
             <span className="font-medium">Date:</span>{" "}
             {formatBillDate(o.createdAt)}
@@ -295,17 +298,6 @@ export default function DeliveryOverview({
               </p>
             </>
           )}
-        </div>
-
-        {/* ── View Order Button ── */}
-        <div className="mt-2 pt-1.5 border-t border-gray-100">
-          <button
-            onClick={() => handleViewOrder(o)}
-            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-[10px] sm:text-xs font-semibold rounded-md bg-slate-700 hover:bg-slate-800 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-1"
-          >
-            <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5 flex-shrink-0" />
-            View Order
-          </button>
         </div>
       </li>
     );
