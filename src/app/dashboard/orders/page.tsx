@@ -832,13 +832,30 @@ function OrdersPageInner() {
 
   const currentTabMeta = tabMeta[tab];
 
+  // Tab config for the horizontal pill navigation
+  const TAB_CONFIG = [
+    { id: "Unsettled" as TabFilter, label: "Unsettled", count: unsettledOrders.length,
+      dot: "bg-amber-400", activeBg: "bg-amber-50 border-amber-300 text-amber-800",
+      inactiveBg: "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50" },
+    { id: "Debt" as TabFilter, label: "Debt", count: debtOrders.length,
+      dot: "bg-blue-400", activeBg: "bg-blue-50 border-blue-300 text-blue-800",
+      inactiveBg: "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50" },
+    { id: "Settled" as TabFilter, label: "Settled", count: settledOrders.length,
+      dot: "bg-emerald-400", activeBg: "bg-emerald-50 border-emerald-300 text-emerald-800",
+      inactiveBg: "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50" },
+    { id: "Discarded" as TabFilter, label: "Discarded", count: discardedOrders.length,
+      dot: "bg-red-400", activeBg: "bg-red-50 border-red-300 text-red-700",
+      inactiveBg: "border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50" },
+  ] as const;
+
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
+    <div className="flex flex-col min-h-screen bg-[#f8f9fb]">
       <DashboardNavbar />
 
       <main className="flex-grow">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
-          {/* ── PHASE 8: Invoice limit warning above the main card ────────── */}
+        <div className="max-w-[1400px] mx-auto px-3 sm:px-5 lg:px-8 py-5 sm:py-7">
+
+          {/* Plan limit warning */}
           {subscription && (
             <PlanLimitWarning
               invoicesUsed={invoicesUsed}
@@ -846,216 +863,118 @@ function OrdersPageInner() {
               planId={subscription.planId}
             />
           )}
-          {/* ─────────────────────────────────────────────────────────────── */}
 
-          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-            {/* Header */}
-            <div className="px-4 sm:px-5 lg:px-6 py-5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-11 h-11 rounded-2xl bg-slate-900 text-white flex items-center justify-center shrink-0">
-                      <ClipboardList className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <h1 className="text-xl sm:text-2xl font-bold text-slate-900">
-                        Order Management
-                      </h1>
-                      {/* ── PHASE 8: Invoice usage in subtitle ── */}
-                      <p className="text-sm text-slate-600 mt-0.5">
-                        {invoicesUsed !== null && invoicesLimit !== null
-                          ? `${invoicesUsed} / ${invoicesLimit} ${
-                              subscription?.planId === "free_trial"
-                                ? "trial invoices used"
-                                : "invoices this month"
-                            }`
-                          : "Manage settlement, delivery and discarded order flow in one place."}
-                      </p>
-                      {/* ─────────────────────────────────────────── */}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <div
-                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${currentTabMeta.activeClass}`}
-                  >
-                    <currentTabMeta.icon
-                      className={`w-4 h-4 ${currentTabMeta.iconClass}`}
-                    />
-                    <span>{currentTabMeta.label}</span>
-                    <span className="rounded-full bg-white/80 px-2 py-0.5 text-xs font-semibold">
-                      {currentTabMeta.count}
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={refreshCurrentTab}
-                    disabled={loading}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
-                  >
-                    <RotateCcw
-                      className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
-                    />
-                    Refresh
-                  </button>
-                </div>
-              </div>
+          {/* ── PAGE HEADER ─────────────────────────────────────────────── */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                Orders
+              </h1>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {invoicesUsed !== null && invoicesLimit !== null
+                  ? `${invoicesUsed} / ${invoicesLimit} ${subscription?.planId === "free_trial" ? "trial invoices used" : "invoices this month"}`
+                  : "Track, settle, and manage every order in one place"}
+              </p>
             </div>
 
-            {/* Tabs */}
-            <div className="px-4 sm:px-5 lg:px-6 py-4 border-b border-slate-200 bg-white">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {(Object.keys(tabMeta) as TabFilter[]).map((key) => {
-                  const meta = tabMeta[key];
-                  const Icon = meta.icon;
-                  const isActive = tab === key;
-
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setTab(key)}
-                      className={`text-left rounded-2xl border px-4 py-3.5 transition ${
-                        isActive
-                          ? meta.activeClass + " shadow-sm"
-                          : "border-slate-200 bg-white hover:bg-slate-50 text-slate-800"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Icon
-                              className={`w-4 h-4 ${
-                                isActive ? meta.iconClass : "text-slate-500"
-                              }`}
-                            />
-                            <div className="text-sm font-semibold">
-                              {meta.label}
-                            </div>
-                          </div>
-                          <div className="text-xs text-slate-500 leading-relaxed">
-                            {meta.description}
-                          </div>
-                        </div>
-
-                        <div className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                          {meta.count}
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
+            <div className="flex items-center gap-2">
+              {/* Search — lives in header for immediate access */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search orders…"
+                  className="pl-8 pr-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-48 sm:w-64 transition"
+                />
               </div>
-            </div>
 
-            {/* MASTER CONTROL BAR */}
-            <div className="px-4 sm:px-5 lg:px-6 py-4 bg-slate-50/70 border-b border-slate-200">
-              <div className="flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
-                <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    {currentTabMeta.label} Orders
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {currentTabMeta.description}
-                  </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-2 w-full xl:w-auto">
-                  {/* Search */}
-                  <div className="relative w-full sm:min-w-[260px]">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search by serial, customer, shop, contact..."
-                      className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-
-                  {/* Sort */}
-                  <div className="relative w-full sm:min-w-[240px]">
-                    <SlidersHorizontal className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <select
-                      value={sortMode}
-                      onChange={(e) => setSortMode(e.target.value as SortMode)}
-                      className="w-full appearance-none rounded-xl border border-slate-300 bg-white pl-9 pr-10 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <optgroup label="Bill Date">
-                        <option value="date-desc">Newest first</option>
-                        <option value="date-asc">Oldest first</option>
-                      </optgroup>
-                      <optgroup label="Last Edited">
-                        <option value="updated-desc">
-                          Recently edited first
-                        </option>
-                        <option value="updated-asc">Oldest edit first</option>
-                      </optgroup>
-                      <optgroup label="Amount">
-                        <option value="total-desc">Highest amount</option>
-                        <option value="total-asc">Lowest amount</option>
-                      </optgroup>
-                      <optgroup label="Shop">
-                        <option value="shop-asc">Shop A → Z</option>
-                        <option value="shop-desc">Shop Z → A</option>
-                      </optgroup>
-                      <optgroup label="Customer">
-                        <option value="customer-asc">Customer A → Z</option>
-                        <option value="customer-desc">Customer Z → A</option>
-                      </optgroup>
-                      <optgroup label="Area">
-                        <option value="area-asc">Area A → Z</option>
-                        <option value="area-desc">Area Z → A</option>
-                      </optgroup>
-                      <optgroup label="Serial">
-                        <option value="serial-asc">Serial low → high</option>
-                        <option value="serial-desc">Serial high → low</option>
-                      </optgroup>
-                    </select>
-                  </div>
-
-                  {(search || sortMode !== "date-desc") && (
-                    <button
-                      onClick={handleClearFilters}
-                      className="w-full sm:w-auto rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
+              {/* Sort select */}
+              <div className="relative">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  className="appearance-none pl-8 pr-7 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <optgroup label="Date"><option value="date-desc">Newest</option><option value="date-asc">Oldest</option></optgroup>
+                  <optgroup label="Edited"><option value="updated-desc">Recently edited</option><option value="updated-asc">Oldest edit</option></optgroup>
+                  <optgroup label="Amount"><option value="total-desc">Highest</option><option value="total-asc">Lowest</option></optgroup>
+                  <optgroup label="Shop"><option value="shop-asc">Shop A→Z</option><option value="shop-desc">Shop Z→A</option></optgroup>
+                  <optgroup label="Customer"><option value="customer-asc">Customer A→Z</option><option value="customer-desc">Customer Z→A</option></optgroup>
+                  <optgroup label="Area"><option value="area-asc">Area A→Z</option><option value="area-desc">Area Z→A</option></optgroup>
+                  <optgroup label="Serial"><option value="serial-asc">Serial ↑</option><option value="serial-desc">Serial ↓</option></optgroup>
+                </select>
               </div>
-            </div>
 
-            {/* Order List */}
-            <div className="px-3 sm:px-4 lg:px-6 py-4 sm:py-5">
-              <OrderList
-                tab={tab}
-                orders={orders}
-                customers={customers}
-                search={search}
-                sortMode={sortMode}
-                loading={loading}
-                onRefresh={refreshCurrentTab}
-                onClearFilters={handleClearFilters}
-                onSetSearch={setSearch}
-                onSetSortMode={setSortMode}
-                onDiscard={handleDiscard}
-                onOpenSettle={openSettleModal}
-                onOpenDebtSettle={openDebtSettleModal}
-                onOpenView={openViewModal}
-                onEdit={handleEditOrder}
-                onChangeDeliveryStatus={handleChangeDeliveryStatus}
-                unsettledOrders={unsettledOrders}
-                settledOrders={settledOrders}
-                debtOrders={debtOrders}
-                discardedOrders={discardedOrders}
-                userId={userId}
-                // ── NEW: deep-link highlight ───────────────────────────────
-                highlightOrderId={highlightOrderId}
-                // ──────────────────────────────────────────────────────────
-              />
+              {(search || sortMode !== "date-desc") && (
+                <button
+                  onClick={handleClearFilters}
+                  className="px-3 py-2 text-sm rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Clear
+                </button>
+              )}
+
+              <button
+                onClick={refreshCurrentTab}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition disabled:opacity-50"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
             </div>
           </div>
+
+          {/* ── TAB BAR ─────────────────────────────────────────────────── */}
+          <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-0.5 scrollbar-hide">
+            {TAB_CONFIG.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition whitespace-nowrap ${
+                  tab === t.id ? t.activeBg : t.inactiveBg
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${t.dot} ${tab !== t.id ? "opacity-40" : ""}`} />
+                {t.label}
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${
+                  tab === t.id ? "bg-white/70" : "bg-slate-100 text-slate-500"
+                }`}>
+                  {t.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* ── ORDER LIST (table) ──────────────────────────────────────── */}
+          <OrderList
+            tab={tab}
+            orders={orders}
+            customers={customers}
+            search={search}
+            sortMode={sortMode}
+            loading={loading}
+            onRefresh={refreshCurrentTab}
+            onClearFilters={handleClearFilters}
+            onSetSearch={setSearch}
+            onSetSortMode={setSortMode}
+            onDiscard={handleDiscard}
+            onOpenSettle={openSettleModal}
+            onOpenDebtSettle={openDebtSettleModal}
+            onOpenView={openViewModal}
+            onEdit={handleEditOrder}
+            onChangeDeliveryStatus={handleChangeDeliveryStatus}
+            unsettledOrders={unsettledOrders}
+            settledOrders={settledOrders}
+            debtOrders={debtOrders}
+            discardedOrders={discardedOrders}
+            userId={userId}
+            highlightOrderId={highlightOrderId}
+          />
+
         </div>
       </main>
 
