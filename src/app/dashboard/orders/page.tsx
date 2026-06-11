@@ -10,12 +10,12 @@
 //  6. After all orders are loaded, if orderId param is present:
 //       a) Find the order across all tab buckets
 //       b) Switch to the matching tab (Unsettled / Debt / Settled / Discarded)
-//       c) Open the view modal for that order
-//       d) Set highlightOrderId so the card animates on scroll
+//       c) Set highlightOrderId — card scrolls into view and animates
+//       d) NO modal is opened — just highlight + scroll, non-intrusive
 //       e) Clear the query param from the URL (replace state) so back/refresh works cleanly
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
@@ -132,7 +132,7 @@ function jsonAuthHeaders(): Record<string, string> {
   };
 }
 
-export default function OrdersPage() {
+function OrdersPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -228,15 +228,13 @@ export default function OrdersPage() {
       targetTab = "Settled";
     }
 
-    // Switch tab, open modal, set highlight, clear the param
+    // Switch tab, highlight the card — NO modal, just scroll + animate
     setTab(targetTab);
-    setViewOrder(found);
 
-    // ── NEW: set highlight so OrderCard can scroll + animate ──────────────
+    // Set highlight so OrderCard can scroll into view and animate
     setHighlightOrderId(targetId);
-    // Auto-clear after 4 s (animation runs for 3 s, give 1 s buffer)
-    setTimeout(() => setHighlightOrderId(null), 4000);
-    // ──────────────────────────────────────────────────────────────────────
+    // Auto-clear after 4.5 s (animation runs for 3.5 s, give 1 s buffer)
+    setTimeout(() => setHighlightOrderId(null), 4500);
 
     deepLinkHandled.current = true;
 
@@ -1101,5 +1099,23 @@ export default function OrdersPage() {
       />
       {/* ─────────────────────────────────────────────────────────────────── */}
     </div>
+  );
+}
+
+// ── Suspense wrapper required by Next.js 14 for useSearchParams() ─────────────
+// useSearchParams() must be inside a Suspense boundary, otherwise the whole
+// page bails out of static pre-rendering and throws at build time.
+export default function OrdersPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col min-h-screen bg-slate-50 items-center justify-center gap-3">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-slate-500">Loading orders…</p>
+        </div>
+      }
+    >
+      <OrdersPageInner />
+    </Suspense>
   );
 }

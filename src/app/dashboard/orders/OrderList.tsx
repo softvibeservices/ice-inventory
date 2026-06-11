@@ -200,19 +200,8 @@ export default function OrderList({
       }
     });
 
-    // ── DEEP-LINK: if a highlight target exists and it's in the list,
-    //    float it to position 0 so it's always visible on the first page
-    //    without the user having to hunt for it.
-    if (highlightOrderId) {
-      const idx = list.findIndex(({ order }) => order._id === highlightOrderId);
-      if (idx > 0) {
-        const [target] = list.splice(idx, 1);
-        list.unshift(target);
-      }
-    }
-
     return list;
-  }, [orders, customerById, search, deliveryFilter, sortMode, highlightOrderId]);
+  }, [orders, customerById, search, deliveryFilter, sortMode]);
 
   const totalPages = Math.ceil(displayOrders.length / ITEMS_PER_PAGE);
 
@@ -225,6 +214,18 @@ export default function OrderList({
   useEffect(() => {
     setCurrentPage(1);
   }, [search, sortMode, tab, deliveryFilter]);
+
+  // ── DEEP-LINK: when a highlight target arrives, jump to whichever page
+  //    it naturally lives on (no reordering). The card scrolls itself into
+  //    view via its own useEffect once it mounts on that page.
+  useEffect(() => {
+    if (!highlightOrderId) return;
+    const idx = displayOrders.findIndex(({ order }) => order._id === highlightOrderId);
+    if (idx === -1) return;
+    const targetPage = Math.floor(idx / ITEMS_PER_PAGE) + 1;
+    setCurrentPage(targetPage);
+    setViewAll(false);
+  }, [highlightOrderId, displayOrders]);
 
   useEffect(() => {
     setDeliveryFilter("All");
