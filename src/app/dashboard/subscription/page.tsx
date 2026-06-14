@@ -728,7 +728,7 @@ export default function SubscriptionPage() {
   // ── Loading state ──────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex flex-col min-h-screen bg-gray-50">
+      <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
         <DashboardNavbar />
         <main className="flex-grow flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
@@ -744,7 +744,7 @@ export default function SubscriptionPage() {
   // ── Error state ────────────────────────────────────────────────────────────
   if (error || !sub) {
     return (
-      <div className="flex flex-col min-h-screen bg-gray-50">
+      <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
         <DashboardNavbar />
         <main className="flex-grow flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl border border-red-200 p-8 max-w-md w-full text-center">
@@ -799,7 +799,7 @@ export default function SubscriptionPage() {
         }}
       />
 
-      <div className="flex flex-col min-h-screen bg-gray-50">
+      <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
         <DashboardNavbar />
 
         <Modal

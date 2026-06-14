@@ -437,7 +437,7 @@ const res = await fetch(
   const canRenderMap = pulsingIcon && startIcon && location && L;
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow w-full px-3 sm:px-5 lg:px-8 py-6">
