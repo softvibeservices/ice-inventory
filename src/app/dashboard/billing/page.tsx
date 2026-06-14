@@ -191,6 +191,7 @@ export default function BillingPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [loadingData, setLoadingData] = useState<boolean>(true);
 
   // ── Customer selection ─────────────────────────────────────────────────────
   const [billingCustomer, setBillingCustomer] = useState<Customer | null>(null);
@@ -810,6 +811,7 @@ export default function BillingPage() {
     const stored = localStorage.getItem("user");
     if (!stored) {
       toast.error("User not found in localStorage");
+      setLoadingData(false);
       return;
     }
     const parsed = JSON.parse(stored);
@@ -818,80 +820,79 @@ export default function BillingPage() {
 
     const token = localStorage.getItem("token");
 
-    // Seller
-    fetch(`/api/seller-details`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => safeJson(r))
-      .then((s) => {
-        if (s && !s.error) setSeller(s);
-      })
-      .catch(() => {});
-
-    // Customers
-    fetch(`/api/customers`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => safeJson(r))
-      .then((data) => {
-        if (!data) return;
-        let arr: any[] = [];
-        if (Array.isArray(data)) arr = data;
-        else if (Array.isArray((data as any).customers))
-          arr = (data as any).customers;
-        else
-          arr = Object.values(data)
-            .filter((v) => Array.isArray(v))
-            .flat();
-        if (arr.length) {
-          const mapped = arr.map((c: any) => ({
-            _id: c._id,
-            name: c.name,
-            contact: Array.isArray(c.contacts)
-              ? c.contacts[0]
-              : c.contacts ?? c.contact ?? "",
-            address: c.shopAddress ?? c.address ?? "",
-            shopName: c.shopName ?? "",
-            shopAddress: c.shopAddress ?? c.address ?? "",
-          }));
-          setCustomers(mapped);
-        }
-      })
-      .catch(() => {});
-
-    // Products
-    fetch(`/api/products`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => safeJson(r))
-      .then((data) => {
-        if (!data) return;
-        if (Array.isArray(data)) setProducts(data as Product[]);
-        else if (Array.isArray((data as any).products))
-          setProducts((data as any).products as Product[]);
-        else {
-          const arr = Object.values(data)
-            .filter((v) => Array.isArray(v))
-            .flat();
-          if (arr.length) setProducts(arr[0] as Product[]);
-        }
-      })
-      .catch(() => {});
-
-    // Serial
-    const initializeSerial = async () => {
+    const loadAllInitialData = async () => {
       try {
+        setLoadingData(true);
+        const [sellerRes, customersRes, productsRes] = await Promise.all([
+          fetch(`/api/seller-details`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then((r) => safeJson(r)),
+          fetch(`/api/customers`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then((r) => safeJson(r)),
+          fetch(`/api/products`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then((r) => safeJson(r)),
+        ]);
+
+        // Seller
+        if (sellerRes && !sellerRes.error) {
+          setSeller(sellerRes);
+        }
+
+        // Customers
+        if (customersRes) {
+          let arr: any[] = [];
+          if (Array.isArray(customersRes)) arr = customersRes;
+          else if (Array.isArray((customersRes as any).customers))
+            arr = (customersRes as any).customers;
+          else
+            arr = Object.values(customersRes)
+              .filter((v) => Array.isArray(v))
+              .flat();
+          if (arr.length) {
+            const mapped = arr.map((c: any) => ({
+              _id: c._id,
+              name: c.name,
+              contact: Array.isArray(c.contacts)
+                ? c.contacts[0]
+                : c.contacts ?? c.contact ?? "",
+              address: c.shopAddress ?? c.address ?? "",
+              shopName: c.shopName ?? "",
+              shopAddress: c.shopAddress ?? c.address ?? "",
+            }));
+            setCustomers(mapped);
+          }
+        }
+
+        // Products
+        if (productsRes) {
+          if (Array.isArray(productsRes)) setProducts(productsRes as Product[]);
+          else if (Array.isArray((productsRes as any).products))
+            setProducts((productsRes as any).products as Product[]);
+          else {
+            const arr = Object.values(productsRes)
+              .filter((v) => Array.isArray(v))
+              .flat();
+            if (arr.length) setProducts(arr[0] as Product[]);
+          }
+        }
+
+        // Serial
         const cachedPreview = sessionStorage.getItem("billing-serial-preview");
         if (cachedPreview) {
           setSerialNo(cachedPreview);
-          return;
+        } else {
+          await fetchNextSerialPreview(uid);
         }
-        await fetchNextSerialPreview(uid);
       } catch (err) {
-        console.error("Error initializing serial:", err);
+        console.error("Error loading initial billing data:", err);
+      } finally {
+        setLoadingData(false);
       }
     };
-    initializeSerial();
+
+    loadAllInitialData();
     updateDateToToday();
   }, []);
 
@@ -1377,8 +1378,8 @@ export default function BillingPage() {
   // ── Derived flags for button disabling ─────────────────────────────────────
   const profileComplete = isProfileComplete();
   const customersExist = hasCustomers();
-  // Buttons that require profile + customers
-  const canUseBillingActions = profileComplete && customersExist;
+  // Buttons that require profile + customers (and loading to be finished)
+  const canUseBillingActions = profileComplete && customersExist && !loadingData;
 
   // ── Tooltip text when buttons are disabled ─────────────────────────────────
   const getDisabledReason = () => {
@@ -1405,7 +1406,7 @@ export default function BillingPage() {
           </h1>
 
           {/* ── Profile / customer warning banners ──────────────── */}
-          {!profileComplete && (
+          {!loadingData && !profileComplete && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
               <span className="text-lg mt-0.5">⚠️</span>
               <div>
@@ -1429,7 +1430,7 @@ export default function BillingPage() {
             </div>
           )}
 
-          {!customersExist && (
+          {!loadingData && !customersExist && (
             <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
               <span className="text-lg mt-0.5">👥</span>
               <div>

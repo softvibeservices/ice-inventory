@@ -5,7 +5,8 @@
 import { useEffect, useMemo, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import { Product, RestockItem } from "@/types/stocks.types";
 import RestockPdfGenerator from "./RestockPdfGenerator";
@@ -19,12 +20,16 @@ import {
   X,
   Package,
   CheckSquare,
+  Boxes,
+  RefreshCw,
+  History as HistoryIcon,
 } from "lucide-react";
 
 type SortType = "name-asc" | "name-desc" | "category-asc" | "category-desc" | "unit-asc" | "unit-desc";
 
 export default function RestockPage() {
   const router = useRouter();
+  const pathname = usePathname();
   const [products, setProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -163,7 +168,34 @@ export default function RestockPage() {
     <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
       <DashboardNavbar />
 
-      <main className="flex-grow container mx-auto px-4 py-6 max-w-5xl">
+      <main className="flex-grow container mx-auto px-4 py-6 max-w-7xl">
+
+        {/* ── Stocks Tab Strip (Phase 3) ── */}
+        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+          <div className="flex flex-wrap gap-2">
+            {[
+              { href: "/dashboard/stocks", label: "Overview", icon: Boxes },
+              { href: "/dashboard/stocks/restock", label: "Restock", icon: RefreshCw },
+              { href: "/dashboard/stocks/history", label: "History", icon: HistoryIcon },
+            ].map(({ href, label, icon: Icon }) => {
+              const active = pathname === href;
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-all border ${
+                    active
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-200 border-blue-600"
+                      : "bg-white text-gray-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 border-gray-200"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
 
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
