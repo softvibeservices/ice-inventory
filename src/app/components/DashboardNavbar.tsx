@@ -94,6 +94,16 @@ export default function DashboardNavbar() {
     else if (pathname.startsWith("/dashboard/profile")) setExpandedGroup("profile");
   }, [pathname]);
 
+  const [activeTab, setActiveTab] = useState<string>("basic");
+
+  // Sync activeTab from URL search params on mount or pathname change
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      setActiveTab(params.get("tab") || "basic");
+    }
+  }, [pathname]);
+
   /* ================= LOAD USER DATA ================= */
   useEffect(() => {
     try {
@@ -218,7 +228,7 @@ export default function DashboardNavbar() {
       )}
 
       {/* ================= MOBILE TOP STRIP (≤1023px) ================= */}
-      <div className={`dash-mobile-topbar ${collapsed ? "" : "lg:hidden"}`}>
+      <div className="dash-mobile-topbar lg:hidden">
         <button
           onClick={() => setMobileOpen((s) => !s)}
           className="text-slate-300 hover:text-cyan-400 transition flex-shrink-0"
@@ -413,16 +423,22 @@ export default function DashboardNavbar() {
 
               {!collapsed && expandedGroup === "profile" && (
                 <div className="dash-subsidebar">
-                  {profileSubLinks.map((sub) => (
-                    <Link
-                      key={sub.tab}
-                      href={`/dashboard/profile?tab=${sub.tab}`}
-                      onClick={() => setMobileOpen(false)}
-                      className={`dash-subnav-link${pathname === "/dashboard/profile" ? " dash-subnav-link-active" : ""}`}
-                    >
-                      {sub.label}
-                    </Link>
-                  ))}
+                  {profileSubLinks.map((sub) => {
+                    const isTabActive = pathname === "/dashboard/profile" && activeTab === sub.tab;
+                    return (
+                      <Link
+                        key={sub.tab}
+                        href={`/dashboard/profile?tab=${sub.tab}`}
+                        onClick={() => {
+                          setActiveTab(sub.tab);
+                          setMobileOpen(false);
+                        }}
+                        className={`dash-subnav-link${isTabActive ? " dash-subnav-link-active" : ""}`}
+                      >
+                        {sub.label}
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>

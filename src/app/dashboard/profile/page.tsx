@@ -31,6 +31,15 @@ export default function ProfilePage() {
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get("tab") as ActiveTab) || "basic";
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
+
+  // Sync activeTab when URL search query parameter changes
+  useEffect(() => {
+    const tab = searchParams.get("tab") as ActiveTab;
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({
     oldPassword: "",
     newPassword: "",
@@ -205,6 +214,11 @@ export default function ProfilePage() {
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
     setIsMobileSidebarOpen(false);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.pushState(null, "", url.pathname + url.search);
+    }
   };
 
   if (!user) {
@@ -349,7 +363,7 @@ export default function ProfilePage() {
                 label={item.label}
                 icon={item.icon}
                 color={item.color}
-                onClick={() => setActiveTab(item.tab)}
+                onClick={() => handleTabChange(item.tab)}
               />
             ))}
           </div>
