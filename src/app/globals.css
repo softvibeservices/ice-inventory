@@ -229,9 +229,8 @@ input[type="number"] {
     transition: margin-left 0.2s ease;
   }
 
-  .dash-content-offset-collapsed {
+  .dash-content-offset:has(.dash-sidebar-collapsed) {
     margin-left: var(--sidebar-w-collapsed);
-    transition: margin-left 0.2s ease;
   }
 }
 

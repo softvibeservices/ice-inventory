@@ -227,22 +227,27 @@ export default function DashboardNavbar() {
         </div>
       )}
 
-      {/* ================= MOBILE TOP STRIP (≤1023px) ================= */}
-      <div className="dash-mobile-topbar lg:hidden">
+      {/* ================= TOP NAVBAR ================= */}
+      <div className="dash-mobile-topbar">
         <button
           onClick={() => setMobileOpen((s) => !s)}
-          className="text-slate-300 hover:text-cyan-400 transition flex-shrink-0"
+          className="text-slate-300 hover:text-cyan-400 transition flex-shrink-0 lg:hidden"
           aria-label="Toggle menu"
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
 
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
           <Image src="/logo.png" alt="Logo" width={28} height={28} className="rounded-md" />
           <span className="font-semibold text-white text-sm">Ice Inventory</span>
         </Link>
 
         <div className="ml-auto flex items-center gap-3">
+          {role !== "manager" && (
+            <div className="hidden md:block">
+              <SubscriptionBadge />
+            </div>
+          )}
           {role !== "manager" && (
             <Link href={requestsHref} className="relative" onClick={() => setMobileOpen(false)}>
               <Bell
@@ -387,60 +392,6 @@ export default function DashboardNavbar() {
           {role !== "manager" && !collapsed && (
             <div className="px-1 pb-1">
               <SubscriptionBadge />
-            </div>
-          )}
-
-          {/* Delivery Requests Bell (admin only) */}
-          {role !== "manager" && <BellLink size={18} />}
-
-          {/* Profile with subsidebar (admin only) */}
-          {role !== "manager" && (
-            <div>
-              <button
-                onClick={() => {
-                  if (collapsed) {
-                    router.push("/dashboard/profile");
-                  } else {
-                    setExpandedGroup(expandedGroup === "profile" ? null : "profile");
-                  }
-                }}
-                className={`dash-nav-link w-full${pathname.startsWith("/dashboard/profile") ? " dash-nav-link-active" : ""}`}
-                style={{ justifyContent: collapsed ? "center" : "space-between" }}
-              >
-                <span className="flex items-center gap-3">
-                  <UserCircle size={18} className="flex-shrink-0" />
-                  {!collapsed && <span>Profile</span>}
-                </span>
-                {!collapsed && (
-                  <ChevronDown
-                    size={14}
-                    className="flex-shrink-0 transition-transform duration-150"
-                    style={{ transform: expandedGroup === "profile" ? "rotate(180deg)" : "rotate(0deg)" }}
-                  />
-                )}
-                {collapsed && <span className="dash-tooltip">Profile</span>}
-              </button>
-
-              {!collapsed && expandedGroup === "profile" && (
-                <div className="dash-subsidebar">
-                  {profileSubLinks.map((sub) => {
-                    const isTabActive = pathname === "/dashboard/profile" && activeTab === sub.tab;
-                    return (
-                      <Link
-                        key={sub.tab}
-                        href={`/dashboard/profile?tab=${sub.tab}`}
-                        onClick={() => {
-                          setActiveTab(sub.tab);
-                          setMobileOpen(false);
-                        }}
-                        className={`dash-subnav-link${isTabActive ? " dash-subnav-link-active" : ""}`}
-                      >
-                        {sub.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           )}
 
