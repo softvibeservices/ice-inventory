@@ -335,7 +335,7 @@ export default function CustomerHistoryPage() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow w-full max-w-5xl mx-auto px-3 sm:px-5 lg:px-8 py-6">

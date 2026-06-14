@@ -183,7 +183,7 @@ const res = await fetch(`/api/delivery/${action}`, {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col dash-content-offset">
       {/* ✅ FIXED: Removed userId prop */}
       <DashboardNavbar />
 

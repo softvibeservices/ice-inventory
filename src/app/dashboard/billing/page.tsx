@@ -1392,7 +1392,7 @@ export default function BillingPage() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
       <DashboardNavbar />
 
       {/* ── Seller / logo header ──────────────────────────────── */}

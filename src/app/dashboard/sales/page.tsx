@@ -782,7 +782,7 @@ if (to) params.append("to", to);
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 md:px-6 py-6 md:py-8 space-y-6">

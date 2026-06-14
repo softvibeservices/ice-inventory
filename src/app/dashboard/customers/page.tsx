@@ -354,7 +354,7 @@ export default function CustomersPage() {
 
   // ── render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow w-full max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6">

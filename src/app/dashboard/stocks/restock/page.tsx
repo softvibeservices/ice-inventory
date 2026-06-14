@@ -151,7 +151,7 @@ export default function RestockPage() {
 
   if (!userId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8 dash-content-offset">
         <div className="max-w-sm w-full bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
           <p className="text-gray-600 font-medium">Please log in to restock products.</p>
         </div>
@@ -160,7 +160,7 @@ export default function RestockPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow container mx-auto px-4 py-6 max-w-5xl">

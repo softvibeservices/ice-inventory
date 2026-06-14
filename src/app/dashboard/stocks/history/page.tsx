@@ -127,7 +127,7 @@ export default function HistoryPage() {
   const hasActiveFilters = searchDate || monthFilter || thisMonthOnly || sortOrder === "asc";
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow max-w-5xl mx-auto w-full px-4 py-6">

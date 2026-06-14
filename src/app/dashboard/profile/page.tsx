@@ -2,7 +2,7 @@
 // src/app/dashboard/profile/page.tsx
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
@@ -28,7 +28,9 @@ export default function ProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [originalUser, setOriginalUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("basic");
+  const searchParams = useSearchParams();
+  const initialTab = (searchParams.get("tab") as ActiveTab) || "basic";
+  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({
     oldPassword: "",
     newPassword: "",
@@ -207,7 +209,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="flex flex-col min-h-screen bg-gray-100">
+      <div className="flex flex-col min-h-screen bg-gray-100 dash-content-offset">
         <DashboardNavbar />
         <main className="flex-grow flex items-center justify-center px-4">
           <p className="text-gray-600 text-base sm:text-lg">
@@ -322,7 +324,7 @@ export default function ProfilePage() {
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100">
+    <div className="flex flex-col min-h-screen bg-gray-100 dash-content-offset">
       <DashboardNavbar />
 
       {/* Mobile Menu Button */}

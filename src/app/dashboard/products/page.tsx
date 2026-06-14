@@ -279,7 +279,7 @@ export default function ProductsPage(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow w-full">

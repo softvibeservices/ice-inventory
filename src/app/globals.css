@@ -58,3 +58,230 @@ input[type="number"] {
 ::-webkit-scrollbar-track { background: #0d1117; }
 ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #4a5568; }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SIDEBAR LAYOUT — Phase 1 + Phase 2 + Phase 3
+   All rules are additive. Nothing above this line is modified.
+══════════════════════════════════════════════════════════════════════════ */
+
+/* ── CSS variables ─────────────────────────────────────────────────────────── */
+:root {
+  --sidebar-w-expanded: 248px;
+  --sidebar-w-collapsed: 72px;
+  --sidebar-mobile-topbar-h: 56px;
+}
+
+/* ── Sidebar base ──────────────────────────────────────────────────────────── */
+.dash-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-w-expanded);
+  background: linear-gradient(180deg, #020617 0%, #020b2c 60%, #031136 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  transition: width 0.2s ease, transform 0.2s ease;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dash-sidebar-collapsed {
+  width: var(--sidebar-w-collapsed);
+}
+
+/* ── Sidebar header ────────────────────────────────────────────────────────── */
+.dash-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 60px;
+  flex-shrink: 0;
+}
+
+/* ── Sidebar nav & footer areas ────────────────────────────────────────────── */
+.dash-sidebar-nav {
+  flex: 1;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dash-sidebar-footer {
+  padding: 10px 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Nav link ──────────────────────────────────────────────────────────────── */
+.dash-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  position: relative;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+}
+
+.dash-nav-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #67e8f9;
+}
+
+.dash-nav-link-active {
+  background: rgba(34, 211, 238, 0.15);
+  color: #22d3ee;
+}
+
+.dash-nav-link-danger {
+  color: #f87171;
+}
+
+.dash-nav-link-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+}
+
+/* ── Collapsed-state CSS tooltip ───────────────────────────────────────────── */
+.dash-tooltip {
+  display: none;
+}
+
+.dash-sidebar-collapsed .dash-nav-link:hover .dash-tooltip {
+  display: block;
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 70;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ── Mobile top strip ──────────────────────────────────────────────────────── */
+.dash-mobile-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 55;
+  height: var(--sidebar-mobile-topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: linear-gradient(90deg, #020617, #020b2c, #031136);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* ── Mobile: sidebar is a slide-in drawer ──────────────────────────────────── */
+@media (max-width: 1023px) {
+  .dash-sidebar {
+    transform: translateX(-100%);
+    width: var(--sidebar-w-expanded) !important;
+  }
+
+  .dash-sidebar-open {
+    transform: translateX(0);
+  }
+}
+
+/* ── Content offset helper ─────────────────────────────────────────────────── */
+/* Mobile: sidebar is overlay, content fills full width with topbar padding */
+.dash-content-offset {
+  margin-left: 0;
+  padding-top: var(--sidebar-mobile-topbar-h);
+}
+
+/* Desktop: content is pushed right by the sidebar width */
+@media (min-width: 1024px) {
+  .dash-content-offset {
+    margin-left: var(--sidebar-w-expanded);
+    padding-top: 0;
+    transition: margin-left 0.2s ease;
+  }
+
+  .dash-content-offset-collapsed {
+    margin-left: var(--sidebar-w-collapsed);
+    transition: margin-left 0.2s ease;
+  }
+}
+
+/* ── Phase 2: Subsidebar ───────────────────────────────────────────────────── */
+.dash-subsidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 3px 0 3px 28px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  padding-left: 10px;
+}
+
+.dash-subnav-link {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.dash-subnav-link:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+}
+
+.dash-subnav-link-active {
+  background: rgba(34, 211, 238, 0.12);
+  color: #22d3ee;
+}
+
+/* ── Phase 3: Page header polish ───────────────────────────────────────────── */
+.dash-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 20px;
+}
+
+.dash-page-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.dash-page-header p {
+  font-size: 0.875rem;
+  color: #64748b;
+}
