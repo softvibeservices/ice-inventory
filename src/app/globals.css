@@ -326,6 +326,11 @@ input[type="number"] {
 
 /* ── 1.5 Page layout ───────────────────────────────────────────────────────── */
 .page-wrapper {
+  /* width: 100% is essential in a flex-col parent.
+     Without it, margin: auto overrides align-items: stretch and collapses
+     the element to content width. width: 100% forces it to fill the
+     available space first; max-width then caps the ceiling. */
+  width: 100%;
   max-width: 1400px;
   margin-left: auto;
   margin-right: auto;

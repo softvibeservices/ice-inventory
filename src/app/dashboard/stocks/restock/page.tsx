@@ -1,12 +1,10 @@
 // src/app/dashboard/stocks/restock/page.tsx
-
+// Shell (DashboardNavbar, Footer, tab strip) is provided by stocks/layout.tsx.
+// This component only renders the page content fragment.
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import DashboardNavbar from "@/app/components/DashboardNavbar";
-import Footer from "@/app/components/Footer";
-import { useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Product, RestockItem } from "@/types/stocks.types";
 import RestockPdfGenerator from "./RestockPdfGenerator";
@@ -19,16 +17,12 @@ import {
   X,
   Package,
   CheckSquare,
-  Boxes,
-  RefreshCw,
-  History as HistoryIcon,
 } from "lucide-react";
 
 type SortType = "name-asc" | "name-desc" | "category-asc" | "category-desc" | "unit-asc" | "unit-desc";
 
 export default function RestockPage() {
   const router = useRouter();
-  const pathname = usePathname();
   const [products, setProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -155,7 +149,7 @@ export default function RestockPage() {
 
   if (!userId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8 dash-content-offset">
+      <div className="flex items-center justify-center py-20">
         <div className="max-w-sm w-full bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
           <p className="text-gray-600 font-medium">Please log in to restock products.</p>
         </div>
@@ -164,274 +158,240 @@ export default function RestockPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 dash-content-offset">
-      <DashboardNavbar />
-
-      <main className="flex-grow page-wrapper">
-
-        {/* ── Stocks Tab Strip ── */}
-        <div className="saas-card saas-card-compact mb-6">
-          <div className="flex flex-wrap gap-2">
-            {[
-              { href: "/dashboard/stocks", label: "Overview", icon: Boxes },
-              { href: "/dashboard/stocks/restock", label: "Restock", icon: RefreshCw },
-              { href: "/dashboard/stocks/history", label: "History", icon: HistoryIcon },
-            ].map(({ href, label, icon: Icon }) => {
-              const active = pathname === href;
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg font-medium text-xs sm:text-sm transition-all border ${
-                    active
-                      ? "bg-blue-600 text-white shadow-md shadow-blue-200 border-blue-600"
-                      : "bg-white text-gray-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300 border-gray-200"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{label}</span>
-                </Link>
-              );
-            })}
-          </div>
+    <>
+      {/* ── Page Header ── */}
+      <div className="page-header">
+        <div className="page-header-left">
+          <h1 className="page-title">Restock Products</h1>
+          <p className="page-subtitle">
+            {products.length} products available
+          </p>
         </div>
 
-        {/* ── Page Header ── */}
-        <div className="page-header">
-          <div className="page-header-left">
-            <h1 className="page-title">Restock Products</h1>
-            <p className="page-subtitle">
-              {products.length} products available
-            </p>
-          </div>
-
-          <div className="page-header-actions">
-            <button
-              onClick={() => setShowFormatModal(true)}
-              className="btn btn-secondary btn-sm"
-            >
-              <FileSpreadsheet size={14} />
-              Format Guide
-            </button>
-            <button
-              onClick={() => setShowBulkModal(true)}
-              className="btn btn-primary btn-sm"
-            >
-              <Upload size={14} />
-              Bulk Upload
-            </button>
-          </div>
+        <div className="page-header-actions">
+          <button
+            onClick={() => setShowFormatModal(true)}
+            className="btn btn-secondary btn-sm"
+          >
+            <FileSpreadsheet size={14} />
+            Format Guide
+          </button>
+          <button
+            onClick={() => setShowBulkModal(true)}
+            className="btn btn-primary btn-sm"
+          >
+            <Upload size={14} />
+            Bulk Upload
+          </button>
         </div>
+      </div>
 
-        {/* ── Restock Note ── */}
-        <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 mb-4 shadow-sm">
-          <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-            Restock Reason / Note
-          </label>
+      {/* ── Restock Note ── */}
+      <div className="bg-white border border-gray-200 rounded-xl px-5 py-4 mb-4 shadow-sm">
+        <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+          Restock Reason / Note
+        </label>
+        <input
+          type="text"
+          value={globalNote}
+          onChange={(e) => setGlobalNote(e.target.value)}
+          placeholder="e.g., Weekly Monday Restock"
+          className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+        />
+      </div>
+
+      {/* ── Search + Sort ── */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
           <input
             type="text"
-            value={globalNote}
-            onChange={(e) => setGlobalNote(e.target.value)}
-            placeholder="e.g., Weekly Monday Restock"
-            className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or category…"
+            className="w-full pl-9 pr-8 py-2.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-sm transition"
           />
-        </div>
-
-        {/* ── Search + Sort ── */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or category…"
-              className="w-full pl-9 pr-8 py-2.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-sm transition"
-            />
-            {search && (
-              <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          <select
-            value={sortType}
-            onChange={(e) => setSortType(e.target.value as SortType)}
-            className="sm:w-44 px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-sm transition"
-          >
-            <option value="name-asc">Name (A–Z)</option>
-            <option value="name-desc">Name (Z–A)</option>
-            <option value="category-asc">Category (A–Z)</option>
-            <option value="category-desc">Category (Z–A)</option>
-            <option value="unit-asc">Unit (A–Z)</option>
-            <option value="unit-desc">Unit (Z–A)</option>
-          </select>
-        </div>
-
-        {/* ── Selected summary pill ── */}
-        {selectedCount > 0 && (
-          <div className="flex items-center gap-2 mb-4 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 font-medium">
-            <CheckSquare className="w-4 h-4 text-blue-600" />
-            <span>{selectedCount} product{selectedCount !== 1 ? "s" : ""} selected · {totalUnitsToAdd} total units to add</span>
-            <button
-              onClick={() => setRestockValues({})}
-              className="ml-auto text-blue-500 hover:text-blue-800 text-xs font-semibold"
-            >
-              Clear all
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
             </button>
-          </div>
-        )}
+          )}
+        </div>
+        <select
+          value={sortType}
+          onChange={(e) => setSortType(e.target.value as SortType)}
+          className="sm:w-44 px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-sm transition"
+        >
+          <option value="name-asc">Name (A–Z)</option>
+          <option value="name-desc">Name (Z–A)</option>
+          <option value="category-asc">Category (A–Z)</option>
+          <option value="category-desc">Category (Z–A)</option>
+          <option value="unit-asc">Unit (A–Z)</option>
+          <option value="unit-desc">Unit (Z–A)</option>
+        </select>
+      </div>
 
-        {/* ── Mobile Cards ── */}
-        {loading ? (
-          <div className="space-y-3 sm:hidden">
-            {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:hidden">
-            {filteredProducts.length === 0 ? (
-              <div className="flex flex-col items-center py-12 bg-white border border-gray-200 rounded-xl text-center">
-                <Package className="w-10 h-10 text-gray-300 mb-2" />
-                <p className="text-gray-500 font-medium text-sm">No products found</p>
+      {/* ── Selected summary pill ── */}
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-2 mb-4 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 font-medium">
+          <CheckSquare className="w-4 h-4 text-blue-600" />
+          <span>{selectedCount} product{selectedCount !== 1 ? "s" : ""} selected · {totalUnitsToAdd} total units to add</span>
+          <button
+            onClick={() => setRestockValues({})}
+            className="ml-auto text-blue-500 hover:text-blue-800 text-xs font-semibold"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {/* ── Mobile Cards ── */}
+      {loading ? (
+        <div className="space-y-3 sm:hidden">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:hidden">
+          {filteredProducts.length === 0 ? (
+            <div className="flex flex-col items-center py-12 bg-white border border-gray-200 rounded-xl text-center">
+              <Package className="w-10 h-10 text-gray-300 mb-2" />
+              <p className="text-gray-500 font-medium text-sm">No products found</p>
+            </div>
+          ) : filteredProducts.map((p) => {
+            const val = restockValues[p._id];
+            const hasValue = val !== undefined && val > 0;
+            return (
+              <div
+                key={p._id}
+                className={`rounded-xl border p-4 bg-white shadow-sm transition-all ${
+                  hasValue ? "border-emerald-400 ring-1 ring-emerald-300" : "border-gray-200"
+                }`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900">{p.name}</h3>
+                    <p className="text-xs text-gray-500">{p.category || "Uncategorized"}</p>
+                  </div>
+                  <span className="text-xs text-gray-400 font-medium">
+                    Stock: {p.quantity}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={restockValues[p._id] ?? ""}
+                    onChange={(e) => handleQuantityChange(p._id, e.target.value)}
+                    placeholder="Add qty…"
+                    min="0"
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-gray-50 transition"
+                  />
+                  <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1.5 rounded-lg">
+                    {p.unit}
+                  </span>
+                </div>
               </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Desktop Table ── */}
+      <div className="hidden sm:block bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50">
+              <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Product</th>
+              <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Category</th>
+              <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Current Stock</th>
+              <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Add Quantity</th>
+              <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Unit</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {loading ? (
+              [...Array(5)].map((_, i) => (
+                <tr key={i}>
+                  <td colSpan={5} className="px-5 py-4">
+                    <div className="h-5 bg-gray-100 rounded animate-pulse" />
+                  </td>
+                </tr>
+              ))
+            ) : filteredProducts.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-16 text-center">
+                  <Package className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                  <p className="text-gray-500 font-medium">No products found</p>
+                </td>
+              </tr>
             ) : filteredProducts.map((p) => {
               const val = restockValues[p._id];
               const hasValue = val !== undefined && val > 0;
               return (
-                <div
+                <tr
                   key={p._id}
-                  className={`rounded-xl border p-4 bg-white shadow-sm transition-all ${
-                    hasValue ? "border-emerald-400 ring-1 ring-emerald-300" : "border-gray-200"
-                  }`}
+                  className={`transition-colors hover:bg-gray-50 ${hasValue ? "bg-emerald-50/50" : ""}`}
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-gray-900">{p.name}</h3>
-                      <p className="text-xs text-gray-500">{p.category || "Uncategorized"}</p>
-                    </div>
-                    <span className="text-xs text-gray-400 font-medium">
-                      Stock: {p.quantity}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <td className="px-5 py-3.5 font-medium text-gray-900">{p.name}</td>
+                  <td className="px-5 py-3.5 text-gray-600">{p.category || "—"}</td>
+                  <td className="px-5 py-3.5 text-gray-700 font-medium">{p.quantity}</td>
+                  <td className="px-5 py-3.5">
                     <input
                       type="number"
                       value={restockValues[p._id] ?? ""}
                       onChange={(e) => handleQuantityChange(p._id, e.target.value)}
-                      placeholder="Add qty…"
+                      placeholder="0"
                       min="0"
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-gray-50 transition"
+                      className={`w-28 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 transition-all ${
+                        hasValue
+                          ? "border-emerald-400 bg-emerald-50 text-emerald-800 focus:ring-emerald-300"
+                          : "border-gray-200 bg-gray-50 text-gray-900 focus:ring-blue-300"
+                      }`}
                     />
-                    <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1.5 rounded-lg">
-                      {p.unit}
-                    </span>
-                  </div>
-                </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-gray-500">{p.unit}</td>
+                </tr>
               );
             })}
-          </div>
-        )}
+          </tbody>
+        </table>
+      </div>
 
-        {/* ── Desktop Table ── */}
-        <div className="hidden sm:block bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Product</th>
-                <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Category</th>
-                <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Current Stock</th>
-                <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Add Quantity</th>
-                <th className="px-5 py-3.5 text-left font-semibold text-gray-600">Unit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
-                [...Array(5)].map((_, i) => (
-                  <tr key={i}>
-                    <td colSpan={5} className="px-5 py-4">
-                      <div className="h-5 bg-gray-100 rounded animate-pulse" />
-                    </td>
-                  </tr>
-                ))
-              ) : filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-16 text-center">
-                    <Package className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                    <p className="text-gray-500 font-medium">No products found</p>
-                  </td>
-                </tr>
-              ) : filteredProducts.map((p) => {
-                const val = restockValues[p._id];
-                const hasValue = val !== undefined && val > 0;
-                return (
-                  <tr
-                    key={p._id}
-                    className={`transition-colors hover:bg-gray-50 ${hasValue ? "bg-emerald-50/50" : ""}`}
-                  >
-                    <td className="px-5 py-3.5 font-medium text-gray-900">{p.name}</td>
-                    <td className="px-5 py-3.5 text-gray-600">{p.category || "—"}</td>
-                    <td className="px-5 py-3.5 text-gray-700 font-medium">{p.quantity}</td>
-                    <td className="px-5 py-3.5">
-                      <input
-                        type="number"
-                        value={restockValues[p._id] ?? ""}
-                        onChange={(e) => handleQuantityChange(p._id, e.target.value)}
-                        placeholder="0"
-                        min="0"
-                        className={`w-28 px-3 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 transition-all ${
-                          hasValue
-                            ? "border-emerald-400 bg-emerald-50 text-emerald-800 focus:ring-emerald-300"
-                            : "border-gray-200 bg-gray-50 text-gray-900 focus:ring-blue-300"
-                        }`}
-                      />
-                    </td>
-                    <td className="px-5 py-3.5 text-gray-500">{p.unit}</td>
-                  </tr>
-                );
+      {/* ── Action Bar ── */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-5 bg-white border border-gray-200 rounded-xl px-5 py-4 shadow-sm">
+        <div className="text-sm text-gray-500">
+          {selectedCount > 0 ? (
+            <span className="text-emerald-700 font-semibold">
+              ✓ {selectedCount} product{selectedCount !== 1 ? "s" : ""} ready to restock
+            </span>
+          ) : (
+            <span>Enter quantities above to begin restocking</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <RestockPdfGenerator
+            items={Object.entries(restockValues)
+              .filter(([_, qty]) => qty !== 0)
+              .map(([id, qty]) => {
+                const product = products.find((p) => p._id === id);
+                return {
+                  productId: { _id: id, name: product?.name || "", category: product?.category, unit: product?.unit || "" },
+                  quantity: qty,
+                  note: globalNote,
+                };
               })}
-            </tbody>
-          </table>
+            dateTime={new Date().toLocaleString()}
+            note={globalNote}
+            fileName={`RESTOCK-${new Date().toISOString().slice(0, 10)}.pdf`}
+          />
+          <button
+            onClick={handleSave}
+            disabled={selectedCount === 0}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-bold shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Save Restock
+          </button>
         </div>
-
-        {/* ── Action Bar ── */}
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-5 bg-white border border-gray-200 rounded-xl px-5 py-4 shadow-sm">
-          <div className="text-sm text-gray-500">
-            {selectedCount > 0 ? (
-              <span className="text-emerald-700 font-semibold">
-                ✓ {selectedCount} product{selectedCount !== 1 ? "s" : ""} ready to restock
-              </span>
-            ) : (
-              <span>Enter quantities above to begin restocking</span>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            <RestockPdfGenerator
-              items={Object.entries(restockValues)
-                .filter(([_, qty]) => qty !== 0)
-                .map(([id, qty]) => {
-                  const product = products.find((p) => p._id === id);
-                  return {
-                    productId: { _id: id, name: product?.name || "", category: product?.category, unit: product?.unit || "" },
-                    quantity: qty,
-                    note: globalNote,
-                  };
-                })}
-              dateTime={new Date().toLocaleString()}
-              note={globalNote}
-              fileName={`RESTOCK-${new Date().toISOString().slice(0, 10)}.pdf`}
-            />
-            <button
-              onClick={handleSave}
-              disabled={selectedCount === 0}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-bold shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Save Restock
-            </button>
-          </div>
-        </div>
-      </main>
-
-      <Footer />
+      </div>
 
       {showBulkModal && (
         <BulkRestockModal
@@ -444,6 +404,6 @@ export default function RestockPage() {
       )}
 
       {showFormatModal && <RestockFormatModal onClose={() => setShowFormatModal(false)} />}
-    </div>
+    </>
   );
 }
