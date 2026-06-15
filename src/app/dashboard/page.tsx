@@ -245,13 +245,13 @@ export default function DashboardPage() {
 
   // ========= RENDER =========
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
+    <div className="flex flex-col min-h-screen bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="page-wrapper">
 
-          {/* ── PHASE 8: Plan limit warning at top of dashboard ───────────── */}
+          {/* ── Plan limit warning at top of dashboard ──────────────────── */}
           {subscription && subscription.usage && subscription.effectiveLimits && (
             <PlanLimitWarning
               invoicesUsed={invoicesUsed}
@@ -265,8 +265,16 @@ export default function DashboardPage() {
           )}
           {/* ─────────────────────────────────────────────────────────────── */}
 
+          {/* Page Header */}
+          <div className="page-header">
+            <div className="page-header-left">
+              <h1 className="page-title">Dashboard</h1>
+              <p className="page-subtitle">Overview of your business at a glance</p>
+            </div>
+          </div>
+
           {/* Tab Navigation */}
-          <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
+          <div className="saas-card saas-card-compact mb-6">
             <div className="flex flex-wrap gap-2 sm:gap-3">
               {tabs.map((tab) => {
                 const Icon = tab.icon;

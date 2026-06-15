@@ -10,7 +10,6 @@ import toast from "react-hot-toast";
 import { RestockHistory, getRestockItemProduct } from "@/types/stocks.types";
 import HistoryPdfGenerator from "./HistoryPdfGenerator";
 import {
-  ArrowLeft,
   ChevronDown,
   ChevronUp,
   Search,
@@ -132,13 +131,13 @@ export default function HistoryPage() {
   const hasActiveFilters = searchDate || monthFilter || thisMonthOnly || sortOrder === "asc";
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
+    <div className="flex flex-col min-h-screen bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
-      <main className="flex-grow max-w-7xl mx-auto w-full px-4 py-6">
+      <main className="flex-grow page-wrapper">
 
-        {/* ── Stocks Tab Strip (Phase 3) ── */}
-        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+        {/* ── Stocks Tab Strip ── */}
+        <div className="saas-card saas-card-compact mb-6">
           <div className="flex flex-wrap gap-2">
             {[
               { href: "/dashboard/stocks", label: "Overview", icon: Boxes },
@@ -164,30 +163,20 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* ── Header ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push("/dashboard/stocks")}
-              className="p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 text-gray-600 transition-colors shadow-sm"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-                Restock History
-              </h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                {filteredHistory.length} record{filteredHistory.length !== 1 ? "s" : ""} found
-              </p>
-            </div>
+        {/* ── Page Header ── */}
+        <div className="page-header">
+          <div className="page-header-left">
+            <h1 className="page-title">Restock History</h1>
+            <p className="page-subtitle">
+              {filteredHistory.length} record{filteredHistory.length !== 1 ? 's' : ''} found
+            </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="page-header-actions">
             {filteredHistory.length > 0 ? (
               <HistoryPdfGenerator history={filteredHistory} isSingle={false} fileName="ALL_STOCK_RECORDS.pdf" />
             ) : (
-              <button disabled className="px-4 py-2 rounded-lg bg-gray-200 text-gray-400 font-semibold text-sm cursor-not-allowed">
+              <button disabled className="btn btn-secondary btn-sm" style={{ opacity: 0.45, cursor: 'not-allowed' }}>
                 No Records to Export
               </button>
             )}

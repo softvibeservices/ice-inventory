@@ -4,7 +4,7 @@
 import React, { JSX, useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { Upload, FileSpreadsheet, Plus, Package, Lock } from "lucide-react";
+import { Upload, FileSpreadsheet, Plus, Lock } from "lucide-react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import PlanLimitWarning from "@/app/components/PlanLimitWarning";
@@ -279,11 +279,11 @@ export default function ProductsPage(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dash-content-offset">
+    <div className="min-h-screen flex flex-col bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
+        <div className="page-wrapper space-y-6">
 
           {/* Plan limit warning */}
           {subscription && (
@@ -295,41 +295,32 @@ export default function ProductsPage(): JSX.Element {
           )}
 
           {/* Page header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
-                <Package size={18} className="text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900 leading-tight">Products</h1>
-                <p className="text-sm text-gray-500">
-                  {productLimit !== null
-                    ? `${productCount} / ${productLimit} products used`
-                    : "Manage your shop's product catalogue"}
-                </p>
-              </div>
+          <div className="page-header">
+            <div className="page-header-left">
+              <h1 className="page-title">Products</h1>
+              <p className="page-subtitle">
+                {productLimit !== null
+                  ? `${productCount} / ${productLimit} products used`
+                  : "Manage your shop's product catalogue"}
+              </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {/* ── File Templates button — shows BOTH CSV & Excel ── */}
+            <div className="page-header-actions">
+              {/* ── File Templates button ── */}
               <button
                 onClick={() => setShowFileTemplate(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium
-                           border border-gray-200 rounded-lg text-gray-600 bg-white
-                           hover:bg-gray-50 transition-colors shadow-sm"
+                className="btn btn-secondary btn-sm"
               >
-                <FileSpreadsheet size={15} />
+                <FileSpreadsheet size={14} />
                 File Templates
               </button>
 
               {/* Bulk Upload */}
               <button
                 onClick={() => setShowBulkUpload(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold
-                           border border-blue-200 rounded-lg text-blue-700 bg-blue-50
-                           hover:bg-blue-100 transition-colors shadow-sm"
+                className="btn btn-secondary btn-sm"
               >
-                <Upload size={15} />
+                <Upload size={14} />
                 Bulk Upload
               </button>
 
@@ -338,10 +329,10 @@ export default function ProductsPage(): JSX.Element {
                 <button
                   onClick={() => setUpgradeModal(true)}
                   title={`Product limit reached (${productCount}/${productLimit}). Upgrade your plan to add more.`}
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg
-                             shadow-sm bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
+                  className="btn btn-secondary btn-sm"
+                  style={{ opacity: 0.5, cursor: 'not-allowed' }}
                 >
-                  <Lock size={15} />
+                  <Lock size={14} />
                   Add Product
                 </button>
               ) : (
@@ -354,14 +345,9 @@ export default function ProductsPage(): JSX.Element {
                     }
                     setShowForm((s) => !s);
                   }}
-                  className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg
-                              shadow-sm transition-all ${
-                    showForm
-                      ? "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                      : "bg-blue-600 hover:bg-blue-700 text-white"
-                  }`}
+                  className={`btn btn-sm ${showForm ? 'btn-secondary' : 'btn-primary'}`}
                 >
-                  <Plus size={15} />
+                  <Plus size={14} />
                   {showForm ? "Hide Form" : "Add Product"}
                 </button>
               )}

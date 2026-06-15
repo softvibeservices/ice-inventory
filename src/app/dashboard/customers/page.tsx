@@ -360,35 +360,28 @@ export default function CustomersPage() {
       <main className="flex-grow w-full max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6">
 
         {/* ═══ PAGE HEADER ═══ */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900">Customers</h1>
-              <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                Ice Saathi
-              </span>
-            </div>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Manage your customer profiles, balances and history
-            </p>
+        <div className="page-header">
+          <div className="page-header-left">
+            <h1 className="page-title">Customers</h1>
+            <p className="page-subtitle">Manage customer profiles, balances and history</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="page-header-actions">
             <CustomerReportPDF customers={customers} />
 
             <button
               onClick={() => setShowBulkModal(true)}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm transition"
+              className="btn btn-secondary btn-sm"
             >
-              <Upload size={15} />
+              <Upload size={14} />
               Bulk Import
             </button>
 
             <button
               onClick={openAddForm}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition"
+              className="btn btn-primary btn-sm"
             >
-              <Plus size={15} />
+              <Plus size={14} />
               Add Customer
             </button>
           </div>

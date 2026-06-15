@@ -15,7 +15,6 @@ import RestockFormatModal from "./RestockFormatModal";
 import {
   Upload,
   FileSpreadsheet,
-  ArrowLeft,
   Search,
   X,
   Package,
@@ -165,13 +164,13 @@ export default function RestockPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
+    <div className="flex flex-col min-h-screen bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
-      <main className="flex-grow container mx-auto px-4 py-6 max-w-7xl">
+      <main className="flex-grow page-wrapper">
 
-        {/* ── Stocks Tab Strip (Phase 3) ── */}
-        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+        {/* ── Stocks Tab Strip ── */}
+        <div className="saas-card saas-card-compact mb-6">
           <div className="flex flex-wrap gap-2">
             {[
               { href: "/dashboard/stocks", label: "Overview", icon: Boxes },
@@ -197,36 +196,28 @@ export default function RestockPage() {
           </div>
         </div>
 
-        {/* ── Header ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push("/dashboard/stocks")}
-              className="p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 text-gray-600 transition-colors shadow-sm"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Restock Products</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                {products.length} products available
-              </p>
-            </div>
+        {/* ── Page Header ── */}
+        <div className="page-header">
+          <div className="page-header-left">
+            <h1 className="page-title">Restock Products</h1>
+            <p className="page-subtitle">
+              {products.length} products available
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="page-header-actions">
             <button
               onClick={() => setShowFormatModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition-colors"
+              className="btn btn-secondary btn-sm"
             >
-              <FileSpreadsheet className="w-4 h-4 text-blue-600" />
+              <FileSpreadsheet size={14} />
               Format Guide
             </button>
             <button
               onClick={() => setShowBulkModal(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold shadow-sm transition-colors"
+              className="btn btn-primary btn-sm"
             >
-              <Upload className="w-4 h-4" />
+              <Upload size={14} />
               Bulk Upload
             </button>
           </div>

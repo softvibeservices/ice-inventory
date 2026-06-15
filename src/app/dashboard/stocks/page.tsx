@@ -254,13 +254,23 @@ export default function StockPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
+    <div className="flex flex-col min-h-screen bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
-      <main className="flex-grow container mx-auto px-4 py-6 max-w-7xl">
+      <main className="flex-grow page-wrapper">
 
-        {/* ── Stocks Tab Strip (Phase 3) ── */}
-        <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+        {/* Page Header */}
+        <div className="page-header">
+          <div className="page-header-left">
+            <h1 className="page-title">Stock Management</h1>
+            <p className="page-subtitle">
+              {products.length} product{products.length !== 1 ? 's' : ''} in inventory
+            </p>
+          </div>
+        </div>
+
+        {/* ── Stocks Tab Strip ── */}
+        <div className="saas-card saas-card-compact mb-6">
           <div className="flex flex-wrap gap-2">
             {[
               { href: "/dashboard/stocks", label: "Overview", icon: Boxes },
