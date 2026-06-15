@@ -2,7 +2,7 @@
 // src/app/dashboard/profile/page.tsx
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
@@ -28,17 +28,21 @@ export default function ProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [originalUser, setOriginalUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const searchParams = useSearchParams();
-  const initialTab = (searchParams.get("tab") as ActiveTab) || "basic";
-  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("basic");
 
-  // Sync activeTab when URL search query parameter changes
+  // Read ?tab= from the URL on mount and on browser back/forward navigation.
+  // Using window.location.search (client-only) avoids the Next.js
+  // useSearchParams() Suspense requirement during static prerendering.
   useEffect(() => {
-    const tab = searchParams.get("tab") as ActiveTab;
-    if (tab) {
-      setActiveTab(tab);
-    }
-  }, [searchParams]);
+    const readTab = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab") as ActiveTab | null;
+      if (tab) setActiveTab(tab);
+    };
+    readTab();
+    window.addEventListener("popstate", readTab);
+    return () => window.removeEventListener("popstate", readTab);
+  }, []);
 
   const [passwordForm, setPasswordForm] = useState<PasswordForm>({
     oldPassword: "",
