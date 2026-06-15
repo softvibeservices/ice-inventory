@@ -34,19 +34,6 @@ const stocksSubLinks = [
   { href: "/dashboard/stocks/history", label: "History" },
 ];
 
-const profileSubLinks: { label: string; tab: string }[] = [
-  { label: "Basic Information", tab: "basic" },
-  { label: "Bill Details", tab: "billing" },
-  { label: "Bank Details", tab: "bank" },
-  { label: "Product Settings", tab: "product-settings" },
-  { label: "Delivery Partners", tab: "delivery" },
-  { label: "Managers", tab: "managers" },
-  { label: "Active Sessions", tab: "sessions" },
-  { label: "Change Password", tab: "password" },
-  { label: "Serial Bill Number", tab: "serial" },
-  { label: "Subscription", tab: "subscription" },
-];
-
 export default function DashboardNavbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -60,11 +47,10 @@ export default function DashboardNavbar() {
   // Sidebar collapse state — persisted to localStorage
   const [collapsed, setCollapsed] = useState(false);
 
-  // Subsidebar expand state (Phase 2)
+  // Subsidebar expand state — stocks only now
   const [expandedGroup, setExpandedGroup] = useState<string | null>(() => {
     if (typeof window !== "undefined") {
       if (window.location.pathname.startsWith("/dashboard/stocks")) return "stocks";
-      if (window.location.pathname.startsWith("/dashboard/profile")) return "profile";
     }
     return null;
   });
@@ -88,20 +74,20 @@ export default function DashboardNavbar() {
     });
   };
 
+  // FIX: Keep --sidebar-current-w on :root in sync with collapse state so that
+  // .dash-topbar and .dash-content-offset always have the correct left/margin-left.
+  // CSS sibling selectors (.dash-sidebar-collapsed ~ .dash-topbar) cannot reach
+  // across Next.js layout subtree boundaries, so we drive it from JS instead.
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--sidebar-current-w",
+      collapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w-expanded)"
+    );
+  }, [collapsed]);
+
   // Auto-expand group based on current pathname
   useEffect(() => {
     if (pathname.startsWith("/dashboard/stocks")) setExpandedGroup("stocks");
-    else if (pathname.startsWith("/dashboard/profile")) setExpandedGroup("profile");
-  }, [pathname]);
-
-  const [activeTab, setActiveTab] = useState<string>("basic");
-
-  // Sync activeTab from URL search params on mount or pathname change
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setActiveTab(params.get("tab") || "basic");
-    }
   }, [pathname]);
 
   /* ================= LOAD USER DATA ================= */
@@ -171,32 +157,6 @@ export default function DashboardNavbar() {
     router.push("/login");
   };
 
-  // Helper: notification bell JSX (reused in sidebar footer + mobile topbar)
-  const BellLink = ({ size = 22 }: { size?: number }) => (
-    <Link href={requestsHref} className="relative group dash-nav-link" onClick={() => setMobileOpen(false)}>
-      <div className="relative flex-shrink-0">
-        <Bell
-          className={`transition ${
-            pendingCount > 0
-              ? "text-red-400 hover:text-red-300"
-              : "text-slate-300 hover:text-cyan-400"
-          }`}
-          size={size}
-        />
-        {pendingCount > 0 && (
-          <>
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping opacity-75"></span>
-            <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center shadow-lg border border-red-400">
-              {pendingCount > 99 ? "99+" : pendingCount}
-            </span>
-          </>
-        )}
-      </div>
-      {!collapsed && <span>Delivery Requests</span>}
-      {collapsed && <span className="dash-tooltip">Delivery Requests</span>}
-    </Link>
-  );
-
   return (
     <>
       {/* ================= LOGOUT CONFIRM DIALOG ================= */}
@@ -227,8 +187,17 @@ export default function DashboardNavbar() {
         </div>
       )}
 
-      {/* ================= TOP NAVBAR ================= */}
-      <div className="dash-mobile-topbar">
+      {/* ===============================================================
+          TOP NAVBAR — visible on ALL breakpoints (mobile + desktop).
+
+          Mobile  (<1024px): sticky, full-width strip with hamburger +
+                             logo + bell + profile.
+          Desktop (≥1024px): fixed strip positioned to the RIGHT of the
+                             sidebar, showing only bell + profile
+                             (hamburger and logo are lg:hidden inside).
+          =============================================================== */}
+      <div className="dash-topbar">
+        {/* Hamburger — mobile only */}
         <button
           onClick={() => setMobileOpen((s) => !s)}
           className="text-slate-300 hover:text-cyan-400 transition flex-shrink-0 lg:hidden"
@@ -237,35 +206,62 @@ export default function DashboardNavbar() {
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
 
+        {/* Logo — mobile only */}
         <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
           <Image src="/logo.png" alt="Logo" width={28} height={28} className="rounded-md" />
           <span className="font-semibold text-white text-sm">Ice Inventory</span>
         </Link>
 
+        {/* Right cluster — always visible on all breakpoints */}
         <div className="ml-auto flex items-center gap-3">
+          {/* Subscription badge — admin only, hidden on very small screens */}
           {role !== "manager" && (
             <div className="hidden md:block">
               <SubscriptionBadge />
             </div>
           )}
+
+          {/* Delivery notification bell — admin only */}
           {role !== "manager" && (
-            <Link href={requestsHref} className="relative" onClick={() => setMobileOpen(false)}>
+            <Link
+              href={requestsHref}
+              className="relative"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Delivery requests"
+            >
               <Bell
-                className={`transition ${pendingCount > 0 ? "text-red-400" : "text-slate-300 hover:text-cyan-400"}`}
+                className={`transition ${
+                  pendingCount > 0
+                    ? "text-red-400 hover:text-red-300"
+                    : "text-slate-300 hover:text-cyan-400"
+                }`}
                 size={20}
               />
               {pendingCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center shadow-lg border border-red-400">
-                  {pendingCount > 99 ? "99+" : pendingCount}
-                </span>
+                <>
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full animate-ping opacity-75 pointer-events-none"></span>
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center shadow-lg border border-red-400 pointer-events-none">
+                    {pendingCount > 99 ? "99+" : pendingCount}
+                  </span>
+                </>
               )}
             </Link>
           )}
+
+          {/* Profile icon — links to profile page (admin only) */}
           {role !== "manager" && (
-            <Link href="/dashboard/profile" onClick={() => setMobileOpen(false)}>
+            <Link
+              href="/dashboard/profile"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Profile"
+            >
               <UserCircle
                 size={26}
-                className={`transition ${pathname === "/dashboard/profile" ? "text-cyan-400" : "text-slate-300 hover:text-cyan-400"}`}
+                className={`transition ${
+                  pathname.startsWith("/dashboard/profile")
+                    ? "text-cyan-400"
+                    : "text-slate-300 hover:text-cyan-400"
+                }`}
               />
             </Link>
           )}
@@ -388,14 +384,14 @@ export default function DashboardNavbar() {
 
         {/* ── Sidebar Footer ── */}
         <div className="dash-sidebar-footer">
-          {/* Subscription Badge (admin only) */}
+          {/* Subscription Badge (admin only, expanded sidebar) */}
           {role !== "manager" && !collapsed && (
             <div className="px-1 pb-1">
               <SubscriptionBadge />
             </div>
           )}
 
-          {/* Subscription link (mobile admin only, collapsed sidebar) */}
+          {/* Subscription link (admin only) */}
           {role !== "manager" && !collapsed && (
             <Link
               href="/dashboard/subscription"
@@ -407,7 +403,7 @@ export default function DashboardNavbar() {
             </Link>
           )}
 
-          {/* Logout (manager only) */}
+          {/* Logout — manager only */}
           {role === "manager" && (
             <button
               onClick={() => {

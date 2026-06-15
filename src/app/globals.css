@@ -78,6 +78,15 @@ input[type="number"] {
   --sidebar-w-expanded:       248px;
   --sidebar-w-collapsed:       72px;
   --sidebar-mobile-topbar-h:   56px;
+  /* Topbar height (used for content offset padding-top) */
+  --dash-topbar-h:             52px;
+
+  /* FIX: --sidebar-current-w is set dynamically by DashboardNavbar via JS
+     (document.documentElement.style.setProperty) whenever the sidebar
+     collapses or expands. This lets the topbar and content offset update
+     correctly even though they live in a different Next.js layout subtree
+     from the <aside> — CSS sibling selectors cannot cross subtree boundaries. */
+  --sidebar-current-w: var(--sidebar-w-expanded);
 }
 
 /* ── Sidebar base ──────────────────────────────────────────────────────────── */
@@ -213,12 +222,25 @@ input[type="number"] {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* ── Phase 1: Mobile top strip — hide completely on desktop ─────────────────── */
-.dash-mobile-topbar {
+/* ── Persistent top navbar — visible on ALL breakpoints ─────────────────────
+   Mobile  (<1024px): sticky, full-width, 52px strip.
+   Desktop (≥1024px): fixed, positioned to the RIGHT of the sidebar so it
+                      never overlaps the sidebar and always shows bell +
+                      profile in the top-right corner of the content area.
+
+   FIX: left is driven by --sidebar-current-w (set on :root by JS in
+   DashboardNavbar) instead of CSS sibling selectors, which cannot reach
+   across Next.js layout subtree boundaries.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+.dash-topbar {
+  /* Mobile default: sticky full-width strip */
   position: sticky;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 55;
-  height: var(--sidebar-mobile-topbar-h);
+  height: var(--dash-topbar-h);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -229,9 +251,18 @@ input[type="number"] {
   flex-shrink: 0;
 }
 
-/* Hidden on desktop — sidebar header handles branding there */
 @media (min-width: 1024px) {
-  .dash-mobile-topbar { display: none; }
+  /* Desktop: fixed strip to the RIGHT of the sidebar.
+     left tracks --sidebar-current-w which JS updates on every
+     collapse/expand toggle — transitions in sync with the sidebar. */
+  .dash-topbar {
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-current-w, var(--sidebar-w-expanded));
+    right: 0;
+    height: var(--dash-topbar-h);
+    transition: left 0.2s ease;
+  }
 }
 
 /* ── Mobile: sidebar is a slide-in drawer ──────────────────────────────────── */
@@ -245,24 +276,21 @@ input[type="number"] {
   }
 }
 
-/* ── Content offset helper ─────────────────────────────────────────────────── */
-/* Mobile: sidebar is overlay, content fills full width with topbar padding */
+/* ── Content offset — accounts for topbar on ALL breakpoints ───────────────── */
 .dash-content-offset {
+  /* Mobile: full-width content, pushed down by topbar height */
   margin-left: 0;
-  padding-top: var(--sidebar-mobile-topbar-h);
+  padding-top: var(--dash-topbar-h);
 }
 
-/* Desktop: content is pushed right by the sidebar width */
 @media (min-width: 1024px) {
+  /* Desktop: pushed right by sidebar (via --sidebar-current-w) + down by topbar.
+     --sidebar-current-w is set on :root by JS so this updates correctly even
+     though .dash-content-offset lives in a different subtree from <aside>. */
   .dash-content-offset {
-    margin-left: var(--sidebar-w-expanded);
-    padding-top: 0;
-    /* Phase 1: smooth transition when sidebar collapses */
+    margin-left: var(--sidebar-current-w, var(--sidebar-w-expanded));
+    padding-top: var(--dash-topbar-h);
     transition: margin-left 0.2s ease;
-  }
-
-  .dash-content-offset:has(.dash-sidebar-collapsed) {
-    margin-left: var(--sidebar-w-collapsed);
   }
 }
 
