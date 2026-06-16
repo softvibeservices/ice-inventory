@@ -20,7 +20,6 @@ import {
   Menu,
   X,
   Map,
-  CreditCard,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -34,17 +33,7 @@ const stocksSubLinks = [
   { href: "/dashboard/stocks/history", label: "History" },
 ];
 
-// ── Phase 5: Profile sub-links for sidebar footer group ───────────────────────
-const profileSubLinks = [
-  { tab: "basic",           label: "Basic Info" },
-  { tab: "billing",         label: "Bill Details" },
-  { tab: "bank",            label: "Bank Details" },
-  { tab: "product-settings",label: "Product Settings" },
-  { tab: "sessions",        label: "Active Sessions" },
-  { tab: "password",        label: "Change Password" },
-  { tab: "serial",          label: "Serial Number" },
-  { tab: "subscription",    label: "Subscription" },
-];
+
 
 export default function DashboardNavbar() {
   const pathname = usePathname();
@@ -447,85 +436,26 @@ export default function DashboardNavbar() {
 
         {/* ── Sidebar Footer ── */}
         <div className="dash-sidebar-footer">
-          {/* Subscription Badge (admin only, expanded sidebar) */}
+          {/* Subscription Badge — admin only, shown only when expanded */}
           {role !== "manager" && !collapsed && (
             <div className="px-1 pb-1">
               <SubscriptionBadge />
             </div>
           )}
 
-          {/* Phase 5: Profile expand group — admin only */}
-          {role !== "manager" && (
-            <div>
-              <button
-                onClick={() =>
-                  collapsed
-                    ? router.push("/dashboard/profile")
-                    : setExpandedGroup(expandedGroup === "profile" ? null : "profile")
-                }
-                className={`dash-nav-link w-full${pathname.startsWith("/dashboard/profile") ? " dash-nav-link-active" : ""}`}
-                style={{ justifyContent: collapsed ? "center" : "space-between" }}
-              >
-                <span className="flex items-center gap-3">
-                  <UserCircle size={18} className="flex-shrink-0" />
-                  {!collapsed && <span>Profile</span>}
-                </span>
-                {!collapsed && (
-                  <ChevronDown
-                    size={14}
-                    style={{
-                      transform: expandedGroup === "profile" ? "rotate(180deg)" : "rotate(0deg)",
-                      transition: "transform .15s",
-                      flexShrink: 0,
-                    }}
-                  />
-                )}
-                {collapsed && <span className="dash-tooltip">Profile</span>}
-              </button>
-              {!collapsed && expandedGroup === "profile" && (
-                <div className="dash-subsidebar">
-                  {profileSubLinks.map((sub) => (
-                    <Link
-                      key={sub.tab}
-                      href={`/dashboard/profile?tab=${sub.tab}`}
-                      onClick={() => setMobileOpen(false)}
-                      className="dash-subnav-link"
-                    >
-                      {sub.label}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Subscription link (admin only) */}
-          {role !== "manager" && !collapsed && (
-            <Link
-              href="/dashboard/subscription"
-              onClick={() => setMobileOpen(false)}
-              className={`dash-nav-link${pathname === "/dashboard/subscription" ? " dash-nav-link-active" : ""}`}
-            >
-              <CreditCard size={18} className="flex-shrink-0" />
-              <span>Subscription</span>
-            </Link>
-          )}
-
-          {/* Logout — manager only */}
-          {role === "manager" && (
-            <button
-              onClick={() => {
-                setMobileOpen(false);
-                setShowDialog(true);
-              }}
-              className="dash-nav-link dash-nav-link-danger w-full"
-              style={{ justifyContent: collapsed ? "center" : undefined }}
-            >
-              <LogOut size={18} className="flex-shrink-0" />
-              {!collapsed && <span>Logout</span>}
-              {collapsed && <span className="dash-tooltip">Logout</span>}
-            </button>
-          )}
+          {/* Logout — ALL users (admin + manager) with confirmation dialog */}
+          <button
+            onClick={() => {
+              setMobileOpen(false);
+              setShowDialog(true);
+            }}
+            className="dash-nav-link dash-nav-link-danger w-full"
+            style={{ justifyContent: collapsed ? "center" : undefined }}
+          >
+            <LogOut size={18} className="flex-shrink-0" />
+            {!collapsed && <span>Logout</span>}
+            {collapsed && <span className="dash-tooltip">Logout</span>}
+          </button>
         </div>
       </aside>
     </>
