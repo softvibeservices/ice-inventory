@@ -250,7 +250,7 @@ export default function StockPage() {
 
   return (
     <>
-      {/* Page Header */}
+      {/* ── Page Header ── */}
       <div className="page-header">
         <div className="page-header-left">
           <h1 className="page-title">Stock Management</h1>
@@ -258,19 +258,36 @@ export default function StockPage() {
             {products.length} product{products.length !== 1 ? "s" : ""} in inventory
           </p>
         </div>
+        <div className="page-header-actions">
+          <button
+            onClick={downloadStockReport}
+            disabled={filteredProducts.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-sm font-semibold shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export PDF
+          </button>
+          <button
+            onClick={() => setShowEmptyModal(true)}
+            disabled={products.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-300 bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-700 text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            Empty Stock
+          </button>
+        </div>
       </div>
 
+      {/* ── Search & Filter Bar ── */}
       <StockHeader
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         showLowStock={showLowStock}
         setShowLowStock={setShowLowStock}
-        filteredProducts={filteredProducts}
-        downloadStockReport={downloadStockReport}
-        setShowEmptyModal={setShowEmptyModal}
         products={products}
       />
 
+      {/* ── Stock Table ── */}
       <StockTable
         filteredProducts={filteredProducts}
         loading={loading}
@@ -291,3 +308,4 @@ export default function StockPage() {
     </>
   );
 }
+
