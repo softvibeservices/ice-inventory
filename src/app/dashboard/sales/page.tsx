@@ -782,24 +782,24 @@ if (to) params.append("to", to);
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
+    <div className="flex flex-col min-h-screen bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 md:px-6 py-6 md:py-8 space-y-6">
+      <main className="flex-1 w-full">
+        <div className="page-wrapper space-y-6">
+
         {/* ── PAGE HEADER + DATE FILTER ─────────────────────────────────── */}
-        <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-blue-700 flex items-center gap-2">
-              <BarChart3 className="w-7 h-7" />
-              Sales Analytics
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
+        <section className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          {/* Standard page-header (title in slate-900, no icon in h1) */}
+          <div className="page-header-left">
+            <h1 className="page-title">Sales Analytics</h1>
+            <p className="page-subtitle">
               Track sales, product performance, and customer accounts.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-white rounded-xl shadow-sm px-3 py-2 border border-gray-100">
-            <div className="flex items-center gap-2 text-gray-600">
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center bg-white rounded-xl shadow-sm px-3 py-2 border border-slate-200">
+            <div className="flex items-center gap-2 text-slate-600">
               <CalendarRange className="w-4 h-4" />
               <span className="text-xs font-semibold uppercase tracking-wide">
                 Date Range
@@ -1696,6 +1696,8 @@ if (to) params.append("to", to);
 
         {/* Error message */}
         {summaryError && <p className="text-xs text-red-500">{summaryError}</p>}
+
+        </div>{/* end page-wrapper */}
       </main>
 
       <Footer />

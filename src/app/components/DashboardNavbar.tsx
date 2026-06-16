@@ -34,6 +34,18 @@ const stocksSubLinks = [
   { href: "/dashboard/stocks/history", label: "History" },
 ];
 
+// ── Phase 5: Profile sub-links for sidebar footer group ───────────────────────
+const profileSubLinks = [
+  { tab: "basic",           label: "Basic Info" },
+  { tab: "billing",         label: "Bill Details" },
+  { tab: "bank",            label: "Bank Details" },
+  { tab: "product-settings",label: "Product Settings" },
+  { tab: "sessions",        label: "Active Sessions" },
+  { tab: "password",        label: "Change Password" },
+  { tab: "serial",          label: "Serial Number" },
+  { tab: "subscription",    label: "Subscription" },
+];
+
 export default function DashboardNavbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -105,20 +117,31 @@ export default function DashboardNavbar() {
   }, []);
 
   /* ================= NAV LINKS ================= */
-  const navLinks = [
+  // Split into three sections for labeled grouping:
+  //   MAIN       — Dashboard, Products
+  //   INVENTORY  — Stocks, Customers
+  //   OPERATIONS — Billing, Orders, Live Map, Sales
+  const mainLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/products", label: "Products", icon: Package },
-    { href: "/dashboard/stocks", label: "Stocks", icon: Boxes },
+  ];
+
+  const inventoryLinks = [
+    { href: "/dashboard/stocks",    label: "Stocks",    icon: Boxes },
     { href: "/dashboard/customers", label: "Customers", icon: Users },
-    { href: "/dashboard/billing", label: "Billing", icon: FileText },
-    { href: "/dashboard/orders", label: "Orders", icon: ClipboardList },
-    { href: "/dashboard/delivery/live-map", label: "Live Map", icon: Map },
+  ];
+
+  const operationsLinks = [
+    { href: "/dashboard/billing",          label: "Billing",  icon: FileText },
+    { href: "/dashboard/orders",           label: "Orders",   icon: ClipboardList },
+    { href: "/dashboard/delivery/live-map",label: "Live Map", icon: Map },
     ...(role === "manager"
       ? []
-      : [
-          { href: "/dashboard/sales", label: "Sales", icon: BarChart3 },
-        ]),
+      : [{ href: "/dashboard/sales", label: "Sales", icon: BarChart3 }]),
   ];
+
+  // Flat list kept for backwards-compat (notifications etc.)
+  const navLinks = [...mainLinks, ...inventoryLinks, ...operationsLinks];
 
   /* ================= NOTIFICATIONS ================= */
   useEffect(() => {
@@ -311,8 +334,32 @@ export default function DashboardNavbar() {
 
         {/* ── Main Nav ── */}
         <nav className="dash-sidebar-nav">
-          {navLinks.map(({ href, label, icon: Icon }) => {
-            // Stocks gets a subsidebar group
+
+          {/* ─── MAIN section ─── */}
+          {!collapsed && <span className="dash-section-label">Main</span>}
+          {mainLinks.map(({ href, label, icon: Icon }) => {
+            const isActive = href === "/dashboard"
+              ? pathname === href
+              : pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setMobileOpen(false)}
+                className={`dash-nav-link${isActive ? " dash-nav-link-active" : ""}`}
+                style={{ justifyContent: collapsed ? "center" : undefined }}
+              >
+                <Icon size={18} className="flex-shrink-0" />
+                {!collapsed && <span>{label}</span>}
+                {collapsed && <span className="dash-tooltip">{label}</span>}
+              </Link>
+            );
+          })}
+
+          {/* ─── INVENTORY section ─── */}
+          {!collapsed && <span className="dash-section-label">Inventory</span>}
+          {inventoryLinks.map(({ href, label, icon: Icon }) => {
+            // Stocks gets the subsidebar treatment
             if (href === "/dashboard/stocks") {
               const isExpanded = expandedGroup === "stocks";
               const isActive = pathname.startsWith("/dashboard/stocks");
@@ -360,12 +407,8 @@ export default function DashboardNavbar() {
                 </div>
               );
             }
-
-            // All other links — plain nav link
-            const isActive = href === "/dashboard"
-              ? pathname === href
-              : pathname.startsWith(href);
-
+            // Other inventory links (Customers)
+            const isActive = pathname.startsWith(href);
             return (
               <Link
                 key={href}
@@ -380,6 +423,26 @@ export default function DashboardNavbar() {
               </Link>
             );
           })}
+
+          {/* ─── OPERATIONS section ─── */}
+          {!collapsed && <span className="dash-section-label">Operations</span>}
+          {operationsLinks.map(({ href, label, icon: Icon }) => {
+            const isActive = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setMobileOpen(false)}
+                className={`dash-nav-link${isActive ? " dash-nav-link-active" : ""}`}
+                style={{ justifyContent: collapsed ? "center" : undefined }}
+              >
+                <Icon size={18} className="flex-shrink-0" />
+                {!collapsed && <span>{label}</span>}
+                {collapsed && <span className="dash-tooltip">{label}</span>}
+              </Link>
+            );
+          })}
+
         </nav>
 
         {/* ── Sidebar Footer ── */}
@@ -388,6 +451,51 @@ export default function DashboardNavbar() {
           {role !== "manager" && !collapsed && (
             <div className="px-1 pb-1">
               <SubscriptionBadge />
+            </div>
+          )}
+
+          {/* Phase 5: Profile expand group — admin only */}
+          {role !== "manager" && (
+            <div>
+              <button
+                onClick={() =>
+                  collapsed
+                    ? router.push("/dashboard/profile")
+                    : setExpandedGroup(expandedGroup === "profile" ? null : "profile")
+                }
+                className={`dash-nav-link w-full${pathname.startsWith("/dashboard/profile") ? " dash-nav-link-active" : ""}`}
+                style={{ justifyContent: collapsed ? "center" : "space-between" }}
+              >
+                <span className="flex items-center gap-3">
+                  <UserCircle size={18} className="flex-shrink-0" />
+                  {!collapsed && <span>Profile</span>}
+                </span>
+                {!collapsed && (
+                  <ChevronDown
+                    size={14}
+                    style={{
+                      transform: expandedGroup === "profile" ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform .15s",
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                {collapsed && <span className="dash-tooltip">Profile</span>}
+              </button>
+              {!collapsed && expandedGroup === "profile" && (
+                <div className="dash-subsidebar">
+                  {profileSubLinks.map((sub) => (
+                    <Link
+                      key={sub.tab}
+                      href={`/dashboard/profile?tab=${sub.tab}`}
+                      onClick={() => setMobileOpen(false)}
+                      className="dash-subnav-link"
+                    >
+                      {sub.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
