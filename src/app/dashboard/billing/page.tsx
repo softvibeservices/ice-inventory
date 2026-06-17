@@ -1,7 +1,9 @@
 // src/app/dashboard/billing/page.tsx
+// Phase A.2: Bottom action buttons use design-system .btn classes (no emoji)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { RotateCcw, Save, CheckCircle, FileDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
@@ -1598,19 +1600,19 @@ export default function BillingPage() {
               {/* Reset button — NOT in PDF (UI only) */}
               <button
                 onClick={() => setShowResetDialog(true)}
-                className="px-3 sm:px-4 py-1 sm:py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 text-xs sm:text-sm"
+                className="btn btn-secondary btn-sm"
                 title="Clear all entered data and start fresh"
               >
-                🔄 Reset Form
+                <RotateCcw size={14} /> Reset Form
               </button>
 
               {/* Save as Draft button */}
               <button
                 onClick={saveDraft}
-                className="px-3 sm:px-4 py-1 sm:py-2 bg-amber-500 text-white rounded hover:bg-amber-600 text-xs sm:text-sm"
+                className="btn btn-warning btn-sm"
                 title="Save current bill as a draft to continue later"
               >
-                💾 Save Draft
+                <Save size={14} /> Save Draft
               </button>
             </div>
 
@@ -1620,9 +1622,9 @@ export default function BillingPage() {
                 onClick={handlePrepareBillClick}
                 disabled={!canUseBillingActions}
                 title={!canUseBillingActions ? getDisabledReason() : ""}
-                className="px-3 sm:px-4 py-1 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn btn-success btn-sm"
               >
-                ✅ {isEditMode ? "Update Bill" : "Prepare Bill"}
+                <CheckCircle size={14} /> {isEditMode ? "Update Bill" : "Prepare Bill"}
               </button>
 
               {/* PDF Export — guarded */}
@@ -1630,9 +1632,9 @@ export default function BillingPage() {
                 onClick={handlePdfExportClick}
                 disabled={!canUseBillingActions}
                 title={!canUseBillingActions ? getDisabledReason() : ""}
-                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
+                className="btn btn-primary btn-sm"
               >
-                📄 Export PDF
+                <FileDown size={14} /> Export PDF
               </button>
 
               {/* Hidden PDF ref component (still used programmatically) */}

@@ -623,3 +623,42 @@ input[type="number"] {
 .dash-page-header { display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px; }
 .dash-page-header h1 { font-size: 1.5rem; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
 .dash-page-header p  { font-size: 0.875rem; color: #64748b; }
+
+/* ── implementation_third.md — Phase A.1.1 ───────────────────────────────── */
+/* Ensure dash-section-label uses the sidebar-appropriate softer color */
+.dash-section-label {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+/* ── Form utilities (Phase A.1.2 — used by profile sub-components) ──────── */
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 5px;
+}
+.form-input {
+  width: 100%;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  color: #111827;
+  background: #ffffff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+}
+.form-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.form-input::placeholder { color: #9ca3af; }
+.form-input:disabled { background: #f9fafb; color: #6b7280; cursor: not-allowed; }
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* ── Phase C — flush card variant for widget components ────────────────── */
+.saas-card-flush { padding: 0; }

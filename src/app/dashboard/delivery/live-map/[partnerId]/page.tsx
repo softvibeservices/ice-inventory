@@ -450,9 +450,10 @@ const res = await fetch(
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => router.push("/dashboard/delivery/live-map")}
-                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                    className="btn btn-secondary btn-sm"
+                    aria-label="Back to partner list"
                   >
-                    <ArrowLeft className="w-5 h-5 text-slate-600" />
+                    <ArrowLeft className="w-4 h-4" />
                   </button>
                   <div>
                     <h2 className="text-lg sm:text-xl font-bold text-blue-700 flex items-center gap-2">

@@ -929,25 +929,26 @@ function OrdersPageInner() {
           </div>
 
           {/* ── TAB BAR ─────────────────────────────────────────────────── */}
-          <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-0.5 scrollbar-hide">
-            {TAB_CONFIG.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium transition whitespace-nowrap ${
-                  tab === t.id ? t.activeBg : t.inactiveBg
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${t.dot} ${tab !== t.id ? "opacity-40" : ""}`} />
-                {t.label}
-                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${
-                  tab === t.id ? "bg-white/70" : "bg-slate-100 text-slate-500"
-                }`}>
-                  {t.count}
-                </span>
-              </button>
-            ))}
+          <div className="saas-card saas-card-compact mb-5">
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+              {TAB_CONFIG.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`btn btn-sm ${tab === t.id ? "btn-primary" : "btn-secondary"} whitespace-nowrap`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${t.dot} ${tab !== t.id ? "opacity-50" : ""}`} />
+                  {t.label}
+                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md ${
+                    tab === t.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                  }`}>
+                    {t.count}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
+
 
           {/* ── ORDER LIST (table) ──────────────────────────────────────── */}
           <OrderList
