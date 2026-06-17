@@ -335,22 +335,31 @@ export default function CustomerHistoryPage() {
   ];
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
-      <main className="flex-grow w-full max-w-5xl mx-auto px-3 sm:px-5 lg:px-8 py-6">
+      <main className="flex-grow w-full max-w-5xl mx-auto page-wrapper">
 
-        {/* ── Back button ── */}
-        <button
-          onClick={() => router.back()}
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition mb-5 group"
-        >
-          <ArrowLeft
-            size={15}
-            className="group-hover:-translate-x-0.5 transition-transform"
-          />
-          Back to Customers
-        </button>
+        {/* ── Page Header ── */}
+        <div className="page-header">
+          <div className="page-header-left">
+            <h1 className="page-title">
+              {customer ? customer.name : 'Customer History'}
+            </h1>
+            <p className="page-subtitle">
+              {customer?.shopName ? `${customer.shopName} · Transaction Ledger` : 'Transaction Ledger'}
+            </p>
+          </div>
+          <div className="page-header-actions">
+            <button
+              onClick={() => router.back()}
+              className="btn btn-secondary btn-sm"
+            >
+              <ArrowLeft size={14} />
+              Back to Customers
+            </button>
+          </div>
+        </div>
 
         {loading ? (
           /* ── Loading ── */

@@ -437,7 +437,7 @@ const res = await fetch(
   const canRenderMap = pulsingIcon && startIcon && location && L;
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow w-full px-3 sm:px-5 lg:px-8 py-6">
@@ -450,9 +450,10 @@ const res = await fetch(
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => router.push("/dashboard/delivery/live-map")}
-                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                    className="btn btn-secondary btn-sm"
+                    aria-label="Back to partner list"
                   >
-                    <ArrowLeft className="w-5 h-5 text-slate-600" />
+                    <ArrowLeft className="w-4 h-4" />
                   </button>
                   <div>
                     <h2 className="text-lg sm:text-xl font-bold text-blue-700 flex items-center gap-2">

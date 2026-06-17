@@ -20,9 +20,20 @@ import {
   Menu,
   X,
   Map,
-  CreditCard,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import SubscriptionBadge from "./SubscriptionBadge";
+
+// ── Sub-link data (Phase 2 subsidebar) ────────────────────────────────────────
+const stocksSubLinks = [
+  { href: "/dashboard/stocks", label: "Overview" },
+  { href: "/dashboard/stocks/restock", label: "Restock" },
+  { href: "/dashboard/stocks/history", label: "History" },
+];
+
+
 
 export default function DashboardNavbar() {
   const pathname = usePathname();
@@ -33,6 +44,52 @@ export default function DashboardNavbar() {
   const [userId, setUserId] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Sidebar collapse state — persisted to localStorage
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Subsidebar expand state — stocks only now
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      if (window.location.pathname.startsWith("/dashboard/stocks")) return "stocks";
+    }
+    return null;
+  });
+
+  // Load collapse preference from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("sidebarCollapsed");
+      if (stored !== null) setCollapsed(stored === "true");
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Persist collapse preference
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("sidebarCollapsed", String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
+  // FIX: Keep --sidebar-current-w on :root in sync with collapse state so that
+  // .dash-topbar and .dash-content-offset always have the correct left/margin-left.
+  // CSS sibling selectors (.dash-sidebar-collapsed ~ .dash-topbar) cannot reach
+  // across Next.js layout subtree boundaries, so we drive it from JS instead.
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--sidebar-current-w",
+      collapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w-expanded)"
+    );
+  }, [collapsed]);
+
+  // Auto-expand group based on current pathname
+  useEffect(() => {
+    if (pathname.startsWith("/dashboard/stocks")) setExpandedGroup("stocks");
+  }, [pathname]);
 
   /* ================= LOAD USER DATA ================= */
   useEffect(() => {
@@ -49,20 +106,31 @@ export default function DashboardNavbar() {
   }, []);
 
   /* ================= NAV LINKS ================= */
-  const navLinks = [
+  // Split into three sections for labeled grouping:
+  //   MAIN       — Dashboard, Products
+  //   INVENTORY  — Stocks, Customers
+  //   OPERATIONS — Billing, Orders, Live Map, Sales
+  const mainLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/dashboard/products", label: "Products", icon: Package },
-    { href: "/dashboard/stocks", label: "Stocks", icon: Boxes },
+  ];
+
+  const inventoryLinks = [
+    { href: "/dashboard/stocks",    label: "Stocks",    icon: Boxes },
     { href: "/dashboard/customers", label: "Customers", icon: Users },
-    { href: "/dashboard/billing", label: "Billing", icon: FileText },
-    { href: "/dashboard/orders", label: "Orders", icon: ClipboardList },
-    { href: "/dashboard/delivery/live-map", label: "Live Map", icon: Map },
+  ];
+
+  const operationsLinks = [
+    { href: "/dashboard/billing",          label: "Billing",  icon: FileText },
+    { href: "/dashboard/orders",           label: "Orders",   icon: ClipboardList },
+    { href: "/dashboard/delivery/live-map",label: "Live Map", icon: Map },
     ...(role === "manager"
       ? []
-      : [
-          { href: "/dashboard/sales", label: "Sales", icon: BarChart3 },
-        ]),
+      : [{ href: "/dashboard/sales", label: "Sales", icon: BarChart3 }]),
   ];
+
+  // Flat list kept for backwards-compat (notifications etc.)
+  const navLinks = [...mainLinks, ...inventoryLinks, ...operationsLinks];
 
   /* ================= NOTIFICATIONS ================= */
   useEffect(() => {
@@ -103,7 +171,7 @@ export default function DashboardNavbar() {
 
   return (
     <>
-      {/* ================= LOGOUT CONFIRM ================= */}
+      {/* ================= LOGOUT CONFIRM DIALOG ================= */}
       {showDialog && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
           <div className="w-full max-w-sm rounded-xl bg-[#020617] border border-white/10 p-6 text-center shadow-xl">
@@ -131,198 +199,265 @@ export default function DashboardNavbar() {
         </div>
       )}
 
-      {/* ================= NAVBAR ================= */}
-      <header className="sticky top-0 z-50 bg-gradient-to-r from-[#020617] via-[#020b2c] to-[#031136] border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-4">
+      {/* ===============================================================
+          TOP NAVBAR — visible on ALL breakpoints (mobile + desktop).
 
-          {/* LOGO */}
-          <Link href="/dashboard" className="flex items-center gap-3">
+          Mobile  (<1024px): sticky, full-width strip with hamburger +
+                             logo + bell + profile.
+          Desktop (≥1024px): fixed strip positioned to the RIGHT of the
+                             sidebar, showing only bell + profile
+                             (hamburger and logo are lg:hidden inside).
+          =============================================================== */}
+      <div className="dash-topbar">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={() => setMobileOpen((s) => !s)}
+          className="text-slate-300 hover:text-cyan-400 transition flex-shrink-0 lg:hidden"
+          aria-label="Toggle menu"
+        >
+          {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+
+        {/* Logo — mobile only */}
+        <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
+          <Image src="/logo.png" alt="Logo" width={28} height={28} className="rounded-md" />
+          <span className="font-semibold text-white text-sm">Ice Inventory</span>
+        </Link>
+
+        {/* Right cluster — always visible on all breakpoints */}
+        <div className="ml-auto flex items-center gap-3">
+          {/* Subscription badge — admin only, hidden on very small screens */}
+          {role !== "manager" && (
+            <div className="hidden md:block">
+              <SubscriptionBadge />
+            </div>
+          )}
+
+          {/* Delivery notification bell — admin only */}
+          {role !== "manager" && (
+            <Link
+              href={requestsHref}
+              className="relative"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Delivery requests"
+            >
+              <Bell
+                className={`transition ${
+                  pendingCount > 0
+                    ? "text-red-400 hover:text-red-300"
+                    : "text-slate-300 hover:text-cyan-400"
+                }`}
+                size={20}
+              />
+              {pendingCount > 0 && (
+                <>
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full animate-ping opacity-75 pointer-events-none"></span>
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center shadow-lg border border-red-400 pointer-events-none">
+                    {pendingCount > 99 ? "99+" : pendingCount}
+                  </span>
+                </>
+              )}
+            </Link>
+          )}
+
+          {/* Profile icon — links to profile page (admin only) */}
+          {role !== "manager" && (
+            <Link
+              href="/dashboard/profile"
+              onClick={() => setMobileOpen(false)}
+              aria-label="Profile"
+            >
+              <UserCircle
+                size={26}
+                className={`transition ${
+                  pathname.startsWith("/dashboard/profile")
+                    ? "text-cyan-400"
+                    : "text-slate-300 hover:text-cyan-400"
+                }`}
+              />
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* ================= MOBILE DRAWER BACKDROP ================= */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-[60] bg-black/50"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* ================= SIDEBAR ================= */}
+      <aside
+        className={`dash-sidebar${collapsed ? " dash-sidebar-collapsed" : ""}${mobileOpen ? " dash-sidebar-open" : ""}`}
+      >
+        {/* ── Sidebar Header ── */}
+        <div className="dash-sidebar-header">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 min-w-0"
+            onClick={() => setMobileOpen(false)}
+          >
             <Image
               src="/logo.png"
               alt="Logo"
-              width={36}
-              height={36}
-              className="rounded-lg"
+              width={32}
+              height={32}
+              className="rounded-md flex-shrink-0"
             />
-            <span className="hidden sm:block font-semibold text-white">
-              IceCream Inventory
-            </span>
+            {!collapsed && (
+              <span className="font-semibold text-white text-sm truncate">
+                Ice Inventory
+              </span>
+            )}
           </Link>
+          <button
+            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition flex-shrink-0"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
+        </div>
 
-          {/* DESKTOP NAV */}
-          <nav className="hidden lg:flex items-center gap-2 ml-6">
-            {navLinks.map(({ href, label, icon: Icon }) => (
+        {/* ── Main Nav ── */}
+        <nav className="dash-sidebar-nav">
+
+          {/* ─── MAIN section ─── */}
+          {!collapsed && <span className="dash-section-label">Main</span>}
+          {mainLinks.map(({ href, label, icon: Icon }) => {
+            const isActive = href === "/dashboard"
+              ? pathname === href
+              : pathname.startsWith(href);
+            return (
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm transition
-                  ${
-                    pathname === href
-                      ? "bg-cyan-500/20 text-cyan-400"
-                      : "text-slate-300 hover:bg-white/10 hover:text-cyan-300"
-                  }`}
+                onClick={() => setMobileOpen(false)}
+                className={`dash-nav-link${isActive ? " dash-nav-link-active" : ""}`}
+                style={{ justifyContent: collapsed ? "center" : undefined }}
               >
-                <Icon size={16} />
-                {label}
+                <Icon size={18} className="flex-shrink-0" />
+                {!collapsed && <span>{label}</span>}
+                {collapsed && <span className="dash-tooltip">{label}</span>}
               </Link>
-            ))}
-          </nav>
+            );
+          })}
 
-          {/* RIGHT */}
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          {/* ─── INVENTORY section ─── */}
+          {!collapsed && <span className="dash-section-label">Inventory</span>}
+          {inventoryLinks.map(({ href, label, icon: Icon }) => {
+            // Stocks gets the subsidebar treatment
+            if (href === "/dashboard/stocks") {
+              const isExpanded = expandedGroup === "stocks";
+              const isActive = pathname.startsWith("/dashboard/stocks");
+              return (
+                <div key={href}>
+                  <button
+                    onClick={() => {
+                      if (collapsed) {
+                        router.push(href);
+                      } else {
+                        setExpandedGroup(isExpanded ? null : "stocks");
+                      }
+                    }}
+                    className={`dash-nav-link w-full${isActive ? " dash-nav-link-active" : ""}`}
+                    style={{ justifyContent: collapsed ? "center" : "space-between" }}
+                  >
+                    <span className="flex items-center gap-3">
+                      <Icon size={18} className="flex-shrink-0" />
+                      {!collapsed && <span>{label}</span>}
+                    </span>
+                    {!collapsed && (
+                      <ChevronDown
+                        size={14}
+                        className="flex-shrink-0 transition-transform duration-150"
+                        style={{ transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+                      />
+                    )}
+                    {collapsed && <span className="dash-tooltip">{label}</span>}
+                  </button>
 
-            {/* ── SUBSCRIPTION BADGE (Admin only, desktop) ── */}
-            {role !== "manager" && <SubscriptionBadge />}
-
-            {/* NOTIFICATION BELL (Admin only) */}
-            {role !== "manager" && (
-              <Link href={requestsHref} className="relative group">
-                <div className="relative">
-                  <Bell
-                    className={`transition ${
-                      pendingCount > 0
-                        ? "text-red-400 hover:text-red-300"
-                        : "text-slate-300 hover:text-cyan-400"
-                    }`}
-                    size={22}
-                  />
-                  {pendingCount > 0 && (
-                    <>
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full animate-ping opacity-75"></span>
-                      <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-lg border border-red-400">
-                        {pendingCount > 99 ? "99+" : pendingCount}
-                      </span>
-                    </>
+                  {!collapsed && isExpanded && (
+                    <div className="dash-subsidebar">
+                      {stocksSubLinks.map((sub) => (
+                        <Link
+                          key={sub.href}
+                          href={sub.href}
+                          onClick={() => setMobileOpen(false)}
+                          className={`dash-subnav-link${pathname === sub.href ? " dash-subnav-link-active" : ""}`}
+                        >
+                          {sub.label}
+                        </Link>
+                      ))}
+                    </div>
                   )}
                 </div>
-
-                {pendingCount > 0 && (
-                  <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 bg-red-600 text-white text-xs px-3 py-1 rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    {pendingCount} pending request{pendingCount > 1 ? "s" : ""}
-                  </div>
-                )}
-              </Link>
-            )}
-
-            {/* PROFILE (Admin only) */}
-            {role !== "manager" && (
-              <Link href="/dashboard/profile">
-                <UserCircle
-                  size={30}
-                  className={`transition ${
-                    pathname === "/dashboard/profile"
-                      ? "text-cyan-400"
-                      : "text-slate-300 hover:text-cyan-400"
-                  }`}
-                />
-              </Link>
-            )}
-
-            {/* LOGOUT BUTTON (Desktop - Manager only) */}
-            {role === "manager" && (
-              <button
-                onClick={() => setShowDialog(true)}
-                className="hidden lg:flex items-center gap-2 px-3 py-2 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
+              );
+            }
+            // Other inventory links (Customers)
+            const isActive = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setMobileOpen(false)}
+                className={`dash-nav-link${isActive ? " dash-nav-link-active" : ""}`}
+                style={{ justifyContent: collapsed ? "center" : undefined }}
               >
-                <LogOut size={18} />
-                <span className="hidden xl:inline">Logout</span>
-              </button>
-            )}
+                <Icon size={18} className="flex-shrink-0" />
+                {!collapsed && <span>{label}</span>}
+                {collapsed && <span className="dash-tooltip">{label}</span>}
+              </Link>
+            );
+          })}
 
-            {/* MOBILE MENU BUTTON */}
-            <button
-              onClick={() => setMobileOpen((s) => !s)}
-              className="lg:hidden text-slate-300 hover:text-cyan-400"
-            >
-              {mobileOpen ? <X size={26} /> : <Menu size={26} />}
-            </button>
-          </div>
-        </div>
+          {/* ─── OPERATIONS section ─── */}
+          {!collapsed && <span className="dash-section-label">Operations</span>}
+          {operationsLinks.map(({ href, label, icon: Icon }) => {
+            const isActive = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setMobileOpen(false)}
+                className={`dash-nav-link${isActive ? " dash-nav-link-active" : ""}`}
+                style={{ justifyContent: collapsed ? "center" : undefined }}
+              >
+                <Icon size={18} className="flex-shrink-0" />
+                {!collapsed && <span>{label}</span>}
+                {collapsed && <span className="dash-tooltip">{label}</span>}
+              </Link>
+            );
+          })}
 
-        {/* ================= MOBILE MENU ================= */}
-        {mobileOpen && (
-          <div className="lg:hidden border-t border-white/10 bg-[#020617]">
-            <div className="px-4 py-3 space-y-1">
-              {navLinks.map(({ href, label, icon: Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition
-                    ${
-                      pathname === href
-                        ? "bg-cyan-500/20 text-cyan-400"
-                        : "text-slate-300 hover:bg-white/10"
-                    }`}
-                >
-                  <Icon size={18} />
-                  {label}
-                </Link>
-              ))}
+        </nav>
 
-              {/* Mobile Admin-only items */}
-              {role !== "manager" && (
-                <>
-                  {/* ── SUBSCRIPTION LINK (mobile, admin only) ── */}
-                  <Link
-                    href="/dashboard/subscription"
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition ${
-                      pathname === "/dashboard/subscription"
-                        ? "bg-cyan-500/20 text-cyan-400"
-                        : "text-slate-300 hover:bg-white/10"
-                    }`}
-                  >
-                    <CreditCard size={18} />
-                    Subscription
-                  </Link>
-
-                  <Link
-                    href="/dashboard/profile"
-                    onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-md text-sm text-slate-300 hover:bg-white/10 transition"
-                  >
-                    <UserCircle size={18} />
-                    Profile
-                  </Link>
-
-                  <Link
-                    href={requestsHref}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm transition relative ${
-                      pendingCount > 0
-                        ? "text-red-400 hover:bg-red-500/10"
-                        : "text-slate-300 hover:bg-white/10"
-                    }`}
-                  >
-                    <Bell size={18} />
-                    <span>Delivery Requests</span>
-                    {pendingCount > 0 && (
-                      <span className="ml-auto bg-red-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg border border-red-400">
-                        {pendingCount > 99 ? "99+" : pendingCount}
-                      </span>
-                    )}
-                  </Link>
-                </>
-              )}
-
-              {/* LOGOUT (Mobile - Manager only) */}
-              {role === "manager" && (
-                <button
-                  onClick={() => {
-                    setMobileOpen(false);
-                    setShowDialog(true);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-sm text-red-400 hover:bg-white/10 transition"
-                >
-                  <LogOut size={18} />
-                  Logout
-                </button>
-              )}
+        {/* ── Sidebar Footer ── */}
+        <div className="dash-sidebar-footer">
+          {/* Subscription Badge — admin only, shown only when expanded */}
+          {role !== "manager" && !collapsed && (
+            <div className="px-1 pb-1">
+              <SubscriptionBadge />
             </div>
-          </div>
-        )}
-      </header>
+          )}
+
+          {/* Logout — ALL users (admin + manager) with confirmation dialog */}
+          <button
+            onClick={() => {
+              setMobileOpen(false);
+              setShowDialog(true);
+            }}
+            className="dash-nav-link dash-nav-link-danger w-full"
+            style={{ justifyContent: collapsed ? "center" : undefined }}
+          >
+            <LogOut size={18} className="flex-shrink-0" />
+            {!collapsed && <span>Logout</span>}
+            {collapsed && <span className="dash-tooltip">Logout</span>}
+          </button>
+        </div>
+      </aside>
     </>
   );
 }

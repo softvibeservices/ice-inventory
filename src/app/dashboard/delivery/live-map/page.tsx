@@ -26,7 +26,7 @@ interface Partner {
 // ─────────────────────────────────────────────────────────────────────────────
 function FeatureGateScreen() {
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50">
+    <div className="flex flex-col min-h-screen bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow w-full max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6 flex items-center justify-center">
@@ -142,7 +142,7 @@ function LiveMapContent() {
   }, [userId]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
+    <div className="flex min-h-screen flex-col bg-slate-50 dash-content-offset">
       <DashboardNavbar />
 
       <main className="flex-grow w-full max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6">
@@ -254,7 +254,7 @@ export default function LiveMapHome() {
   // While subscription is loading, show a neutral loading state
   if (loading) {
     return (
-      <div className="flex min-h-screen flex-col bg-slate-50">
+      <div className="flex min-h-screen flex-col bg-slate-50 dash-content-offset">
         <DashboardNavbar />
         <main className="flex-grow flex items-center justify-center">
           <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />

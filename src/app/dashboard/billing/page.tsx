@@ -1,7 +1,9 @@
 // src/app/dashboard/billing/page.tsx
+// Phase A.2: Bottom action buttons use design-system .btn classes (no emoji)
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { RotateCcw, Save, CheckCircle, FileDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
@@ -191,6 +193,7 @@ export default function BillingPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
+  const [loadingData, setLoadingData] = useState<boolean>(true);
 
   // ── Customer selection ─────────────────────────────────────────────────────
   const [billingCustomer, setBillingCustomer] = useState<Customer | null>(null);
@@ -810,6 +813,7 @@ export default function BillingPage() {
     const stored = localStorage.getItem("user");
     if (!stored) {
       toast.error("User not found in localStorage");
+      setLoadingData(false);
       return;
     }
     const parsed = JSON.parse(stored);
@@ -818,80 +822,79 @@ export default function BillingPage() {
 
     const token = localStorage.getItem("token");
 
-    // Seller
-    fetch(`/api/seller-details`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => safeJson(r))
-      .then((s) => {
-        if (s && !s.error) setSeller(s);
-      })
-      .catch(() => {});
-
-    // Customers
-    fetch(`/api/customers`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => safeJson(r))
-      .then((data) => {
-        if (!data) return;
-        let arr: any[] = [];
-        if (Array.isArray(data)) arr = data;
-        else if (Array.isArray((data as any).customers))
-          arr = (data as any).customers;
-        else
-          arr = Object.values(data)
-            .filter((v) => Array.isArray(v))
-            .flat();
-        if (arr.length) {
-          const mapped = arr.map((c: any) => ({
-            _id: c._id,
-            name: c.name,
-            contact: Array.isArray(c.contacts)
-              ? c.contacts[0]
-              : c.contacts ?? c.contact ?? "",
-            address: c.shopAddress ?? c.address ?? "",
-            shopName: c.shopName ?? "",
-            shopAddress: c.shopAddress ?? c.address ?? "",
-          }));
-          setCustomers(mapped);
-        }
-      })
-      .catch(() => {});
-
-    // Products
-    fetch(`/api/products`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => safeJson(r))
-      .then((data) => {
-        if (!data) return;
-        if (Array.isArray(data)) setProducts(data as Product[]);
-        else if (Array.isArray((data as any).products))
-          setProducts((data as any).products as Product[]);
-        else {
-          const arr = Object.values(data)
-            .filter((v) => Array.isArray(v))
-            .flat();
-          if (arr.length) setProducts(arr[0] as Product[]);
-        }
-      })
-      .catch(() => {});
-
-    // Serial
-    const initializeSerial = async () => {
+    const loadAllInitialData = async () => {
       try {
+        setLoadingData(true);
+        const [sellerRes, customersRes, productsRes] = await Promise.all([
+          fetch(`/api/seller-details`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then((r) => safeJson(r)),
+          fetch(`/api/customers`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then((r) => safeJson(r)),
+          fetch(`/api/products`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }).then((r) => safeJson(r)),
+        ]);
+
+        // Seller
+        if (sellerRes && !sellerRes.error) {
+          setSeller(sellerRes);
+        }
+
+        // Customers
+        if (customersRes) {
+          let arr: any[] = [];
+          if (Array.isArray(customersRes)) arr = customersRes;
+          else if (Array.isArray((customersRes as any).customers))
+            arr = (customersRes as any).customers;
+          else
+            arr = Object.values(customersRes)
+              .filter((v) => Array.isArray(v))
+              .flat();
+          if (arr.length) {
+            const mapped = arr.map((c: any) => ({
+              _id: c._id,
+              name: c.name,
+              contact: Array.isArray(c.contacts)
+                ? c.contacts[0]
+                : c.contacts ?? c.contact ?? "",
+              address: c.shopAddress ?? c.address ?? "",
+              shopName: c.shopName ?? "",
+              shopAddress: c.shopAddress ?? c.address ?? "",
+            }));
+            setCustomers(mapped);
+          }
+        }
+
+        // Products
+        if (productsRes) {
+          if (Array.isArray(productsRes)) setProducts(productsRes as Product[]);
+          else if (Array.isArray((productsRes as any).products))
+            setProducts((productsRes as any).products as Product[]);
+          else {
+            const arr = Object.values(productsRes)
+              .filter((v) => Array.isArray(v))
+              .flat();
+            if (arr.length) setProducts(arr[0] as Product[]);
+          }
+        }
+
+        // Serial
         const cachedPreview = sessionStorage.getItem("billing-serial-preview");
         if (cachedPreview) {
           setSerialNo(cachedPreview);
-          return;
+        } else {
+          await fetchNextSerialPreview(uid);
         }
-        await fetchNextSerialPreview(uid);
       } catch (err) {
-        console.error("Error initializing serial:", err);
+        console.error("Error loading initial billing data:", err);
+      } finally {
+        setLoadingData(false);
       }
     };
-    initializeSerial();
+
+    loadAllInitialData();
     updateDateToToday();
   }, []);
 
@@ -1377,8 +1380,8 @@ export default function BillingPage() {
   // ── Derived flags for button disabling ─────────────────────────────────────
   const profileComplete = isProfileComplete();
   const customersExist = hasCustomers();
-  // Buttons that require profile + customers
-  const canUseBillingActions = profileComplete && customersExist;
+  // Buttons that require profile + customers (and loading to be finished)
+  const canUseBillingActions = profileComplete && customersExist && !loadingData;
 
   // ── Tooltip text when buttons are disabled ─────────────────────────────────
   const getDisabledReason = () => {
@@ -1392,7 +1395,7 @@ export default function BillingPage() {
   // ═══════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50">
+    <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
       <DashboardNavbar />
 
       {/* ── Seller / logo header ──────────────────────────────── */}
@@ -1405,7 +1408,7 @@ export default function BillingPage() {
           </h1>
 
           {/* ── Profile / customer warning banners ──────────────── */}
-          {!profileComplete && (
+          {!loadingData && !profileComplete && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
               <span className="text-lg mt-0.5">⚠️</span>
               <div>
@@ -1429,7 +1432,7 @@ export default function BillingPage() {
             </div>
           )}
 
-          {!customersExist && (
+          {!loadingData && !customersExist && (
             <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
               <span className="text-lg mt-0.5">👥</span>
               <div>
@@ -1597,19 +1600,19 @@ export default function BillingPage() {
               {/* Reset button — NOT in PDF (UI only) */}
               <button
                 onClick={() => setShowResetDialog(true)}
-                className="px-3 sm:px-4 py-1 sm:py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded hover:bg-gray-200 text-xs sm:text-sm"
+                className="btn btn-secondary btn-sm"
                 title="Clear all entered data and start fresh"
               >
-                🔄 Reset Form
+                <RotateCcw size={14} /> Reset Form
               </button>
 
               {/* Save as Draft button */}
               <button
                 onClick={saveDraft}
-                className="px-3 sm:px-4 py-1 sm:py-2 bg-amber-500 text-white rounded hover:bg-amber-600 text-xs sm:text-sm"
+                className="btn btn-warning btn-sm"
                 title="Save current bill as a draft to continue later"
               >
-                💾 Save Draft
+                <Save size={14} /> Save Draft
               </button>
             </div>
 
@@ -1619,9 +1622,9 @@ export default function BillingPage() {
                 onClick={handlePrepareBillClick}
                 disabled={!canUseBillingActions}
                 title={!canUseBillingActions ? getDisabledReason() : ""}
-                className="px-3 sm:px-4 py-1 sm:py-2 bg-green-600 text-white rounded hover:bg-green-700 text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn btn-success btn-sm"
               >
-                ✅ {isEditMode ? "Update Bill" : "Prepare Bill"}
+                <CheckCircle size={14} /> {isEditMode ? "Update Bill" : "Prepare Bill"}
               </button>
 
               {/* PDF Export — guarded */}
@@ -1629,9 +1632,9 @@ export default function BillingPage() {
                 onClick={handlePdfExportClick}
                 disabled={!canUseBillingActions}
                 title={!canUseBillingActions ? getDisabledReason() : ""}
-                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs sm:text-sm"
+                className="btn btn-primary btn-sm"
               >
-                📄 Export PDF
+                <FileDown size={14} /> Export PDF
               </button>
 
               {/* Hidden PDF ref component (still used programmatically) */}

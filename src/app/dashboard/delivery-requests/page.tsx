@@ -1,11 +1,12 @@
 // src/app/dashboard/delivery-requests/page.tsx
 // ✅ FIXED: Removed userId prop from DashboardNavbar
+// Phase A.6: page-header + page-wrapper + stat cards + btn classes
 "use client";
 
 import { useEffect, useState } from "react";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
-import { Check, X, RefreshCw, Truck, AlertCircle, Clock } from "lucide-react";
+import { Check, X, RefreshCw, Truck, AlertCircle, Clock, Users, CheckCircle, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 type Partner = {
@@ -144,8 +145,8 @@ const res = await fetch(`/api/delivery/${action}`, {
         // Show success message
         const successMsg =
           action === "approve"
-            ? "✅ Partner approved successfully!"
-            : "❌ Partner request rejected.";
+            ? "Partner approved successfully!"
+            : "Partner request rejected.";
         
         const tempDiv = document.createElement("div");
         tempDiv.className =
@@ -182,63 +183,91 @@ const res = await fetch(`/api/delivery/${action}`, {
     }
   };
 
+  // Stat counts
+  const totalCount = partners.length;
+  const pendingCount = partners.length;
+  const approvedCount = 0;
+  const rejectedCount = 0;
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col dash-content-offset">
       {/* ✅ FIXED: Removed userId prop */}
       <DashboardNavbar />
 
       <main className="flex-grow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
-          {/* Header Card */}
-          <div className="bg-white rounded-xl shadow-md p-4 sm:p-6 mb-4 sm:mb-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Truck className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-semibold text-gray-800">
-                    Delivery Partner Requests
-                  </h1>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Approve or decline delivery partners who have requested
-                    access to your shop.
-                  </p>
-                </div>
-              </div>
+        <div className="page-wrapper">
 
-              <div className="flex items-center gap-3 flex-wrap">
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
-                  <Clock size={16} className="text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">
-                    {loading ? "Loading..." : `${partners.length} pending`}
-                  </span>
-                </div>
-                <button
-                  onClick={loadRequests}
-                  disabled={loading}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <RefreshCw
-                    size={16}
-                    className={loading ? "animate-spin" : ""}
-                  />
-                  <span className="hidden sm:inline">Refresh</span>
-                </button>
+          {/* ── Page Header ── */}
+          <div className="page-header">
+            <div className="page-header-left">
+              <h1 className="page-title">Delivery Partner Requests</h1>
+              <p className="page-subtitle">
+                Approve or decline delivery partners who have requested access to your shop
+              </p>
+            </div>
+            <div className="page-header-actions">
+              <button
+                onClick={loadRequests}
+                disabled={loading}
+                className="btn btn-primary btn-sm"
+              >
+                <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {/* ── Stat Cards ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <div className="stat-card">
+              <div className="stat-icon-wrap stat-icon-blue">
+                <Users size={16} />
+              </div>
+              <div>
+                <p className="stat-label">Total</p>
+                <p className="stat-value">{loading ? "—" : totalCount}</p>
               </div>
             </div>
-
-            {errorMsg && (
-              <div className="mt-4 rounded-lg border-l-4 border-red-500 bg-red-50 p-4 flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-red-700">{errorMsg}</div>
+            <div className="stat-card">
+              <div className="stat-icon-wrap stat-icon-amber">
+                <Clock size={16} />
               </div>
-            )}
+              <div>
+                <p className="stat-label">Pending</p>
+                <p className="stat-value">{loading ? "—" : pendingCount}</p>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon-wrap stat-icon-green">
+                <CheckCircle size={16} />
+              </div>
+              <div>
+                <p className="stat-label">Approved</p>
+                <p className="stat-value">{approvedCount}</p>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-icon-wrap stat-icon-red">
+                <XCircle size={16} />
+              </div>
+              <div>
+                <p className="stat-label">Rejected</p>
+                <p className="stat-value">{rejectedCount}</p>
+              </div>
+            </div>
           </div>
+
+          {/* Error Banner */}
+          {errorMsg && (
+            <div className="mb-4 rounded-lg border-l-4 border-red-500 bg-red-50 p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-700">{errorMsg}</div>
+            </div>
+          )}
 
           {/* Loading State */}
           {loading && (
-            <div className="bg-white rounded-xl shadow-md p-12 text-center">
+            <div className="saas-card p-12 text-center">
               <div className="inline-block w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
               <p className="text-gray-500">Loading requests…</p>
             </div>
@@ -246,7 +275,7 @@ const res = await fetch(`/api/delivery/${action}`, {
 
           {/* Empty State */}
           {!loading && partners.length === 0 && (
-            <div className="bg-white rounded-xl shadow-md p-8 sm:p-12 text-center">
+            <div className="saas-card p-8 sm:p-12 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Truck className="w-8 h-8 text-gray-400" />
               </div>
@@ -254,7 +283,7 @@ const res = await fetch(`/api/delivery/${action}`, {
                 No Pending Requests
               </h3>
               <p className="text-gray-600 max-w-md mx-auto">
-                You don't have any pending delivery partner requests at the
+                You don&apos;t have any pending delivery partner requests at the
                 moment. New requests will appear here.
               </p>
             </div>
@@ -266,7 +295,7 @@ const res = await fetch(`/api/delivery/${action}`, {
               {partners.map((p) => (
                 <article
                   key={p._id}
-                  className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 sm:p-5"
+                  className="saas-card hover:shadow-md transition-shadow"
                 >
                   <div className="flex gap-4">
                     {/* Avatar */}
@@ -298,7 +327,7 @@ const res = await fetch(`/api/delivery/${action}`, {
                           </div>
                           {p.phone && (
                             <div className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-                              📞 <span>{p.phone}</span>
+                              <span>{p.phone}</span>
                             </div>
                           )}
                         </div>
@@ -334,25 +363,17 @@ const res = await fetch(`/api/delivery/${action}`, {
                       <div className="flex flex-col sm:flex-row gap-2">
                         <button
                           disabled={workingId === p._id}
-                          onClick={() =>
-                            showConfirmation(p._id, "approve", p.name)
-                          }
-                          className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors ${
-                            workingId === p._id
-                              ? "opacity-60 cursor-not-allowed"
-                              : ""
-                          }`}
+                          onClick={() => showConfirmation(p._id, "approve", p.name)}
+                          className="flex-1 btn btn-success btn-sm justify-center"
                         >
                           {workingId === p._id ? (
                             <>
                               <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                              <span className="hidden sm:inline">
-                                Processing...
-                              </span>
+                              <span className="hidden sm:inline">Processing...</span>
                             </>
                           ) : (
                             <>
-                              <Check size={18} />
+                              <Check size={16} />
                               <span>Accept</span>
                             </>
                           )}
@@ -360,25 +381,17 @@ const res = await fetch(`/api/delivery/${action}`, {
 
                         <button
                           disabled={workingId === p._id}
-                          onClick={() =>
-                            showConfirmation(p._id, "reject", p.name)
-                          }
-                          className={`flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-colors ${
-                            workingId === p._id
-                              ? "opacity-60 cursor-not-allowed"
-                              : ""
-                          }`}
+                          onClick={() => showConfirmation(p._id, "reject", p.name)}
+                          className="flex-1 btn btn-danger btn-sm justify-center"
                         >
                           {workingId === p._id ? (
                             <>
                               <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                              <span className="hidden sm:inline">
-                                Processing...
-                              </span>
+                              <span className="hidden sm:inline">Processing...</span>
                             </>
                           ) : (
                             <>
-                              <X size={18} />
+                              <X size={16} />
                               <span>Decline</span>
                             </>
                           )}
@@ -400,9 +413,7 @@ const res = await fetch(`/api/delivery/${action}`, {
             <div className="flex items-start gap-3 mb-4">
               <div
                 className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                  confirmAction.action === "approve"
-                    ? "bg-green-100"
-                    : "bg-red-100"
+                  confirmAction.action === "approve" ? "bg-green-100" : "bg-red-100"
                 }`}
               >
                 {confirmAction.action === "approve" ? (
@@ -413,19 +424,14 @@ const res = await fetch(`/api/delivery/${action}`, {
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {confirmAction.action === "approve"
-                    ? "Approve Partner"
-                    : "Reject Partner"}
+                  {confirmAction.action === "approve" ? "Approve Partner" : "Reject Partner"}
                 </h3>
                 <p className="text-sm text-gray-600 mt-1">
                   Are you sure you want to{" "}
                   <span className="font-semibold">
                     {confirmAction.action === "approve" ? "approve" : "reject"}
                   </span>{" "}
-                  <span className="font-semibold">
-                    {confirmAction.partnerName}
-                  </span>
-                  ?{" "}
+                  <span className="font-semibold">{confirmAction.partnerName}</span>?{" "}
                   {confirmAction.action === "approve"
                     ? "They will be able to access delivery operations."
                     : "They will not be able to access your shop."}
@@ -439,23 +445,15 @@ const res = await fetch(`/api/delivery/${action}`, {
                   setShowConfirmModal(false);
                   setConfirmAction(null);
                 }}
-                className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+                className="btn btn-secondary"
               >
                 Cancel
               </button>
               <button
-                onClick={() =>
-                  handleAction(confirmAction.partnerId, confirmAction.action)
-                }
-                className={`w-full sm:w-auto px-5 py-2.5 rounded-lg text-white transition-colors font-medium ${
-                  confirmAction.action === "approve"
-                    ? "bg-green-600 hover:bg-green-700"
-                    : "bg-red-600 hover:bg-red-700"
-                }`}
+                onClick={() => handleAction(confirmAction.partnerId, confirmAction.action)}
+                className={`btn ${confirmAction.action === "approve" ? "btn-success" : "btn-danger"}`}
               >
-                {confirmAction.action === "approve"
-                  ? "Yes, Approve"
-                  : "Yes, Reject"}
+                {confirmAction.action === "approve" ? "Yes, Approve" : "Yes, Reject"}
               </button>
             </div>
           </div>
