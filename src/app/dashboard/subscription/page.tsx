@@ -821,23 +821,28 @@ export default function SubscriptionPage() {
           </div>
         )}
 
-        <main className="flex-grow max-w-5xl mx-auto w-full px-4 py-6 sm:py-8 space-y-6">
+        <main className="flex-grow w-full px-4 py-6 sm:py-8">
+          <div className="max-w-5xl mx-auto space-y-6">
 
           {/* Page header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Subscription</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
-                Manage your plan, usage and billing history
+          <div className="page-header">
+            <div className="page-header-left">
+              <h1 className="page-title">Subscription & Billing</h1>
+              <p className="page-subtitle">
+                {sub
+                  ? `${PLAN_DISPLAY[sub.planId]?.name ?? sub.planId} plan · ${sub.status}`
+                  : "Manage your plan, usage and billing history"}
               </p>
             </div>
-            <button
-              onClick={fetchData}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 bg-white hover:bg-gray-50 rounded-xl transition-colors"
-            >
-              <RefreshCw size={14} />
-              Refresh
-            </button>
+            <div className="page-header-actions">
+              <button
+                onClick={fetchData}
+                className="btn btn-secondary btn-sm"
+              >
+                <RefreshCw size={14} />
+                Refresh
+              </button>
+            </div>
           </div>
 
           {/* Expired banner */}
@@ -856,7 +861,7 @@ export default function SubscriptionPage() {
           )}
 
           {/* Current Plan Card */}
-          <div className={`bg-white rounded-2xl border p-5 sm:p-6 ${planDisplay.color}`}>
+          <div className={`saas-card p-5 sm:p-6 ${planDisplay.color}`}>
             <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div className="w-11 h-11 rounded-xl bg-white/70 border border-current/20 flex items-center justify-center shrink-0">
@@ -909,7 +914,7 @@ export default function SubscriptionPage() {
           </div>
 
           {/* Usage */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
+          <div className="saas-card p-5 sm:p-6">
             <h3 className="text-base font-semibold text-gray-900 mb-1">Usage</h3>
             <p className="text-xs text-gray-400 mb-4">
               {sub.planId === "free_trial"
@@ -941,7 +946,7 @@ export default function SubscriptionPage() {
 
           {/* Active Add-ons */}
           {sub.activeAddOns.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
+            <div className="saas-card p-5 sm:p-6">
               <h3 className="text-base font-semibold text-gray-900 mb-4">
                 Active Add-ons
               </h3>
@@ -985,7 +990,7 @@ export default function SubscriptionPage() {
           )}
 
           {/* ✅ FIXED: Upgrade Plans with Billing Period Selector */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
+          <div className="saas-card p-5 sm:p-6">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-semibold text-gray-900">
                 {sub.planId === "free_trial" || isExpired
@@ -1134,7 +1139,7 @@ export default function SubscriptionPage() {
           </div>
 
           {/* Add-ons Catalogue */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
+          <div className="saas-card p-5 sm:p-6">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-base font-semibold text-gray-900">Optional Add-ons</h3>
               <Zap size={18} className="text-amber-500" />
@@ -1173,7 +1178,7 @@ export default function SubscriptionPage() {
           </div>
 
           {/* Payment History */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6">
+          <div className="saas-card p-5 sm:p-6">
             <h3 className="text-base font-semibold text-gray-900 mb-4">
               Payment History
             </h3>
@@ -1241,6 +1246,7 @@ export default function SubscriptionPage() {
             </a>
           </div>
 
+          </div>
         </main>
 
         <Footer />

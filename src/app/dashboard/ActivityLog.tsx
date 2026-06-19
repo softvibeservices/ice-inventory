@@ -668,7 +668,7 @@ export default function ActivityLogPanel() {
       </div>
 
       {/* ── Log list ─────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="saas-card saas-card-flush overflow-hidden">
 
         {/* List header — desktop only */}
         <div className="hidden sm:grid grid-cols-[28px_1fr_180px_90px] gap-3 px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-widest">

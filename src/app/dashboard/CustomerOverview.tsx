@@ -158,7 +158,7 @@ export default function CustomerOverview() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="saas-card">
         <div className="animate-pulse space-y-6">
           <div className="h-6 bg-gray-200 rounded w-1/3" />
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -174,7 +174,7 @@ export default function CustomerOverview() {
 
   if (error || !stats) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center">
+      <div className="saas-card text-center">
         <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
         <p className="text-gray-500 text-sm mb-3">{error ?? "No data"}</p>
         <button
@@ -219,7 +219,7 @@ export default function CustomerOverview() {
   const netBalance = stats.totalDebit - stats.totalCredit;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+    <div className="saas-card p-4 sm:p-6">
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">

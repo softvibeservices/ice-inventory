@@ -456,7 +456,7 @@ export default function SalesInsights({
 
   // ===== RENDER =====
   return (
-    <div className="space-y-6">
+    <div className="page-wrapper">
       {/* KPI Cards Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Average Order Value */}
@@ -558,7 +558,7 @@ export default function SalesInsights({
       {/* Row 1: Sales & Orders Trend */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Sales Over Time */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="saas-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-green-600" />
@@ -620,7 +620,7 @@ export default function SalesInsights({
         </div>
 
         {/* Payment Methods */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="saas-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Wallet className="w-5 h-5 text-purple-600" />
@@ -671,7 +671,7 @@ export default function SalesInsights({
       {/* Row 2: Product Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Products */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="saas-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Package className="w-5 h-5 text-emerald-600" />
@@ -738,7 +738,7 @@ export default function SalesInsights({
         </div>
 
         {/* Category Distribution */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="saas-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Target className="w-5 h-5 text-indigo-600" />
@@ -804,7 +804,7 @@ export default function SalesInsights({
       {/* Row 3: Financial Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Payment Distribution */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="saas-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-orange-600" />
@@ -875,7 +875,7 @@ export default function SalesInsights({
         </div>
 
         {/* Top Outstanding Customers */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div className="saas-card">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-red-600" />

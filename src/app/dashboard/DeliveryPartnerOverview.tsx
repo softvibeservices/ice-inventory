@@ -314,7 +314,7 @@ export default function DeliveryPartnerOverview() {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-5">
+      <div className="saas-card space-y-5">
         <div className="animate-pulse">
           <div className="h-6 bg-gray-200 rounded w-1/3 mb-5" />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
@@ -337,7 +337,7 @@ export default function DeliveryPartnerOverview() {
 
   if (error) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center">
+      <div className="saas-card text-center">
         <Truck className="w-10 h-10 text-gray-300 mx-auto mb-2" />
         <p className="text-sm text-gray-500 mb-3">{error}</p>
         {error !== "Managers cannot view delivery partner overview." && (
@@ -353,7 +353,7 @@ export default function DeliveryPartnerOverview() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+    <div className="saas-card p-4 sm:p-6">
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">

@@ -135,7 +135,7 @@ export default function LowStockAlerts({
   };
 
   return (
-    <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-6">
+    <div className="saas-card saas-card-flush p-3 sm:p-4 lg:p-6">
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16">
           <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mb-3"></div>
