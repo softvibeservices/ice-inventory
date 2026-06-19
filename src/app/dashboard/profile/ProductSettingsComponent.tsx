@@ -239,13 +239,9 @@ const res = await fetch("/api/user-settings", {
           <button
             onClick={() => handleSave(true)}
             disabled={loading || !hasUnsavedChanges}
-            className={`w-full sm:w-auto px-6 py-2 rounded-lg shadow font-medium flex items-center justify-center gap-2 transition-all ${
-              hasUnsavedChanges && !loading
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
-            }`}
+            className="btn btn-primary"
           >
-            <Save size={18} />
+            <Save size={16} />
             {loading ? "Saving..." : hasUnsavedChanges ? "Save Settings" : "All Saved"}
           </button>
         </div>
@@ -292,9 +288,9 @@ const res = await fetch("/api/user-settings", {
           />
           <button
             onClick={addCategory}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:shadow-md"
+            className="btn btn-success btn-sm"
           >
-            <Plus size={18} />
+            <Plus size={16} />
             <span className="hidden sm:inline">Add</span>
           </button>
         </div>
@@ -311,13 +307,13 @@ const res = await fetch("/api/user-settings", {
                 className="bg-blue-100 text-blue-800 px-3 py-2 rounded-lg flex items-center gap-2 shadow-sm hover:shadow-md transition-shadow"
               >
                 <span className="font-medium">{cat}</span>
-                <button
-                  onClick={() => removeCategory(idx)}
-                  className="text-blue-600 hover:text-blue-800 transition-colors hover:bg-blue-200 rounded-full p-1"
-                  title="Remove category"
-                >
-                  <X size={16} />
-                </button>
+                  <button
+                    onClick={() => removeCategory(idx)}
+                    className="btn btn-danger btn-sm p-1"
+                    title="Remove category"
+                  >
+                    <X size={14} />
+                  </button>
               </div>
             ))
           )}
@@ -349,9 +345,9 @@ const res = await fetch("/api/user-settings", {
           />
           <button
             onClick={addUnit}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm hover:shadow-md"
+            className="btn btn-success btn-sm"
           >
-            <Plus size={18} />
+            <Plus size={16} />
             <span className="hidden sm:inline">Add</span>
           </button>
         </div>
@@ -368,13 +364,13 @@ const res = await fetch("/api/user-settings", {
                 className="bg-purple-100 text-purple-800 px-3 py-2 rounded-lg flex items-center gap-2 shadow-sm hover:shadow-md transition-shadow"
               >
                 <span className="font-medium">{unit}</span>
-                <button
-                  onClick={() => removeUnit(idx)}
-                  className="text-purple-600 hover:text-purple-800 transition-colors hover:bg-purple-200 rounded-full p-1"
-                  title="Remove unit"
-                >
-                  <X size={16} />
-                </button>
+                  <button
+                    onClick={() => removeUnit(idx)}
+                    className="btn btn-danger btn-sm p-1"
+                    title="Remove unit"
+                  >
+                    <X size={14} />
+                  </button>
               </div>
             ))
           )}

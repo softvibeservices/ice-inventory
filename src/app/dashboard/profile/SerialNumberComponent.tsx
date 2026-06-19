@@ -3,6 +3,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import toast from "react-hot-toast";
+import { Hash } from "lucide-react";
 
 interface SerialNumberComponentProps {
   userId: string;
@@ -165,9 +166,9 @@ export default function SerialNumberComponent({ userId }: SerialNumberComponentP
     <>
       <button
         onClick={() => setShowDialog(true)}
-        className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-left font-medium hover:bg-gray-100 text-gray-700 transition-colors"
+        className="btn btn-secondary w-full justify-start"
       >
-        🔢 Set Bill Serial Number
+        <Hash size={16} /> Set Bill Serial Number
       </button>
 
       {showDialog && (
@@ -333,15 +334,14 @@ export default function SerialNumberComponent({ userId }: SerialNumberComponentP
                 <button
                   onClick={handleClose}
                   disabled={saving}
-                  className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all disabled:opacity-50"
+                  className="btn btn-secondary btn-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSaveSerial}
                   disabled={saving || !allFilled}
-                  className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-                  style={{ background: saving || !allFilled ? "#93c5fd" : "linear-gradient(135deg, #3b82f6, #6366f1)" }}
+                  className="btn btn-primary btn-sm"
                 >
                   {saving ? (
                     <>

@@ -4,7 +4,7 @@
 
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { User } from "lucide-react";
+import { User, Save } from "lucide-react";
 import type { UserProfile } from "@/types/profile.types";
 
 type Props = {
@@ -154,7 +154,7 @@ const res = await fetch("/api/profile/update", {
       <button
         onClick={updateProfile}
         disabled={loading || !isChanged}
-        className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg shadow disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+        className="btn btn-primary"
       >
         {loading ? (
           <span className="inline-flex items-center gap-2">
@@ -162,7 +162,7 @@ const res = await fetch("/api/profile/update", {
             Saving...
           </span>
         ) : (
-          "💾 Save Changes"
+          <><Save size={14} /> Save Changes</>
         )}
       </button>
     </div>

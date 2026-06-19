@@ -464,9 +464,9 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
         {!showAddForm && !showOtpVerification && (
           <button
             onClick={() => setShowAddForm(true)}
-            className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+            className="btn btn-primary btn-sm"
           >
-            <UserPlus size={18} />
+            <UserPlus size={16} />
             Add Manager
           </button>
         )}
@@ -538,7 +538,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
           <button
             onClick={sendOtpToManagerEmail}
             disabled={isOtpSending}
-            className="mt-4 w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="btn btn-primary mt-4"
           >
             {isOtpSending ? (
               <><span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Sending OTP...</>
@@ -583,7 +583,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
               <button
                 onClick={verifyOtpAndSaveManager}
                 disabled={isVerifyingOtp || otpForNewManager.length !== 6}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="btn btn-success flex-1"
               >
                 {isVerifyingOtp
                   ? <><span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Verifying...</>
@@ -592,7 +592,7 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
               <button
                 onClick={sendOtpToManagerEmail}
                 disabled={isOtpSending}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="btn btn-secondary"
               >
                 {isOtpSending
                   ? <><span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Resending...</>
@@ -654,27 +654,27 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
                       {m.status === "blocked" ? (
                         <button
                           onClick={() => handleManagerStatusAction(m._id, "unblock")}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-colors"
+                          className="btn btn-success btn-sm"
                         >
                           <Shield size={13} />Unblock
                         </button>
                       ) : (
                         <button
                           onClick={() => { setBlockingManager(m); setShowBlockConfirm(true); }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg text-xs font-medium transition-colors"
+                          className="btn btn-warning btn-sm"
                         >
                           <ShieldOff size={13} />Block
                         </button>
                       )}
                       <button
                         onClick={() => confirmDelete(m._id, m.name)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-medium transition-colors"
+                        className="btn btn-danger btn-sm"
                       >
                         <Trash2 size={13} />Delete
                       </button>
                       <button
                         onClick={() => toggleManagerDevices(m._id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-medium transition-colors"
+                        className="btn btn-secondary btn-sm"
                       >
                         <Monitor size={13} />
                         Devices
@@ -820,13 +820,13 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-6">
               <button
                 onClick={() => { setShowBlockConfirm(false); setBlockingManager(null); }}
-                className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+                className="btn btn-secondary w-full sm:w-auto"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleManagerStatusAction(blockingManager._id, "block")}
-                className="w-full sm:w-auto px-5 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition-colors font-medium"
+                className="btn btn-warning w-full sm:w-auto"
               >
                 Block Manager
               </button>
@@ -855,13 +855,13 @@ export default function ManagerComponent({ adminId }: { adminId: string }) {
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-6">
               <button
                 onClick={() => { setShowDeleteConfirm(false); setDeleteId(""); setDeletingManagerName(""); }}
-                className="w-full sm:w-auto px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors font-medium"
+                className="btn btn-secondary w-full sm:w-auto"
               >
                 Cancel
               </button>
               <button
                 onClick={del}
-                className="w-full sm:w-auto px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
+                className="btn btn-danger w-full sm:w-auto"
               >
                 Delete Manager
               </button>
