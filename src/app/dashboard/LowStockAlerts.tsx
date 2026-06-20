@@ -138,7 +138,7 @@ export default function LowStockAlerts({
     <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-6">
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-red-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
           <p className="text-xs sm:text-sm text-gray-600">Loading stock data...</p>
         </div>
       ) : (
@@ -148,11 +148,11 @@ export default function LowStockAlerts({
             {/* Title and Stats */}
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="flex items-start gap-3">
-                <div className="p-2 sm:p-3 bg-red-100 rounded-xl">
-                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
+                <div className="p-2 sm:p-3 bg-blue-100 rounded-xl">
+                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-red-700">
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-700">
                     Low Stock Alerts
                   </h2>
                   <p className="text-xs sm:text-sm text-gray-600 mt-0.5">
@@ -189,7 +189,7 @@ export default function LowStockAlerts({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search by product or category..."
-                  className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-400 focus:border-transparent outline-none bg-white placeholder-gray-400"
+                  className="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none bg-white placeholder-gray-400"
                 />
               </div>
 
@@ -199,7 +199,7 @@ export default function LowStockAlerts({
                   onClick={() => setSeverityFilter("all")}
                   className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
                     severityFilter === "all"
-                      ? "bg-gray-700 text-white"
+                      ? "bg-blue-600 text-white"
                       : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   }`}
                 >
@@ -209,8 +209,8 @@ export default function LowStockAlerts({
                   onClick={() => setSeverityFilter("critical")}
                   className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
                     severityFilter === "critical"
-                      ? "bg-red-600 text-white"
-                      : "bg-red-50 text-red-700 hover:bg-red-100"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   }`}
                 >
                   Critical
@@ -219,8 +219,8 @@ export default function LowStockAlerts({
                   onClick={() => setSeverityFilter("low")}
                   className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
                     severityFilter === "low"
-                      ? "bg-amber-600 text-white"
-                      : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                   }`}
                 >
                   Low
@@ -378,7 +378,7 @@ export default function LowStockAlerts({
                           onClick={() => handlePageChange(pageNum)}
                           className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
                             currentPage === pageNum
-                              ? "bg-red-600 text-white shadow-md"
+                              ? "bg-blue-600 text-white shadow-md"
                               : "border border-gray-300 hover:bg-gray-50"
                           }`}
                         >

@@ -9,7 +9,7 @@ import LowStockAlerts from "./LowStockAlerts";
 import MostPopularProducts from "./MostPopularProducts";
 import CustomerOverview from "./CustomerOverview";
 import DeliveryPartnerOverview from "./DeliveryPartnerOverview";
-import PlanLimitWarning from "../components/PlanLimitWarning";
+
 import {
   Truck,
   StickyNote,
@@ -17,7 +17,8 @@ import {
   TrendingUp,
   Users,
   TruckIcon,
-  Activity
+  Activity,
+  Boxes
 } from "lucide-react";
 
 import type { Order, Product, Customer } from "./types";
@@ -112,48 +113,47 @@ export default function DashboardPage() {
 
   // ========= TAB CONFIGURATION =========
   const tabs = [
-    { id: "activity-log" as TabType, label: "Activity Log", description: "Recent system activities and logs", icon: Activity, color: "slate" },
     {
       id: "delivery" as TabType,
       label: "Delivery Overview",
       description: "Today's orders and their delivery status",
       icon: Truck,
-      color: "blue",
-    },
-    {
-      id: "popular-products" as TabType,
-      label: "Popular Products",
-      description: "Top products sold by volume",
-      icon: TrendingUp,
-      color: "purple",
-    },
-    {
-      id: "customers" as TabType,
-      label: "Customers",
-      description: "Customer directory and overview statistics",
-      icon: Users,
-      color: "blue",
-    },
-    {
-      id: "delivery-partners" as TabType,
-      label: "Delivery Partners",
-      description: "Active delivery team tracking",
-      icon: TruckIcon,
-      color: "orange",
-    },
-    {
-      id: "low-stock" as TabType,
-      label: "Low Stock Alerts",
-      description: "Alerts for products below minimum threshold",
-      icon: AlertTriangle,
-      color: "red",
     },
     {
       id: "sticky-notes" as TabType,
       label: "Sticky Notes",
       description: "Personal scratchpad for quick reminders",
       icon: StickyNote,
-      color: "yellow",
+    },
+    {
+      id: "low-stock" as TabType,
+      label: "Low Stock Alerts",
+      description: "Alerts for products below minimum threshold",
+      icon: AlertTriangle,
+    },
+    {
+      id: "popular-products" as TabType,
+      label: "Popular Products",
+      description: "Top products sold by volume",
+      icon: TrendingUp,
+    },
+    {
+      id: "customers" as TabType,
+      label: "Customers",
+      description: "Customer directory and overview statistics",
+      icon: Users,
+    },
+    {
+      id: "delivery-partners" as TabType,
+      label: "Delivery Partners",
+      description: "Active delivery team tracking",
+      icon: TruckIcon,
+    },
+    {
+      id: "activity-log" as TabType,
+      label: "Activity Log",
+      description: "Recent system activities and logs",
+      icon: Activity,
     },
   ];
 
@@ -164,33 +164,14 @@ export default function DashboardPage() {
   }).length;
 
   // ========= GET BUTTON CLASSES =========
-  const getButtonClasses = (tabId: TabType, color: string) => {
+  const getButtonClasses = (tabId: TabType) => {
     const isActive = activeTab === tabId;
 
-    // FIX 3: Added "slate" color entry for the activity-log tab
-    const colorClasses: Record<string, string> = {
-      slate: isActive
-        ? "bg-slate-700 text-white shadow-lg shadow-slate-200"
-        : "bg-white text-gray-700 hover:bg-slate-50 hover:text-slate-700 hover:border-slate-300",
-      blue: isActive
-        ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
-        : "bg-white text-gray-700 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300",
-      purple: isActive
-        ? "bg-purple-600 text-white shadow-lg shadow-purple-200"
-        : "bg-white text-gray-700 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-300",
-      orange: isActive
-        ? "bg-orange-600 text-white shadow-lg shadow-orange-200"
-        : "bg-white text-gray-700 hover:bg-orange-50 hover:text-orange-600 hover:border-orange-300",
-      red: isActive
-        ? "bg-red-600 text-white shadow-lg shadow-red-200"
-        : "bg-white text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-300",
-      yellow: isActive
-        ? "bg-yellow-500 text-white shadow-lg shadow-yellow-200"
-        : "bg-white text-gray-700 hover:bg-yellow-50 hover:text-yellow-600 hover:border-yellow-300",
-    };
-
-    return `flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all border relative ${colorClasses[color] ?? colorClasses.blue
-      }`;
+    return `flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all border relative ${
+      isActive
+        ? "bg-blue-600 text-white shadow-md shadow-blue-100 border-blue-600"
+        : "bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-slate-200"
+    }`;
   };
 
   // ========= RENDER TAB CONTENT =========
@@ -257,27 +238,11 @@ export default function DashboardPage() {
       <main className="flex-grow">
         <div className="page-wrapper">
 
-          {/* ── Plan limit warning at top of dashboard ──────────────────── */}
-          {subscription && subscription.usage && subscription.effectiveLimits && (
-            <PlanLimitWarning
-              invoicesUsed={invoicesUsed}
-              invoicesLimit={invoicesLimit}
-              customersCount={subscription.usage.customersCount}
-              customersLimit={subscription.effectiveLimits.customers}
-              productsCount={subscription.usage.productsCount}
-              productsLimit={subscription.effectiveLimits.products}
-              planId={subscription.planId}
-            />
-          )}
-          {/* ─────────────────────────────────────────────────────────────── */}
 
-          {/* Page Header */}
-          <div className="page-header">
-            <div className="page-header-left">
-              <h1 className="page-title">Dashboard</h1>
-              <p className="page-subtitle">Overview of your business at a glance</p>
-            </div>
-          </div>
+
+
+
+
 
           {/* Tab Navigation */}
           <div className="saas-card saas-card-compact mb-6">
@@ -291,7 +256,7 @@ export default function DashboardPage() {
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={getButtonClasses(tab.id, tab.color)}
+                    className={getButtonClasses(tab.id)}
                   >
                     <Icon className="w-4 h-4" />
                     <span className="hidden sm:inline">{tab.label}</span>

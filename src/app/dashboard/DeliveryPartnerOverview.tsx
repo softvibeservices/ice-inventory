@@ -343,7 +343,7 @@ export default function DeliveryPartnerOverview() {
         {error !== "Managers cannot view delivery partner overview." && (
           <button
             onClick={fetchData}
-            className="flex items-center gap-2 mx-auto px-4 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700"
+            className="flex items-center gap-2 mx-auto px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
           >
             <RefreshCw className="w-4 h-4" /> Retry
           </button>
@@ -357,8 +357,8 @@ export default function DeliveryPartnerOverview() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-100 rounded-lg">
-            <Truck className="w-5 h-5 text-orange-600" />
+          <div className="p-2 bg-blue-100 rounded-lg">
+            <Truck className="w-5 h-5 text-blue-600" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
@@ -379,79 +379,62 @@ export default function DeliveryPartnerOverview() {
         </button>
       </div>
 
-      {/* ── Partner Status Cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <div className="bg-gradient-to-br from-orange-50 to-amber-100 rounded-xl p-3 sm:p-4 border border-orange-200">
+      {/* ── Summary Cards ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        {/* Total Partners */}
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-3 sm:p-4 border border-blue-200">
           <div className="flex items-center gap-1.5 mb-1">
-            <Truck className="w-3.5 h-3.5 text-orange-600" />
-            <span className="text-xs font-medium text-orange-700">
+            <Truck className="w-3.5 h-3.5 text-blue-600" />
+            <span className="text-xs font-medium text-blue-700">
               Total Partners
             </span>
           </div>
-          <p className="text-2xl font-bold text-orange-900">
+          <p className="text-2xl font-bold text-blue-900">
             {partners.length}
           </p>
-          <p className="text-[10px] text-orange-600 mt-0.5">Registered</p>
+          <p className="text-[10px] text-blue-600 mt-0.5">Registered</p>
         </div>
 
-        {(["approved", "pending", "rejected"] as const).map((status) => {
-          const cfg = STATUS_CONFIG[status];
-          const { Icon } = cfg;
-          const count = partners.filter((p) => p.status === status).length;
-          return (
-            <div
-              key={status}
-              onClick={() =>
-                setFilterStatus(filterStatus === status ? "all" : status)
-              }
-              className={`bg-gradient-to-br rounded-xl p-3 sm:p-4 border cursor-pointer transition-all hover:shadow-sm ${
-                cfg.countBg
-              } ${
-                filterStatus === status ? "ring-2 ring-offset-1 ring-gray-400" : ""
-              }`}
-            >
-              <div className="flex items-center gap-1.5 mb-1">
-                <Icon className={`w-3.5 h-3.5 ${cfg.countLabel}`} />
-                <span className={`text-xs font-medium ${cfg.countLabel}`}>
-                  {cfg.label}
-                </span>
-              </div>
-              <p className={`text-2xl font-bold ${cfg.countText}`}>{count}</p>
-              <p className={`text-[10px] mt-0.5 ${cfg.countLabel}`}>
-                Click to filter
-              </p>
-            </div>
-          );
-        })}
-      </div>
+        {/* Total Delivered */}
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-3 sm:p-4 border border-green-200">
+          <div className="flex items-center gap-1.5 mb-1">
+            <CheckCircle className="w-3.5 h-3.5 text-green-600" />
+            <span className="text-xs font-medium text-green-700">
+              Total Delivered
+            </span>
+          </div>
+          <p className="text-2xl font-bold text-green-900">
+            {totalDelivered}
+          </p>
+          <p className="text-[10px] text-green-600 mt-0.5">Orders</p>
+        </div>
 
-      {/* ── Delivery Activity Summary ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
-          <CheckCircle className="w-4 h-4 text-green-500 mx-auto mb-1" />
-          <p className="text-xs text-green-600 font-medium">Total Delivered</p>
-          <p className="text-2xl font-bold text-green-800">{totalDelivered}</p>
-          <p className="text-[10px] text-green-500">Orders</p>
+        {/* On The Way */}
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-3 sm:p-4 border border-blue-200">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Activity className="w-3.5 h-3.5 text-blue-600" />
+            <span className="text-xs font-medium text-blue-700">
+              On The Way
+            </span>
+          </div>
+          <p className="text-2xl font-bold text-blue-900">
+            {totalOnTheWay}
+          </p>
+          <p className="text-[10px] text-blue-600 mt-0.5">In Progress</p>
         </div>
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
-          <Activity className="w-4 h-4 text-blue-500 mx-auto mb-1" />
-          <p className="text-xs text-blue-600 font-medium">On The Way</p>
-          <p className="text-2xl font-bold text-blue-800">{totalOnTheWay}</p>
-          <p className="text-[10px] text-blue-500">In Progress</p>
-        </div>
-        <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-center">
-          <Zap className="w-4 h-4 text-purple-500 mx-auto mb-1" />
-          <p className="text-xs text-purple-600 font-medium">Overall Rate</p>
-          <p className="text-2xl font-bold text-purple-800">{overallRate}%</p>
-          <p className="text-[10px] text-purple-500">Completion</p>
-        </div>
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-center">
-          <TrendingUp className="w-4 h-4 text-indigo-500 mx-auto mb-1" />
-          <p className="text-xs text-indigo-600 font-medium">Value Delivered</p>
-          <p className="text-base font-bold text-indigo-800 leading-tight">
+
+        {/* Value Delivered */}
+        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl p-3 sm:p-4 border border-indigo-200">
+          <div className="flex items-center gap-1.5 mb-1">
+            <TrendingUp className="w-3.5 h-3.5 text-indigo-600" />
+            <span className="text-xs font-medium text-indigo-700">
+              Value Delivered
+            </span>
+          </div>
+          <p className="text-2xl font-bold text-indigo-900">
             {formatCurrency(totalValue)}
           </p>
-          <p className="text-[10px] text-indigo-500">Total</p>
+          <p className="text-[10px] text-indigo-600 mt-0.5">Total</p>
         </div>
       </div>
 
@@ -464,7 +447,7 @@ export default function DeliveryPartnerOverview() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by name, email or phone…"
-            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent outline-none placeholder-gray-400"
+            className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none placeholder-gray-400"
           />
         </div>
         <div className="flex gap-2 items-center flex-wrap">
@@ -484,7 +467,7 @@ export default function DeliveryPartnerOverview() {
               onClick={() => setSortBy(key)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                 sortBy === key
-                  ? "bg-orange-600 text-white border-orange-600"
+                  ? "bg-blue-600 text-white border-blue-600"
                   : "border-gray-200 text-gray-600 hover:bg-gray-50"
               }`}
             >
@@ -892,7 +875,7 @@ export default function DeliveryPartnerOverview() {
                       onClick={() => handlePageChange(page)}
                       className={`w-9 h-9 rounded-lg text-xs font-medium transition-colors ${
                         currentPage === page
-                          ? "bg-orange-600 text-white shadow-md"
+                          ? "bg-blue-600 text-white shadow-md"
                           : "border border-gray-300 hover:bg-gray-50"
                       }`}
                     >

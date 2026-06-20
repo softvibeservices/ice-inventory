@@ -206,8 +206,8 @@ export default function MostPopularProducts() {
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
-              <TrendingUp className="w-4.5 h-4.5 text-purple-600" />
+            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-4.5 h-4.5 text-blue-600" />
             </div>
             <div>
               <h2 className="text-base font-semibold text-gray-900">Popular Products</h2>
@@ -216,8 +216,8 @@ export default function MostPopularProducts() {
           </div>
         </div>
         <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-purple-50 flex items-center justify-center mx-auto mb-4">
-            <Package className="w-6 h-6 text-purple-400" />
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
+            <Package className="w-6 h-6 text-blue-400" />
           </div>
           <h3 className="text-base font-semibold text-gray-800 mb-1">No sales data yet</h3>
           <p className="text-sm text-gray-500 max-w-xs">
@@ -226,7 +226,7 @@ export default function MostPopularProducts() {
           {dateRange !== "all" && (
             <button
               onClick={() => setDateRange("all")}
-              className="mt-4 text-sm text-purple-600 font-medium hover:underline"
+              className="mt-4 text-sm text-blue-600 font-medium hover:underline"
             >
               View all-time data instead
             </button>
@@ -247,8 +247,8 @@ export default function MostPopularProducts() {
 
           {/* Title */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
-              <TrendingUp className="w-[18px] h-[18px] text-purple-600" />
+            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-[18px] h-[18px] text-blue-600" />
             </div>
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-gray-900">Popular Products</h2>
@@ -268,7 +268,7 @@ export default function MostPopularProducts() {
             <div className="relative">
               <button
                 onClick={() => setShowRangeMenu((v) => !v)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50 text-xs font-medium text-gray-700 transition-all"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50 text-xs font-medium text-gray-700 transition-all"
               >
                 <Calendar className="w-3.5 h-3.5 text-gray-400" />
                 {getRangeLabel(dateRange)}
@@ -284,7 +284,7 @@ export default function MostPopularProducts() {
                         onClick={() => { setDateRange(opt.value); setShowRangeMenu(false); setVisibleCount(10); }}
                         className={`w-full px-4 py-2 text-left text-sm transition-colors ${
                           dateRange === opt.value
-                            ? "bg-purple-50 text-purple-700 font-medium"
+                            ? "bg-blue-50 text-blue-700 font-medium"
                             : "text-gray-700 hover:bg-gray-50"
                         }`}
                       >
@@ -300,7 +300,7 @@ export default function MostPopularProducts() {
             <button
               onClick={() => fetchData(dateRange)}
               disabled={loading}
-              className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50 transition-all disabled:opacity-40"
+              className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50 transition-all disabled:opacity-40"
               title="Refresh"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-gray-500 ${loading ? "animate-spin" : ""}`} />
@@ -332,8 +332,8 @@ export default function MostPopularProducts() {
       {!loading && !error && stats && (
         <div className="px-4 sm:px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard
-            icon={<Layers className="w-4 h-4 text-purple-500" />}
-            bg="bg-purple-50"
+            icon={<Layers className="w-4 h-4 text-blue-500" />}
+            bg="bg-blue-50"
             label="Products sold"
             value={stats.totalQty.toLocaleString("en-IN")}
           />
@@ -375,7 +375,7 @@ export default function MostPopularProducts() {
               placeholder="Search products or categories…"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setVisibleCount(10); }}
-              className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-400 transition-all"
+              className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all"
             />
           </div>
 
@@ -405,7 +405,7 @@ export default function MostPopularProducts() {
               <p className="text-xs text-gray-400 mt-1">Try a different search term</p>
               <button
                 onClick={() => setSearchTerm("")}
-                className="mt-3 text-sm text-purple-600 font-medium hover:underline"
+                className="mt-3 text-sm text-blue-600 font-medium hover:underline"
               >
                 Clear search
               </button>
@@ -492,7 +492,7 @@ export default function MostPopularProducts() {
         <div className="px-4 sm:px-6 pb-5 flex justify-center">
           <button
             onClick={() => setVisibleCount((v) => v + 10)}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-700 text-sm font-semibold transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-semibold transition-all"
           >
             <ChevronDown className="w-4 h-4" />
             Show {Math.min(10, displayed.length - visibleCount)} more
@@ -552,11 +552,12 @@ function SortButton({
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-        active
-          ? "bg-white text-purple-700 shadow-sm border border-purple-100"
-          : "text-gray-500 hover:text-gray-700"
-      }`}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all hover:bg-slate-50"
+      style={{
+        backgroundColor: active ? "#eff6ff" : "transparent",
+        color: active ? "#2563eb" : "#64748b",
+        border: active ? "1px solid #bfdbfe" : "1px solid transparent",
+      }}
     >
       {children}
     </button>
