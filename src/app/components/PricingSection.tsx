@@ -15,7 +15,7 @@ const plans = {
     tag: "For small shop owners",
     highlight: false,
     description:
-      "Best for single-owner ice cream shops that need billing, inventory and customer tracking without team complexity.",
+      "Perfect for small ice cream shops and solo distributors just getting started.",
     monthly: { price: 499, per: "/mo", save: "" },
     sixmonths: { price: 2499, per: "/6 months", save: "Save ₹495" },
     yearly: { price: 4999, per: "/year", save: "Save ₹989" },
@@ -38,7 +38,7 @@ const plans = {
     tag: "For growing distributors",
     highlight: true,
     description:
-      "Built for active ice cream distributors managing daily orders, staff operations, delivery flow and business reporting.",
+      "For growing ice cream wholesale businesses managing multiple customers and orders.",
     monthly: { price: 1499, per: "/mo", save: "" },
     sixmonths: { price: 7999, per: "/6 months", save: "Save ₹995" },
     yearly: { price: 14999, per: "/year", save: "Save ₹2,989" },
@@ -65,7 +65,7 @@ const plans = {
     tag: "For high-volume operations",
     highlight: false,
     description:
-      "Ideal for serious distributors handling large invoice volume, multiple staff members, bigger dispatch teams and advanced workflows.",
+      "For established ice cream distributors with high order volumes and delivery teams.",
     monthly: { price: 2499, per: "/mo", save: "" },
     sixmonths: { price: 13499, per: "/6 months", save: "Save ₹1,495" },
     yearly: { price: 24999, per: "/year", save: "Save ₹4,989" },
@@ -492,13 +492,11 @@ export default function PricingSection() {
             id="pricing-heading"
             className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-gray-900 leading-tight"
           >
-            Simple pricing for ice cream inventory, billing and delivery management
+            Simple, transparent pricing for ice cream businesses
           </h2>
 
           <p className="mt-5 text-base sm:text-lg text-gray-600 leading-8 max-w-2xl">
-            Choose the right Ice Saathi pricing plan for your ice cream shop,
-            distributor business or delivery operation. Start free, upgrade when
-            your invoice volume and business complexity grow.
+            Choose the plan that fits your ice cream business. Start free for 30 days. No credit card required. Cancel anytime.
           </p>
         </div>
 

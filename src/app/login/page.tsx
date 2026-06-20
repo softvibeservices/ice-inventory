@@ -41,6 +41,7 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const inFlightRef = useRef(false);
   const toastIdRef = useRef<ToastId | null>(null);
 
@@ -75,7 +76,7 @@ export default function LoginPage() {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, rememberMe, clientDeviceId }),
+        body: JSON.stringify({ ...form, rememberMe, clientDeviceId, termsAccepted }),
       });
 
       const data: LoginErrorResponse & {
@@ -184,7 +185,7 @@ export default function LoginPage() {
             <div>
               <div className="inline-flex items-center gap-2 bg-white/10 border border-white/10 rounded-full px-3 py-1 mb-8">
                 <span className="feature-pill-dot"></span>
-                <span className="text-white/70 text-xs font-medium">Ice Saathi Platform</span>
+                <span className="text-white/70 text-xs font-medium">IceSaathi Platform</span>
               </div>
               <h2 className="text-3xl font-bold text-white leading-tight mb-3">
                 The inventory OS for ice cream wholesalers.
@@ -204,7 +205,7 @@ export default function LoginPage() {
             </div>
 
             <p className="text-white/20 text-xs">
-              © {new Date().getFullYear()} Ice Saathi. All rights reserved.
+              © {new Date().getFullYear()} IceSaathi. All rights reserved.
             </p>
           </div>
 
@@ -286,8 +287,54 @@ export default function LoginPage() {
                   </label>
                 </div>
 
+                {/* ── Terms & Conditions checkbox ── */}
+                <div className="flex items-start gap-3 py-1">
+                  <input
+                    type="checkbox"
+                    id="terms-accept"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    disabled={loading}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer flex-shrink-0"
+                    style={{ accentColor: "#2563eb" }}
+                  />
+                  <label htmlFor="terms-accept" className="text-sm text-gray-600 leading-snug cursor-pointer select-none">
+                    I have read and accept the{" "}
+                    <a
+                      href="/terms"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline font-medium"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Terms &amp; Conditions
+                    </a>
+                    ,{" "}
+                    <a
+                      href="/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline font-medium"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Privacy Policy
+                    </a>{" "}
+                    and{" "}
+                    <a
+                      href="/refund"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline font-medium"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Refund Policy
+                    </a>{" "}
+                    of IceSaathi.
+                  </label>
+                </div>
+
                 {/* SUBMIT */}
-                <button type="submit" disabled={loading} className="btn-primary" style={{ marginTop: "8px" }}>
+                <button type="submit" disabled={loading || !termsAccepted} className="btn-primary" style={{ marginTop: "8px" }}>
                   {loading ? (
                     <><Loader2 className="animate-spin" size={16} />Verifying…</>
                   ) : "Sign in"}

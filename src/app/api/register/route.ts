@@ -133,6 +133,18 @@ export async function POST(req: NextRequest) {
     }
 
     const { name, email, contact, password } = result.data;
+    const termsAccepted = raw.termsAccepted;
+
+    // ── Terms acceptance required ────────────────────────────────────────────────
+    if (!termsAccepted) {
+      return NextResponse.json(
+        {
+          error: "You must accept the Terms & Conditions to create an IceSaathi account.",
+          message: "You must accept the Terms & Conditions to create an IceSaathi account.",
+        },
+        { status: 400 }
+      );
+    }
 
     // ── 6. DB: duplicate check ──────────────────────────────────────────────
     await connectDB();
@@ -166,6 +178,8 @@ export async function POST(req: NextRequest) {
       otpExpires,
       otpRequestedAt: now,
       createdAt: now,
+      termsAcceptedAt: now,
+      termsVersion: "1.0",
     });
 
     await newUser.save();

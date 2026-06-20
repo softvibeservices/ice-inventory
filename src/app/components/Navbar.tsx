@@ -17,7 +17,7 @@ export default function Navbar() {
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
             <span className="text-white text-lg font-bold">IS</span>
           </div>
-          <span className="font-semibold text-gray-900">Ice Saathi</span>
+          <span className="font-semibold text-gray-900">IceSaathi</span>
         </Link>
 
         {/* Desktop Actions */}
