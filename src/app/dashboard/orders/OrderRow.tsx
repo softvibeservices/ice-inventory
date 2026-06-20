@@ -16,7 +16,11 @@ import {
   CheckCircle,
   Truck,
   RotateCcw,
+  FileDown,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 type OrderRowProps = {
   order: Order;
@@ -54,6 +58,489 @@ export default function OrderRow({
   const [animating, setAnimating] = useState(false);
   const rowRef = useRef<HTMLTableRowElement>(null);
   const deliveryRef = useRef<HTMLDivElement>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    const downloadToast = toast.loading("Fetching invoice data...");
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authorization token found. Please log in again.");
+      }
+
+      // 1. Fetch Bill details
+      const billRes = await fetch(`/api/bills?orderId=${order.orderId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!billRes.ok) {
+        const errorData = await billRes.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to load bill details.");
+      }
+      const bill = await billRes.json();
+
+      // 2. Fetch Seller details
+      const sellerRes = await fetch(`/api/seller-details`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!sellerRes.ok) {
+        throw new Error("Failed to load seller details.");
+      }
+      const seller = await sellerRes.json();
+
+      // 3. Fetch Bank details (depends on seller._id)
+      let bank = null;
+      if (seller?._id) {
+        try {
+          const bankRes = await fetch(`/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (bankRes.ok) {
+            const b = await bankRes.json();
+            if (b && !b.error && Object.keys(b).length) {
+              bank = Array.isArray(b) ? b[0] ?? b : b;
+            }
+          }
+        } catch (bankErr) {
+          console.error("Non-fatal: Failed to fetch bank details:", bankErr);
+        }
+      }
+
+      // If no custom bank details fetched, use fallback from seller object
+      if (!bank && seller) {
+        bank = {
+          bankName: seller.bankName,
+          branchName: seller.branchName,
+          accountNumber: seller.accountNumber ?? seller.accountNo,
+          ifscCode: seller.ifscCode,
+          bankingName: seller.bankingName,
+        };
+      }
+
+      // Validate inputs matching PdfExportComponent.tsx checks
+      const billingCustomer = bill.billingCustomer;
+      if (!billingCustomer || !billingCustomer.name?.trim()) {
+        throw new Error("Billing customer name is missing from bill.");
+      }
+      const billAddr = billingCustomer.address || "";
+      if (!billAddr.trim()) {
+        throw new Error("Billing address is required to generate PDF.");
+      }
+
+      const shippingCustomer = bill.shippingCustomer;
+      const shName = bill.sameAsBilling ? billingCustomer.name : shippingCustomer?.name;
+      const shAddress = bill.sameAsBilling ? billAddr : shippingCustomer?.address;
+
+      if (!shName?.trim() || !shAddress?.trim()) {
+        throw new Error("Shipping customer name and address are required.");
+      }
+
+      if (!seller) {
+        throw new Error("Seller profile is missing.");
+      }
+      if (!seller.sellerName || !seller.fullAddress) {
+        throw new Error("Seller name and address are required.");
+      }
+      if (!seller.logoUrl || !seller.qrCodeUrl || !seller.signatureUrl) {
+        throw new Error("Logo, QR, and Signature are required on seller profile.");
+      }
+
+      const bankNameText = bank?.bankName || seller.bankName;
+      const accNoText = bank?.accountNumber || seller.accountNumber || seller.accountNo;
+      const ifscText = bank?.ifscCode || seller.ifscCode;
+      const inFavorText = bank?.bankingName || seller.bankingName;
+
+      if (!bankNameText || !accNoText || !ifscText || !inFavorText) {
+        throw new Error("Complete bank details are required. Please update seller profile.");
+      }
+
+      const filledItems = (bill.items || []).filter(
+        (it: any) => it.productName && it.productName.trim() !== "" && it.quantity && it.quantity > 0
+      );
+      if (!filledItems.length) {
+        throw new Error("Bill must contain at least one product with quantity.");
+      }
+
+      // Helper function to fetch images as data URLs
+      const fetchImageAsDataURL = async (url?: string | null) => {
+        if (!url) return null;
+        try {
+          if (url.startsWith("data:")) return url;
+          const resp = await fetch(url);
+          if (!resp.ok) return null;
+          const blob = await resp.blob();
+          return await new Promise<string | null>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === "string" ? reader.result : null);
+            reader.readAsDataURL(blob);
+          });
+        } catch {
+          return null;
+        }
+      };
+
+      toast.loading("Generating PDF...", { id: downloadToast });
+
+      const logoDataUrl = await fetchImageAsDataURL(seller.logoUrl);
+      const qrDataUrl = await fetchImageAsDataURL(seller.qrCodeUrl);
+      const sigDataUrl = await fetchImageAsDataURL(seller.signatureUrl);
+
+      const doc = new jsPDF("p", "pt", "a4");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      const margin = {
+        top: 210,
+        bottom: 140,
+        left: 40,
+        right: 40,
+      };
+
+      const tableTop = margin.top + 18;
+
+      const drawHeader = (pageNumber: number, totalPages: number) => {
+        const topY = 30;
+
+        if (logoDataUrl) {
+          try {
+            doc.addImage(logoDataUrl, "PNG", margin.left, topY - 10, 60, 60);
+          } catch {}
+        }
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.text(
+          (seller?.sellerName || "SELLER").toUpperCase(),
+          pageWidth / 2,
+          topY + 5,
+          { align: "center" }
+        );
+
+        doc.setFont("helvetica", "normal").setFontSize(10);
+        doc.text(seller?.fullAddress || "-", pageWidth / 2, topY + 22, {
+          align: "center",
+          maxWidth: pageWidth - 80,
+        });
+
+        if (seller?.contact) {
+          doc.text(`Contact: ${seller.contact}`, pageWidth / 2, topY + 36, {
+            align: "center",
+          });
+        }
+
+        if (seller?.gstNumber) {
+          doc.text(`GSTIN: ${seller.gstNumber}`, pageWidth / 2, topY + 50, {
+            align: "center",
+          });
+        }
+
+        if (seller?.compositionLine && seller.compositionLine.trim()) {
+          doc.setFont("helvetica", "italic").setFontSize(9);
+          doc.text(seller.compositionLine, pageWidth / 2, topY + 66, {
+            align: "center",
+            maxWidth: pageWidth - 100,
+          });
+        }
+
+        doc.setFont("helvetica", "bold").setFontSize(14);
+        doc.text("BILL OF SUPPLY", pageWidth / 2, topY + 82, {
+          align: "center",
+        });
+
+        doc.setFont("helvetica", "normal").setFontSize(9);
+        doc.text(`Serial: ${bill.serialNumber}`, pageWidth - margin.right, topY, {
+          align: "right",
+        });
+
+        const billDateObj = new Date(bill.billDate);
+        const dd = String(billDateObj.getUTCDate()).padStart(2, "0");
+        const mm = String(billDateObj.getUTCMonth() + 1).padStart(2, "0");
+        const yyyy = billDateObj.getUTCFullYear();
+        const dateText = `${dd}-${mm}-${yyyy}`;
+
+        doc.text(`Date: ${dateText}`, pageWidth - margin.right, topY + 12, {
+          align: "right",
+        });
+        doc.text(
+          `Page ${pageNumber} / ${totalPages}`,
+          pageWidth - margin.right,
+          topY + 24,
+          { align: "right" }
+        );
+
+        const BOX_HEADER_H = 16;
+        const LINE_H = 13;
+        const BOX_PADDING_TOP = 6;
+        const BOX_CONTENT_LINES = 4;
+        const boxHeight = BOX_HEADER_H + BOX_PADDING_TOP + BOX_CONTENT_LINES * LINE_H + 8;
+        const boxTop = margin.top - boxHeight - 10;
+        const gap = 12;
+        const boxWidth = (pageWidth - margin.left - margin.right - gap) / 2;
+
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.7);
+        doc.rect(margin.left, boxTop, boxWidth, boxHeight);
+        doc.rect(margin.left + boxWidth + gap, boxTop, boxWidth, boxHeight);
+
+        doc.setFillColor(240, 240, 240);
+        doc.rect(margin.left, boxTop, boxWidth, BOX_HEADER_H, "F");
+        doc.rect(margin.left + boxWidth + gap, boxTop, boxWidth, BOX_HEADER_H, "F");
+
+        doc.setFont("helvetica", "bold").setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        doc.text("Billing Details", margin.left + 6, boxTop + 11);
+        doc.text(
+          "Shipping Details",
+          margin.left + boxWidth + gap + 6,
+          boxTop + 11
+        );
+
+        doc.setFont("helvetica", "normal").setFontSize(9);
+
+        const billShop = billingCustomer?.shopName || "-";
+        const billName = billingCustomer?.name || "-";
+        const billAddrText = billingCustomer?.address || "-";
+        const billContact = billingCustomer?.contact || "-";
+
+        const shipShop = bill.sameAsBilling ? billShop : shippingCustomer?.shopName || "-";
+        const shipName = bill.sameAsBilling ? billName : shippingCustomer?.name || "-";
+        const shipAddrText = bill.sameAsBilling ? billAddrText : shippingCustomer?.address || "-";
+        const shipContact = bill.sameAsBilling ? billContact : shippingCustomer?.contact || "-";
+
+        let y = boxTop + BOX_HEADER_H + BOX_PADDING_TOP + 8;
+
+        const maxW = boxWidth - 14;
+        const sx = margin.left + boxWidth + gap + 6;
+
+        const truncate = (text: string, maxWidth: number): string => {
+          const lines = doc.splitTextToSize(text, maxWidth) as string[];
+          return lines[0] || text;
+        };
+
+        doc.text(truncate(`Shop: ${billShop}`, maxW), margin.left + 6, y);
+        doc.text(truncate(`Shop: ${shipShop}`, maxW), sx, y);
+        y += LINE_H;
+
+        doc.text(truncate(`Customer: ${billName}`, maxW), margin.left + 6, y);
+        doc.text(truncate(`Customer: ${shipName}`, maxW), sx, y);
+        y += LINE_H;
+
+        doc.text(truncate(`Address: ${billAddrText}`, maxW), margin.left + 6, y);
+        doc.text(truncate(`Address: ${shipAddrText}`, maxW), sx, y);
+        y += LINE_H;
+
+        doc.text(truncate(`Contact: ${billContact}`, maxW), margin.left + 6, y);
+        doc.text(truncate(`Contact: ${shipContact}`, maxW), sx, y);
+
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.7);
+        doc.line(
+          margin.left,
+          tableTop - 10,
+          pageWidth - margin.right,
+          tableTop - 10
+        );
+      };
+
+      const drawFooter = () => {
+        const footerTop = pageHeight - margin.bottom + 10;
+
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.6);
+        doc.line(margin.left, footerTop, pageWidth - margin.right, footerTop);
+
+        doc.setFillColor(245, 245, 245);
+        doc.rect(margin.left, footerTop + 1, pageWidth - margin.left - margin.right, 14, "F");
+
+        doc.setFont("helvetica", "bold").setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        doc.text("Payment & Banking Details", margin.left + 4, footerTop + 12);
+
+        const bankNameText2 = bank?.bankName || seller.bankName || "-";
+        const branchText2 = bank?.branchName || seller.branchName || "-";
+        const accNoText2 = bank?.accountNumber || seller.accountNumber || seller.accountNo || "-";
+        const ifscText2 = bank?.ifscCode || seller.ifscCode || "-";
+        const inFavorText2 = bank?.bankingName || seller.bankingName || "-";
+
+        let lineY = footerTop + 28;
+        const lineGap = 11;
+        doc.setFont("helvetica", "normal").setFontSize(8.5);
+        doc.text(`Bank: ${bankNameText2}`, margin.left, lineY);
+        lineY += lineGap;
+        doc.text(`Branch: ${branchText2}`, margin.left, lineY);
+        lineY += lineGap;
+        doc.text(`Account No.: ${accNoText2}`, margin.left, lineY);
+        lineY += lineGap;
+        doc.text(`IFSC: ${ifscText2}`, margin.left, lineY);
+        lineY += lineGap;
+        doc.text(`In favour of: ${inFavorText2}`, margin.left, lineY);
+
+        if (qrDataUrl) {
+          doc.addImage(
+            qrDataUrl,
+            "PNG",
+            pageWidth / 2 - 30,
+            footerTop + 18,
+            60,
+            60
+          );
+          doc.setFont("helvetica", "normal").setFontSize(7.5);
+          doc.text("Scan to Pay", pageWidth / 2, footerTop + 82, { align: "center" });
+        }
+
+        if (sigDataUrl) {
+          const sigW = 110;
+          const sigH = 45;
+          const sigX = pageWidth - margin.right - sigW;
+          const sigY = footerTop + 22;
+
+          doc.setFont("helvetica", "italic").setFontSize(8);
+          doc.text("Signature of the Supplier", sigX + sigW / 2, sigY - 4, {
+            align: "center",
+          });
+          doc.addImage(sigDataUrl, "PNG", sigX, sigY, sigW, sigH);
+
+          doc.setDrawColor(100, 100, 100);
+          doc.setLineWidth(0.4);
+          doc.line(sigX, sigY + sigH + 2, sigX + sigW, sigY + sigH + 2);
+          doc.setFont("helvetica", "normal").setFontSize(7.5);
+          doc.text("Authorized Signatory", sigX + sigW / 2, sigY + sigH + 10, { align: "center" });
+        }
+
+        doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.3);
+        doc.line(margin.left, pageHeight - 28, pageWidth - margin.right, pageHeight - 28);
+        doc.setFont("helvetica", "italic").setFontSize(8.5);
+        doc.setTextColor(80, 80, 80);
+        doc.text(
+          seller?.slogan || "Thank you for your business!",
+          pageWidth / 2,
+          pageHeight - 16,
+          { align: "center" }
+        );
+        doc.setTextColor(0, 0, 0);
+      };
+
+      const tableBody = filledItems.map((it: any, idx: number) => [
+        `${idx + 1}`,
+        it.productName,
+        String(it.quantity),
+        it.unit || "-",
+        it.free ? "FREE" : Number(it.price).toFixed(2),
+        it.free ? "FREE" : Number(it.total).toFixed(2),
+      ]);
+
+      const subtotal = bill.subtotal || 0;
+      const discountPercentage = bill.discountPercentage || 0;
+      const discountAmount = bill.discountAmount || 0;
+      const grandTotal = bill.grandTotal || 0;
+
+      const totalQty = filledItems.reduce((acc: number, it: any) => {
+        if (!it.unit?.toLowerCase().includes("box")) return acc;
+        return acc + (Number(it.quantity) || 0);
+      }, 0);
+
+      autoTable(doc, {
+        head: [["#", "Particulars", "Qty", "Unit", "Price (Rs.)", "Total (Rs.)"]],
+        body: tableBody,
+        foot: [
+          [
+            {
+              content: `Total Boxes: ${totalQty}`,
+              colSpan: 6,
+              styles: { halign: "left" },
+            },
+          ],
+          [
+            { content: "Subtotal", colSpan: 5, styles: { halign: "right" } },
+            { content: subtotal.toFixed(2), styles: { halign: "center" } },
+          ],
+          [
+            {
+              content: `Discount (${discountPercentage}%)`,
+              colSpan: 5,
+              styles: { halign: "right" },
+            },
+            { content: discountAmount.toFixed(2), styles: { halign: "center" } },
+          ],
+          [
+            { content: "Total", colSpan: 5, styles: { halign: "right" } },
+            {
+              content: grandTotal.toFixed(2),
+              styles: { halign: "center", fontStyle: "bold" },
+            },
+          ],
+        ],
+        margin: {
+          top: tableTop,
+          bottom: margin.bottom,
+          left: margin.left,
+          right: margin.right,
+        },
+        theme: "grid",
+        styles: {
+          fontSize: 10,
+          cellPadding: 6,
+          halign: "center",
+          valign: "middle",
+          lineColor: [0, 0, 0],
+          lineWidth: 0.7,
+        },
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+          lineColor: [0, 0, 0],
+          lineWidth: 0.7,
+        },
+        bodyStyles: {
+          lineColor: [0, 0, 0],
+          lineWidth: 0.7,
+        },
+        footStyles: {
+          fillColor: [255, 255, 255],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+          lineColor: [0, 0, 0],
+          lineWidth: 0.7,
+        },
+        columnStyles: { 1: { halign: "left" } },
+        didDrawPage: () => {
+          const pageInfo = (doc.internal as any).getCurrentPageInfo();
+          drawHeader(
+            pageInfo.pageNumber,
+            (doc.internal as any).getNumberOfPages()
+          );
+          drawFooter();
+        },
+      });
+
+      const pages = (doc.internal as any).getNumberOfPages();
+      doc.setPage(pages);
+
+      const billRemarks = bill.remarks || "";
+      if (billRemarks.trim()) {
+        const y = pageHeight - margin.bottom - 44;
+        doc.setFont("helvetica", "bold").setFontSize(9);
+        doc.setTextColor(0, 0, 0);
+        doc.text("Remarks:", margin.left, y);
+        doc.setFont("helvetica", "normal").setFontSize(8.5);
+        doc.text(billRemarks, margin.left, y + 13, {
+          maxWidth: pageWidth - margin.left - margin.right,
+        });
+      }
+
+      doc.save(`Bill_${bill.serialNumber}.pdf`);
+      toast.success("PDF downloaded successfully!", { id: downloadToast });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to download PDF.", { id: downloadToast });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   /* ── highlight on deep-link navigation ───────────────────────── */
   useEffect(() => {
@@ -309,6 +796,18 @@ export default function OrderRow({
               <span>Details</span>
             </button>
 
+            {tab !== "Discarded" && (
+              <button
+                onClick={() => handleDownloadPDF()}
+                disabled={isDownloading}
+                title="Download invoice PDF"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200 text-xs font-semibold hover:bg-indigo-100 transition disabled:opacity-50"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>{isDownloading ? "Downloading..." : "Download"}</span>
+              </button>
+            )}
+
             {tab === "Unsettled" && (
               <button
                 onClick={() => onEdit(order)}
@@ -520,6 +1019,16 @@ export default function OrderRow({
                   >
                     Full Details
                   </button>
+                  {tab !== "Discarded" && (
+                    <button
+                      onClick={() => handleDownloadPDF()}
+                      disabled={isDownloading}
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <FileDown className="w-3.5 h-3.5" />
+                      <span>{isDownloading ? "Downloading..." : "Download PDF"}</span>
+                    </button>
+                  )}
                   {tab === "Unsettled" && (
                     <>
                       <button
