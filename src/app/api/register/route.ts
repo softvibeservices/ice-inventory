@@ -46,7 +46,7 @@ function buildRegisterEmailHtml({
   supportEmail: string;
   userName?: string;
 }): string {
-  const safeApp     = appName     || "IceCream Inventory";
+  const safeApp     = appName     || "Ice Saathi";
   const safeSupport = supportEmail || "support@yourdomain.com";
 
   return `<!doctype html>
@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
     await newUser.save();
 
     // ── 8. Send verification email ──────────────────────────────────────────
-    const appName     = process.env.APP_NAME     || "IceCream Inventory";
+    const appName     = process.env.APP_NAME     || "Ice Saathi";
     const supportEmail = process.env.SUPPORT_EMAIL || process.env.EMAIL_USER || "support@yourdomain.com";
 
     const html = buildRegisterEmailHtml({

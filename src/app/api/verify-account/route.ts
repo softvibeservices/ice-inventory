@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
     await user.save();
 
     // ── 8. Send email ───────────────────────────────────────────────────────
-    const appName      = process.env.APP_NAME      || "IceCream Inventory";
+    const appName      = process.env.APP_NAME      || "Ice Saathi";
     const supportEmail = process.env.SUPPORT_EMAIL || process.env.EMAIL_USER || "support@yourdomain.com";
 
     const html = buildEmailHtml({ appName, otp, expiresMinutes: OTP_TTL_MINUTES, supportEmail, userName: user.name });

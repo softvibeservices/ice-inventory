@@ -549,7 +549,7 @@ export default function SubscriptionPage() {
         amount: orderData.amount,
         currency: orderData.currency,
         order_id: orderData.razorpayOrderId,
-        name: "Ice Inventory",
+        name: "Ice Saathi",
         description: `${orderData.planId} Plan - ${BILLING_PERIOD_LABELS[billingPeriod]}`,
         handler: async (response: RazorpayResponse) => {
           try {
@@ -656,7 +656,7 @@ export default function SubscriptionPage() {
         amount: orderData.amount,
         currency: orderData.currency,
         order_id: orderData.razorpayOrderId,
-        name: "Ice Inventory",
+        name: "Ice Saathi",
         description: ADDON_DISPLAY[addonType]?.label || "Add-on Purchase",
         handler: async (response: RazorpayResponse) => {
           try {
@@ -824,20 +824,22 @@ export default function SubscriptionPage() {
         <main className="flex-grow max-w-5xl mx-auto w-full px-4 py-6 sm:py-8 space-y-6">
 
           {/* Page header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Subscription</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
+          <div className="page-header">
+            <div className="page-header-left">
+              <h1 className="page-title">Subscription</h1>
+              <p className="page-subtitle">
                 Manage your plan, usage and billing history
               </p>
             </div>
-            <button
-              onClick={fetchData}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 bg-white hover:bg-gray-50 rounded-xl transition-colors"
-            >
-              <RefreshCw size={14} />
-              Refresh
-            </button>
+            <div className="page-header-actions">
+              <button
+                onClick={fetchData}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-200 bg-white hover:bg-gray-50 rounded-xl transition-colors"
+              >
+                <RefreshCw size={14} />
+                Refresh
+              </button>
+            </div>
           </div>
 
           {/* Expired banner */}

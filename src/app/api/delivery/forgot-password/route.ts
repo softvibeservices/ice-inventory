@@ -44,7 +44,7 @@ export async function POST(req: Request) {
         html: `<p>Hello ${partner.name},</p>
                <p>Your OTP to reset your password is: <strong>${otp}</strong></p>
                <p>This OTP expires in 10 minutes. Do not share it with anyone.</p>
-               <p>— IceCream Inventory</p>`,
+               <p>— Ice Saathi</p>`,
       });
     } catch (emailErr) {
       console.error('[forgot-password] email failed:', emailErr);

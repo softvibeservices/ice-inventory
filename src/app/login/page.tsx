@@ -184,7 +184,7 @@ export default function LoginPage() {
             <div>
               <div className="inline-flex items-center gap-2 bg-white/10 border border-white/10 rounded-full px-3 py-1 mb-8">
                 <span className="feature-pill-dot"></span>
-                <span className="text-white/70 text-xs font-medium">Ice Inventory Platform</span>
+                <span className="text-white/70 text-xs font-medium">Ice Saathi Platform</span>
               </div>
               <h2 className="text-3xl font-bold text-white leading-tight mb-3">
                 The inventory OS for ice cream wholesalers.
@@ -204,7 +204,7 @@ export default function LoginPage() {
             </div>
 
             <p className="text-white/20 text-xs">
-              © {new Date().getFullYear()} Ice Inventory. All rights reserved.
+              © {new Date().getFullYear()} Ice Saathi. All rights reserved.
             </p>
           </div>
 

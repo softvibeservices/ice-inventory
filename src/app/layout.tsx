@@ -5,22 +5,22 @@ import { Toaster } from "react-hot-toast";
 import type { Metadata } from "next";
 
 const BASE_URL = "https://ice-inventory.vercel.app";
-const BRAND_NAME = "Ice Inventory";
+const BRAND_NAME = "Ice Saathi";
 const OG_IMAGE = "/og-image.png";
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
 
   title: {
-    default: "Ice Inventory — Inventory, Billing & Delivery Software for Ice Cream Businesses",
+    default: "Ice Saathi — Inventory, Billing & Delivery Software for Ice Cream Businesses",
     template: `%s | ${BRAND_NAME}`,
   },
 
   description:
-    "Ice Inventory is inventory, billing, stock tracking and delivery management software for ice cream wholesalers, distributors and shop owners. Manage products, GST invoices, customer ledger, orders, delivery partners and analytics from one dashboard.",
+    "Ice Saathi is inventory, billing, stock tracking and delivery management software for ice cream wholesalers, distributors and shop owners. Manage products, GST invoices, customer ledger, orders, delivery partners and analytics from one dashboard.",
 
   keywords: [
-    "ice inventory",
+    "ice saathi",
     "ice cream inventory software",
     "ice cream billing software",
     "ice cream wholesale management software",
@@ -63,7 +63,7 @@ export const metadata: Metadata = {
     url: BASE_URL,
     siteName: BRAND_NAME,
     title:
-      "Ice Inventory — Inventory, Billing & Delivery Software for Ice Cream Businesses",
+      "Ice Saathi — Inventory, Billing & Delivery Software for Ice Cream Businesses",
     description:
       "Manage stock, billing, GST invoices, customer ledger, delivery workflow and analytics for your ice cream business in one modern dashboard.",
     locale: "en_IN",
@@ -72,7 +72,7 @@ export const metadata: Metadata = {
         url: OG_IMAGE,
         width: 1200,
         height: 630,
-        alt: "Ice Inventory software dashboard preview",
+        alt: "Ice Saathi software dashboard preview",
       },
     ],
   },
@@ -80,7 +80,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title:
-      "Ice Inventory — Inventory, Billing & Delivery Software for Ice Cream Businesses",
+      "Ice Saathi — Inventory, Billing & Delivery Software for Ice Cream Businesses",
     description:
       "Inventory, billing, GST invoices, stock tracking, customer ledger and delivery management software for ice cream businesses.",
     images: [OG_IMAGE],
@@ -118,7 +118,7 @@ export default function RootLayout({
         operatingSystem: "Web",
         inLanguage: "en-IN",
         description:
-          "Ice Inventory is a web-based inventory, billing, stock tracking and delivery management platform built for ice cream wholesalers, distributors and retail business owners.",
+          "Ice Saathi is a web-based inventory, billing, stock tracking and delivery management platform built for ice cream wholesalers, distributors and retail business owners.",
         offers: {
           "@type": "Offer",
           price: "0",
@@ -168,7 +168,7 @@ export default function RootLayout({
         isPartOf: { "@id": `${BASE_URL}/#website` },
         about: { "@id": `${BASE_URL}/#software` },
         description:
-          "Homepage of Ice Inventory, a software platform for inventory, billing, delivery and stock management in the ice cream business industry.",
+          "Homepage of Ice Saathi, a software platform for inventory, billing, delivery and stock management in the ice cream business industry.",
         inLanguage: "en-IN",
       },
       {
@@ -177,50 +177,50 @@ export default function RootLayout({
         mainEntity: [
           {
             "@type": "Question",
-            name: "What is Ice Inventory?",
+            name: "What is Ice Saathi?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Ice Inventory is inventory, billing, stock tracking and delivery management software for ice cream wholesalers, distributors and shop owners. It helps businesses manage products, invoices, customers, stock, orders and delivery operations from one dashboard.",
+              text: "Ice Saathi is inventory, billing, stock tracking and delivery management software for ice cream wholesalers, distributors and shop owners. It helps businesses manage products, invoices, customers, stock, orders and delivery operations from one dashboard.",
             },
           },
           {
             "@type": "Question",
-            name: "Does Ice Inventory support GST billing?",
+            name: "Does Ice Saathi support GST billing?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Ice Inventory supports GST-ready billing and invoice generation for ice cream businesses, including customer billing records and downloadable invoice documents.",
+              text: "Yes. Ice Saathi supports GST-ready billing and invoice generation for ice cream businesses, including customer billing records and downloadable invoice documents.",
             },
           },
           {
             "@type": "Question",
-            name: "Can I manage delivery partners with Ice Inventory?",
+            name: "Can I manage delivery partners with Ice Saathi?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Ice Inventory includes delivery workflow support, delivery partner management and order tracking for businesses that handle dispatch and order delivery operations.",
+              text: "Yes. Ice Saathi includes delivery workflow support, delivery partner management and order tracking for businesses that handle dispatch and order delivery operations.",
             },
           },
           {
             "@type": "Question",
-            name: "Who should use Ice Inventory?",
+            name: "Who should use Ice Saathi?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Ice Inventory is built for ice cream wholesalers, distributors, retailers and business owners who need software for stock tracking, billing, customer records, GST invoices and delivery operations.",
+              text: "Ice Saathi is built for ice cream wholesalers, distributors, retailers and business owners who need software for stock tracking, billing, customer records, GST invoices and delivery operations.",
             },
           },
           {
             "@type": "Question",
-            name: "Can I track stock and inventory with Ice Inventory?",
+            name: "Can I track stock and inventory with Ice Saathi?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Ice Inventory helps businesses manage products, stock levels, restocks, low stock alerts and inventory records in one place.",
+              text: "Yes. Ice Saathi helps businesses manage products, stock levels, restocks, low stock alerts and inventory records in one place.",
             },
           },
           {
             "@type": "Question",
-            name: "Does Ice Inventory support customer ledger management?",
+            name: "Does Ice Saathi support customer ledger management?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Ice Inventory includes customer ledger and payment tracking features so businesses can manage balances, settlement history and invoice records efficiently.",
+              text: "Yes. Ice Saathi includes customer ledger and payment tracking features so businesses can manage balances, settlement history and invoice records efficiently.",
             },
           },
         ],
@@ -262,9 +262,9 @@ export default function RootLayout({
       <body className="h-full min-h-screen bg-white text-gray-900 antialiased">
         {/* Hidden semantic content for crawlers / AEO */}
         <div className="sr-only" aria-hidden="true">
-          <h1>Ice Inventory</h1>
+          <h1>Ice Saathi</h1>
           <p>
-            Ice Inventory is inventory, billing, stock tracking and delivery
+            Ice Saathi is inventory, billing, stock tracking and delivery
             management software for ice cream wholesalers, distributors and
             retail business owners.
           </p>
@@ -274,7 +274,7 @@ export default function RootLayout({
             and analytics from one dashboard.
           </p>
           <p>
-            Ice Inventory is designed for ice cream business operations in
+            Ice Saathi is designed for ice cream business operations in
             India and supports inventory workflows, billing workflows and
             delivery management workflows.
           </p>

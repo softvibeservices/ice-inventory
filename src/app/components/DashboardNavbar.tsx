@@ -5,7 +5,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useLayoutEffect } from "react";
 import {
   Package,
   Boxes,
@@ -35,6 +35,12 @@ const stocksSubLinks = [
 
 
 
+// Persistent singleton state across client-side page transitions
+let globalCollapsed: boolean | null = null;
+
+// Safe layout effect to prevent console warnings on SSR/server environment
+const useSafeLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 export default function DashboardNavbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -44,9 +50,23 @@ export default function DashboardNavbar() {
   const [userId, setUserId] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [shopName, setShopName] = useState<string | null>(null);
 
-  // Sidebar collapse state — persisted to localStorage
-  const [collapsed, setCollapsed] = useState(false);
+  // Sidebar collapse state — persisted to localStorage and singleton module cache
+  const [collapsed, setCollapsed] = useState(() => {
+    if (globalCollapsed !== null) return globalCollapsed;
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("sidebarCollapsed");
+        return stored === "true";
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
 
   // Subsidebar expand state — stocks only now
   const [expandedGroup, setExpandedGroup] = useState<string | null>(() => {
@@ -57,19 +77,38 @@ export default function DashboardNavbar() {
   });
 
   // Load collapse preference from localStorage
-  useEffect(() => {
+  useSafeLayoutEffect(() => {
+    // Disable transitions during initial mount layout sync
+    document.documentElement.classList.add("no-transition");
+
     try {
       const stored = localStorage.getItem("sidebarCollapsed");
-      if (stored !== null) setCollapsed(stored === "true");
+      if (stored !== null) {
+        const isCollapsed = stored === "true";
+        setCollapsed(isCollapsed);
+        // Force the custom property synchronously before transitions are re-enabled
+        document.documentElement.style.setProperty(
+          "--sidebar-current-w",
+          isCollapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w-expanded)"
+        );
+      }
     } catch {
       // ignore
     }
+
+    // Re-enable transition animations in the next frame
+    const timer = setTimeout(() => {
+      document.documentElement.classList.remove("no-transition");
+    }, 50);
+
+    return () => clearTimeout(timer);
   }, []);
 
   // Persist collapse preference
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
+      globalCollapsed = next;
       try { localStorage.setItem("sidebarCollapsed", String(next)); } catch { /* ignore */ }
       return next;
     });
@@ -79,7 +118,8 @@ export default function DashboardNavbar() {
   // .dash-topbar and .dash-content-offset always have the correct left/margin-left.
   // CSS sibling selectors (.dash-sidebar-collapsed ~ .dash-topbar) cannot reach
   // across Next.js layout subtree boundaries, so we drive it from JS instead.
-  useEffect(() => {
+  useSafeLayoutEffect(() => {
+    globalCollapsed = collapsed;
     document.documentElement.style.setProperty(
       "--sidebar-current-w",
       collapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w-expanded)"
@@ -99,6 +139,9 @@ export default function DashboardNavbar() {
         const parsed = JSON.parse(stored);
         setRole(parsed.role || "admin");
         setUserId(parsed._id || null);
+        setUserName(parsed.name || null);
+        setUserEmail(parsed.email || null);
+        setShopName(parsed.shopName || null);
       }
     } catch (error) {
       console.error("Error loading user data:", error);
@@ -212,7 +255,7 @@ export default function DashboardNavbar() {
         {/* Hamburger — mobile only */}
         <button
           onClick={() => setMobileOpen((s) => !s)}
-          className="text-slate-300 hover:text-cyan-400 transition flex-shrink-0 lg:hidden"
+          className="text-slate-600 hover:text-blue-600 transition flex-shrink-0 lg:hidden"
           aria-label="Toggle menu"
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -221,15 +264,27 @@ export default function DashboardNavbar() {
         {/* Logo — mobile only */}
         <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
           <Image src="/logo.png" alt="Logo" width={28} height={28} className="rounded-md" />
-          <span className="font-semibold text-white text-sm">Ice Inventory</span>
+          <span className="font-semibold text-slate-900 text-sm">Ice Saathi</span>
         </Link>
+
+        {/* Breadcrumb Context Label */}
+        <span className="dash-topbar-context text-slate-200">
+          {pathname.startsWith("/dashboard/products") ? "Products"
+            : pathname.startsWith("/dashboard/stocks") ? "Stocks"
+            : pathname.startsWith("/dashboard/customers") ? "Customers"
+            : pathname.startsWith("/dashboard/orders") ? "Orders"
+            : pathname.startsWith("/dashboard/delivery") ? "Live Map"
+            : pathname.startsWith("/dashboard/profile") ? "Profile"
+            : pathname.startsWith("/dashboard/sales") ? "Sales"
+            : "Dashboard"}
+        </span>
 
         {/* Right cluster — always visible on all breakpoints */}
         <div className="ml-auto flex items-center gap-3">
           {/* Subscription badge — admin only, hidden on very small screens */}
           {role !== "manager" && (
             <div className="hidden md:block">
-              <SubscriptionBadge />
+              <SubscriptionBadge light />
             </div>
           )}
 
@@ -240,12 +295,13 @@ export default function DashboardNavbar() {
               className="relative"
               onClick={() => setMobileOpen(false)}
               aria-label="Delivery requests"
+              data-tip="Delivery requests"
             >
               <Bell
                 className={`transition ${
                   pendingCount > 0
-                    ? "text-red-400 hover:text-red-300"
-                    : "text-slate-300 hover:text-cyan-400"
+                    ? "text-red-500 hover:text-red-600"
+                    : "text-slate-600 hover:text-blue-600"
                 }`}
                 size={20}
               />
@@ -266,13 +322,14 @@ export default function DashboardNavbar() {
               href="/dashboard/profile"
               onClick={() => setMobileOpen(false)}
               aria-label="Profile"
+              data-tip="Your profile"
             >
               <UserCircle
                 size={26}
                 className={`transition ${
                   pathname.startsWith("/dashboard/profile")
-                    ? "text-cyan-400"
-                    : "text-slate-300 hover:text-cyan-400"
+                    ? "text-blue-600"
+                    : "text-slate-600 hover:text-blue-600"
                 }`}
               />
             </Link>
@@ -308,7 +365,7 @@ export default function DashboardNavbar() {
             />
             {!collapsed && (
               <span className="font-semibold text-white text-sm truncate">
-                Ice Inventory
+                Ice Saathi
               </span>
             )}
           </Link>
@@ -316,6 +373,7 @@ export default function DashboardNavbar() {
             className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition flex-shrink-0"
             onClick={toggleCollapsed}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            data-tip={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
@@ -440,6 +498,21 @@ export default function DashboardNavbar() {
           {role !== "manager" && !collapsed && (
             <div className="px-1 pb-1">
               <SubscriptionBadge />
+            </div>
+          )}
+
+          {/* User Identity Chip */}
+          {!collapsed && (
+            <div className="dash-user-chip">
+              <div className="dash-user-avatar">
+                {(userName || role || "U").charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="dash-user-name truncate">
+                  {userName || shopName || (role ? role.charAt(0).toUpperCase() + role.slice(1) : "User")}
+                </p>
+                {userEmail && <p className="dash-user-email truncate">{userEmail}</p>}
+              </div>
             </div>
           )}
 

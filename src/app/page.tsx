@@ -15,9 +15,9 @@ import PricingSection from "./components/PricingSection";
 // ─── Metadata (OpenGraph + Twitter + canonical) ───────────────────────────────
 
 export const metadata: Metadata = {
-  title: "IceCream Inventory — Wholesale Inventory, Billing & Delivery Management",
+  title: "Ice Saathi — Wholesale Inventory, Billing & Delivery Management",
   description:
-    "IceCream Inventory is a complete management platform for ice cream wholesalers. Manage products, customers, GST invoices, stock alerts, delivery tracking and sales reports from one dashboard. Free 30-day trial.",
+    "Ice Saathi is a complete management platform for ice cream wholesalers. Manage products, customers, GST invoices, stock alerts, delivery tracking and sales reports from one dashboard. Free 30-day trial.",
   keywords: [
     "ice cream inventory management",
     "ice cream wholesale software",
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     "wholesale stock management",
     "ice cream distributor software",
     "inventory management India",
-    "SoftVibe ice inventory",
+    "SoftVibe ice saathi",
   ],
   authors: [{ name: "SoftVibe Services" }],
   creator: "SoftVibe Services",
@@ -36,15 +36,15 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "/",
-    siteName: "IceCream Inventory",
-    title: "IceCream Inventory — Wholesale Inventory, Billing & Delivery Management",
+    siteName: "Ice Saathi",
+    title: "Ice Saathi — Wholesale Inventory, Billing & Delivery Management",
     description:
       "Complete inventory, GST billing and delivery management for ice cream wholesalers. 12 business modules. Free 30-day trial.",
     locale: "en_IN",
   },
   twitter: {
     card: "summary_large_image",
-    title: "IceCream Inventory — Inventory & Billing for Ice Cream Wholesalers",
+    title: "Ice Saathi — Inventory & Billing for Ice Cream Wholesalers",
     description:
       "Manage products, customers, GST invoices, stock, delivery partners and sales — all from one dashboard.",
   },
@@ -63,11 +63,11 @@ const jsonLd = {
     {
       "@type": "SoftwareApplication",
       "@id": "https://ice-inventory.vercel.app/#software",
-      name: "IceCream Inventory",
+      name: "Ice Saathi",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       description:
-        "IceCream Inventory is a complete management platform for ice cream wholesalers. It handles products, customers, orders, GST billing, stock management, delivery partner tracking and sales analytics.",
+        "Ice Saathi is a complete management platform for ice cream wholesalers. It handles products, customers, orders, GST billing, stock management, delivery partner tracking and sales analytics.",
       offers: [
         {
           "@type": "Offer",
@@ -128,7 +128,7 @@ const jsonLd = {
       "@type": "WebSite",
       "@id": "https://ice-inventory.vercel.app/#website",
       url: "https://ice-inventory.vercel.app",
-      name: "IceCream Inventory",
+      name: "Ice Saathi",
       publisher: { "@id": "https://ice-inventory.vercel.app/#org" },
     },
     {
@@ -136,15 +136,15 @@ const jsonLd = {
       mainEntity: [
         {
           "@type": "Question",
-          name: "What is IceCream Inventory?",
+          name: "What is Ice Saathi?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "IceCream Inventory is a complete management platform for ice cream wholesalers and retailers. It handles products, customers, orders, billing, stock, delivery partners and sales reports — all from one dashboard.",
+            text: "Ice Saathi is a complete management platform for ice cream wholesalers and retailers. It handles products, customers, orders, billing, stock, delivery partners and sales reports — all from one dashboard.",
           },
         },
         {
           "@type": "Question",
-          name: "Does IceCream Inventory support GST billing?",
+          name: "Does Ice Saathi support GST billing?",
           acceptedAnswer: {
             "@type": "Answer",
             text: "Yes. You can generate GST-compliant PDF invoices with your business logo, QR code, digital signature, GSTIN and full itemised product details. Every invoice gets a unique serial number automatically.",
@@ -184,7 +184,7 @@ const jsonLd = {
         },
         {
           "@type": "Question",
-          name: "What can I export as PDF from IceCream Inventory?",
+          name: "What can I export as PDF from Ice Saathi?",
           acceptedAnswer: {
             "@type": "Answer",
             text: "You can export GST invoices, customer reports, restock history and stock history summaries as formatted PDFs directly from the dashboard.",
@@ -303,8 +303,8 @@ const HOW_IT_WORKS = [
 
 const FAQS: { q: string; a: string }[] = [
   {
-    q: "What is IceCream Inventory?",
-    a: "IceCream Inventory is a complete management platform for ice cream wholesalers and retailers. It handles your products, customers, orders, billing, stock, delivery partners and sales reports — all from one dashboard.",
+    q: "What is Ice Saathi?",
+    a: "Ice Saathi is a complete management platform for ice cream wholesalers and retailers. It handles your products, customers, orders, billing, stock, delivery partners and sales reports — all from one dashboard.",
   },
   {
     q: "Does it support GST billing?",
@@ -359,11 +359,11 @@ export default function HomePage() {
         {/* ── HEADER ── */}
         <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <Link href="/" aria-label="IceCream Inventory home" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center" aria-hidden="true">
-                <span className="text-white text-sm font-bold">IC</span>
+            <Link href="/" aria-label="Ice Saathi home" className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-md" aria-hidden="true">
+                <span className="text-white text-xl font-bold">IS</span>
               </div>
-              <span className="font-semibold text-gray-900">IceCream Inventory</span>
+              <span className="font-semibold text-gray-900">Ice Saathi</span>
             </Link>
             <nav aria-label="Primary navigation" className="flex items-center gap-1">
               <Link href="#features" className="hidden sm:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
@@ -579,10 +579,10 @@ export default function HomePage() {
 
               <div>
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center" aria-hidden="true">
-                    <span className="text-white text-sm font-bold">IC</span>
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-md" aria-hidden="true">
+                    <span className="text-white text-xl font-bold">IS</span>
                   </div>
-                  <span className="font-semibold text-white">IceCream Inventory</span>
+                  <span className="font-semibold text-white">Ice Saathi</span>
                 </div>
                 <p className="text-sm leading-relaxed">
                   Inventory, GST billing and delivery management for ice cream wholesalers and retailers in India.
@@ -650,7 +650,7 @@ export default function HomePage() {
 
             <div className="pt-8 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
               <p className="text-sm">
-                © {new Date().getFullYear()} IceCream Inventory · by{" "}
+                © {new Date().getFullYear()} Ice Saathi · by{" "}
                 <a href="mailto:support@softvibe.in" className="hover:text-white transition-colors">
                   SoftVibe Services
                 </a>

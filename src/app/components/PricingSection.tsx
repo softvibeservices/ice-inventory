@@ -141,15 +141,15 @@ const ADDONS = [
 
 const FAQS = [
   {
-    q: `What does "Invoices / month" mean in Ice Inventory pricing?`,
-    a: `It means the number of GST bills or invoices you can generate inside Ice Inventory during one billing cycle. If you reach your monthly invoice limit, you can upgrade your plan or purchase an Extra Invoice Pack.`,
+    q: `What does "Invoices / month" mean in Ice Saathi pricing?`,
+    a: `It means the number of GST bills or invoices you can generate inside Ice Saathi during one billing cycle. If you reach your monthly invoice limit, you can upgrade your plan or purchase an Extra Invoice Pack.`,
   },
   {
-    q: "Which Ice Inventory pricing plan is best for most businesses?",
+    q: "Which Ice Saathi pricing plan is best for most businesses?",
     a: "The Scale plan is the best fit for most active ice cream distributors. It includes staff access, delivery management, analytics and enough monthly invoice capacity for regular operations.",
   },
   {
-    q: "Can I upgrade my Ice Inventory plan later?",
+    q: "Can I upgrade my Ice Saathi plan later?",
     a: "Yes. You can upgrade your plan anytime as your shop, staff, delivery operations or invoice volume grows. Your existing data stays safe.",
   },
   {
@@ -162,10 +162,10 @@ const FAQS = [
   },
   {
     q: "Is the free trial really free?",
-    a: "Yes. Ice Inventory offers a 30-day free trial with no credit card required. You can test billing, inventory and customer management before subscribing.",
+    a: "Yes. Ice Saathi offers a 30-day free trial with no credit card required. You can test billing, inventory and customer management before subscribing.",
   },
   {
-    q: "Does Ice Inventory include delivery management in every plan?",
+    q: "Does Ice Saathi include delivery management in every plan?",
     a: "No. Delivery workflow is available from the Scale plan onward because smaller single-owner shops often do not need dispatch management.",
   },
   {
@@ -496,7 +496,7 @@ export default function PricingSection() {
           </h2>
 
           <p className="mt-5 text-base sm:text-lg text-gray-600 leading-8 max-w-2xl">
-            Choose the right Ice Inventory pricing plan for your ice cream shop,
+            Choose the right Ice Saathi pricing plan for your ice cream shop,
             distributor business or delivery operation. Start free, upgrade when
             your invoice volume and business complexity grow.
           </p>
@@ -556,7 +556,7 @@ export default function PricingSection() {
             </div>
 
             <p className="text-sm text-gray-600 leading-7 mb-6">
-              Test Ice Inventory for 30 days with enough capacity to explore
+              Test Ice Saathi for 30 days with enough capacity to explore
               billing, products, and customer workflows before choosing a paid plan.
             </p>
 
@@ -722,7 +722,7 @@ export default function PricingSection() {
               Pricing FAQ
             </h3>
             <p className="text-base text-gray-600 leading-8">
-              Answers to common questions about Ice Inventory pricing, invoice
+              Answers to common questions about Ice Saathi pricing, invoice
               limits, upgrades, delivery features and plan selection.
             </p>
           </div>

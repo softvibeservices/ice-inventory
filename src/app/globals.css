@@ -94,8 +94,8 @@ input[type="number"] {
   position: fixed;
   top: 0; left: 0; bottom: 0;
   width: var(--sidebar-w-expanded);
-  background: linear-gradient(180deg, #020617 0%, #020b2c 60%, #031136 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: #090d16;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   z-index: 50;
@@ -114,7 +114,7 @@ input[type="number"] {
   align-items: center;
   justify-content: space-between;
   padding: 14px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   min-height: 60px;
   flex-shrink: 0;
 }
@@ -132,7 +132,7 @@ input[type="number"] {
 
 .dash-sidebar-footer {
   padding: 10px 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -146,7 +146,7 @@ input[type="number"] {
   gap: 10px;
   padding: 9px 12px;
   border-radius: 8px;
-  color: #cbd5e1;
+  color: #94a3b8;
   font-size: 13.5px;
   font-weight: 500;
   text-decoration: none;
@@ -160,16 +160,16 @@ input[type="number"] {
 }
 
 .dash-nav-link:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #67e8f9;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
 }
 
 .dash-nav-link-active {
-  background: rgba(34, 211, 238, 0.15);
-  color: #22d3ee;
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
 }
 
-/* Phase 5: cyan left accent bar on active link */
+/* Accent bar on active link */
 .dash-nav-link-active::before {
   content: '';
   position: absolute;
@@ -178,7 +178,7 @@ input[type="number"] {
   transform: translateY(-50%);
   height: 60%;
   width: 3px;
-  background: #22d3ee;
+  background: #3b82f6;
   border-radius: 0 3px 3px 0;
 }
 
@@ -245,9 +245,9 @@ input[type="number"] {
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  background: linear-gradient(90deg, #020617, #020b2c, #031136);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+  color: #0f172a;
   flex-shrink: 0;
 }
 
@@ -300,7 +300,7 @@ input[type="number"] {
   flex-direction: column;
   gap: 1px;
   margin: 3px 0 3px 28px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
   padding-left: 10px;
 }
 
@@ -314,8 +314,8 @@ input[type="number"] {
   text-decoration: none;
   transition: all 0.15s ease;
 }
-.dash-subnav-link:hover  { background: rgba(255,255,255,0.06); color: #e2e8f0; }
-.dash-subnav-link-active { background: rgba(34,211,238,0.12); color: #22d3ee; }
+.dash-subnav-link:hover  { background: rgba(255,255,255,0.04); color: #ffffff; }
+.dash-subnav-link-active { background: rgba(59, 130, 246, 0.08); color: #60a5fa; }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -662,3 +662,276 @@ input[type="number"] {
 
 /* ── Phase C — flush card variant for widget components ────────────────── */
 .saas-card-flush { padding: 0; }
+
+/* ── Prevent transition animation flash on page load / mount ──────────────── */
+.no-transition,
+.no-transition * {
+  transition: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   IMPLEMENTATION_FIFTH.MD — Comprehension Toolkit
+   Purely additive. Nothing above this line is changed.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 5.1: Hide the public-site footer inside the logged-in app ─────────────
+   Footer.tsx itself is NOT touched — it still renders correctly on public
+   pages (/login, /register, /, etc.) which live outside .dash-content-offset.
+   This rule only hides it where it's a sibling inside the dashboard shell. */
+.dash-content-offset footer { display: none; }
+
+/* ── 5.2: Contextual info banner ────────────────────────────────────────── */
+.info-banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.info-banner-icon { flex-shrink: 0; color: #2563eb; margin-top: 1px; }
+.info-banner-amber { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.info-banner-amber .info-banner-icon { color: #d97706; }
+
+/* ── 5.3: CSS-only tooltip (for icons that don't have a `title=` yet) ──────
+   Usage: <button data-tip="Your shop's notifications">…</button>
+   Coexists peacefully with existing native title= tooltips elsewhere —
+   this is only used for NEW tooltips added in Phase 2. */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 5px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 80;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── 5.4: Status legend (dot + label key) ───────────────────────────────── */
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  font-size: 12px;
+  color: #64748b;
+}
+.status-legend-item { display: flex; align-items: center; gap: 6px; }
+.status-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── 5.5: Stepper (multi-step flow progress) ────────────────────────────── */
+.stepper { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
+.stepper-step { display: flex; align-items: center; gap: 8px; }
+.stepper-step-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 1.5px solid #e2e8f0;
+  flex-shrink: 0;
+  font-family: 'Inter', Arial, sans-serif;
+}
+.stepper-step-active .stepper-step-circle { background: #2563eb; color: #fff; border-color: #2563eb; }
+.stepper-step-done .stepper-step-circle   { background: #ecfdf5; color: #059669; border-color: #6ee7b7; }
+.stepper-step-label { font-size: 12.5px; font-weight: 600; color: #94a3b8; }
+.stepper-step-active .stepper-step-label { color: #0f172a; }
+.stepper-step-done .stepper-step-label   { color: #059669; }
+.stepper-connector { width: 28px; height: 2px; background: #e2e8f0; flex-shrink: 0; }
+
+/* ── 5.6: Helper text under fields / buttons ────────────────────────────── */
+.helper-text {
+  font-size: 12.5px;
+  color: #6b7280;
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+/* ── 5.7: Touch-friendly minimum tap target for icon-only buttons ──────── */
+.tap-target {
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+@media (max-width: 1024px) {
+  .tap-target { min-width: 40px; min-height: 40px; }
+}
+
+/* ── 5.8: Spacing for a CTA button placed inside .empty-state ──────────── */
+.empty-state-action { margin-top: 16px; }
+
+/* ── 5.9: One-line description under an active tab strip ───────────────── */
+.tab-description {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: -2px 0 14px 2px;
+}
+
+/* ── 5.10: Accessible keyboard focus ring (additive, used selectively) ─── */
+.focus-ring:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── 5.11: Sidebar footer user-identity block ───────────────────────────── */
+.dash-user-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 6px;
+}
+.dash-user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: 'Inter', Arial, sans-serif;
+}
+.dash-user-name  { font-size: 12.5px; font-weight: 600; color: #f1f5f9; line-height: 1.3; }
+.dash-user-email { font-size: 11px; color: #94a3b8; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+
+/* ── 5.12: Topbar page-context label (lightweight breadcrumb) ──────────── */
+.dash-topbar-context {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  display: none;
+}
+@media (min-width: 1024px) {
+  .dash-topbar-context { display: block; }
+}
+
+/* ── Modern Premium SaaS Scrollbar Styling ── */
+/* Global Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 9999px;
+  border: 1px solid transparent;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; /* slate-400 */
+}
+
+/* Firefox Support */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+/* Specifically for inner tables / custom containers to look thin and elegant */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ── Modern Premium SaaS Table System ────────────────────────────────────── */
+.saas-table-modern {
+  width: 100%;
+  border-collapse: collapse !important;
+  font-size: 13px;
+  background-color: #ffffff;
+}
+
+.saas-table-modern thead tr {
+  background-color: #f8fafc !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+}
+
+.saas-table-modern thead th {
+  padding: 10px 14px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: #475569 !important;
+  border-right: 1px solid #cbd5e1 !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+  vertical-align: middle;
+}
+
+.saas-table-modern thead th:last-child {
+  border-right: none !important;
+}
+
+.saas-table-modern tbody tr {
+  border-bottom: 1px solid #cbd5e1 !important;
+  transition: background-color 0.15s ease;
+}
+
+.saas-table-modern tbody tr:hover {
+  background-color: #f8fafc !important;
+}
+
+.saas-table-modern tbody td {
+  padding: 12px 14px !important;
+  color: #334155 !important;
+  border-right: 1px solid #cbd5e1 !important;
+  border-bottom: 1px solid #cbd5e1 !important;
+  vertical-align: middle;
+}
+
+.saas-table-modern tbody td:last-child {
+  border-right: none !important;
+}
+
+.saas-table-modern tbody td.p-0,
+.saas-table-modern thead th.p-0 {
+  border-right: none !important;
+  width: 0 !important;
+  padding: 0 !important;
+}

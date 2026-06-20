@@ -1,5 +1,5 @@
 # IMPLEMENTATION.md
-## Sidebar Navigation Migration — Ice Inventory Dashboard
+## Sidebar Navigation Migration — Ice Saathi Dashboard
 ### Top Navbar → Professional Left Sidebar (with Subsidebar + Tab Navigation)
 
 ---

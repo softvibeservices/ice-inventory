@@ -7,7 +7,7 @@ export default function Footer() {
         <div className="text-center text-sm">
           <p>
             © {new Date().getFullYear()}{" "}
-            <span className="font-semibold text-white">IceCream Inventory</span>
+            <span className="font-semibold text-white">Ice Saathi</span>
             {" "}• Developed by{" "}
             <span className="font-semibold text-blue-400">Nitrajsinh Solanki</span>
             {" "}&{" "}

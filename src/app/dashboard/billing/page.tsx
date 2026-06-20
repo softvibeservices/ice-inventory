@@ -190,6 +190,7 @@ export default function BillingPage() {
   // ── Remote data ────────────────────────────────────────────────────────────
   const [seller, setSeller] = useState<SellerDetails | null>(null);
   const [bank, setBank] = useState<BankDetails | null>(null);
+  const [loadingBank, setLoadingBank] = useState<boolean>(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -916,11 +917,13 @@ export default function BillingPage() {
           ifscCode: seller.ifscCode,
           bankingName: seller.bankingName,
         });
+        setLoadingBank(false);
       }
       return;
     }
 
     const token = localStorage.getItem("token");
+    setLoadingBank(true);
     fetch(
       `/api/bank-details?sellerId=${encodeURIComponent(seller._id)}`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -952,6 +955,9 @@ export default function BillingPage() {
           bankingName: seller.bankingName,
         };
         if (possible.bankName || possible.accountNumber) setBank(possible);
+      })
+      .finally(() => {
+        setLoadingBank(false);
       });
   }, [seller]);
 
@@ -1381,7 +1387,7 @@ export default function BillingPage() {
   const profileComplete = isProfileComplete();
   const customersExist = hasCustomers();
   // Buttons that require profile + customers (and loading to be finished)
-  const canUseBillingActions = profileComplete && customersExist && !loadingData;
+  const canUseBillingActions = profileComplete && customersExist && !loadingData && !loadingBank;
 
   // ── Tooltip text when buttons are disabled ─────────────────────────────────
   const getDisabledReason = () => {
@@ -1408,7 +1414,7 @@ export default function BillingPage() {
           </h1>
 
           {/* ── Profile / customer warning banners ──────────────── */}
-          {!loadingData && !profileComplete && (
+          {!loadingData && !loadingBank && !profileComplete && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
               <span className="text-lg mt-0.5">⚠️</span>
               <div>

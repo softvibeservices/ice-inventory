@@ -147,16 +147,13 @@ function LiveMapContent() {
 
       <main className="flex-grow w-full max-w-7xl mx-auto px-3 sm:px-5 lg:px-8 py-6">
         {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <MapPin className="w-8 h-8 text-blue-600" />
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-              Live Partner Tracking
-            </h1>
+        <div className="page-header">
+          <div className="page-header-left">
+            <h1 className="page-title">Live Partner Tracking</h1>
+            <p className="page-subtitle">
+              Select any delivery partner to view their live location on the map.
+            </p>
           </div>
-          <p className="text-sm sm:text-base text-slate-600">
-            Select any delivery partner to view their live location on the map.
-          </p>
         </div>
 
         {/* Loading State */}
