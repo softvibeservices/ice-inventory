@@ -94,8 +94,8 @@ input[type="number"] {
   position: fixed;
   top: 0; left: 0; bottom: 0;
   width: var(--sidebar-w-expanded);
-  background: linear-gradient(180deg, #020617 0%, #020b2c 60%, #031136 100%);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: #090d16;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   z-index: 50;
@@ -114,7 +114,7 @@ input[type="number"] {
   align-items: center;
   justify-content: space-between;
   padding: 14px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   min-height: 60px;
   flex-shrink: 0;
 }
@@ -132,7 +132,7 @@ input[type="number"] {
 
 .dash-sidebar-footer {
   padding: 10px 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -146,7 +146,7 @@ input[type="number"] {
   gap: 10px;
   padding: 9px 12px;
   border-radius: 8px;
-  color: #cbd5e1;
+  color: #94a3b8;
   font-size: 13.5px;
   font-weight: 500;
   text-decoration: none;
@@ -160,16 +160,16 @@ input[type="number"] {
 }
 
 .dash-nav-link:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #67e8f9;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
 }
 
 .dash-nav-link-active {
-  background: rgba(34, 211, 238, 0.15);
-  color: #22d3ee;
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
 }
 
-/* Phase 5: cyan left accent bar on active link */
+/* Accent bar on active link */
 .dash-nav-link-active::before {
   content: '';
   position: absolute;
@@ -178,7 +178,7 @@ input[type="number"] {
   transform: translateY(-50%);
   height: 60%;
   width: 3px;
-  background: #22d3ee;
+  background: #3b82f6;
   border-radius: 0 3px 3px 0;
 }
 
@@ -245,9 +245,9 @@ input[type="number"] {
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  background: linear-gradient(90deg, #020617, #020b2c, #031136);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+  color: #0f172a;
   flex-shrink: 0;
 }
 
@@ -300,7 +300,7 @@ input[type="number"] {
   flex-direction: column;
   gap: 1px;
   margin: 3px 0 3px 28px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
   padding-left: 10px;
 }
 
@@ -314,8 +314,8 @@ input[type="number"] {
   text-decoration: none;
   transition: all 0.15s ease;
 }
-.dash-subnav-link:hover  { background: rgba(255,255,255,0.06); color: #e2e8f0; }
-.dash-subnav-link-active { background: rgba(34,211,238,0.12); color: #22d3ee; }
+.dash-subnav-link:hover  { background: rgba(255,255,255,0.04); color: #ffffff; }
+.dash-subnav-link-active { background: rgba(59, 130, 246, 0.08); color: #60a5fa; }
 
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -811,7 +811,8 @@ input[type="number"] {
   gap: 9px;
   padding: 9px 10px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   margin-bottom: 6px;
 }
 .dash-user-avatar {
@@ -833,9 +834,9 @@ input[type="number"] {
 
 /* ── 5.12: Topbar page-context label (lightweight breadcrumb) ──────────── */
 .dash-topbar-context {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: #0f172a;
   display: none;
 }
 @media (min-width: 1024px) {

@@ -62,7 +62,7 @@ function getDaysLeft(dateStr: string | null): number | null {
   return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
 }
 
-export default function SubscriptionBadge() {
+export default function SubscriptionBadge({ light = false }: { light?: boolean }) {
   const [badge, setBadge] = useState<BadgeData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -110,30 +110,54 @@ export default function SubscriptionBadge() {
 
   if (badge.status === "expired" || badge.status === "cancelled") {
     statusLabel = "Expired";
-    pillClass = "bg-red-500/20 text-red-400 border-red-500/30";
+    pillClass = light
+      ? "bg-red-50 text-red-600 border-red-200"
+      : "bg-red-500/20 text-red-400 border-red-500/30";
   } else if (badge.planId === "free_trial") {
     const days = getDaysLeft(badge.trialEndsAt);
     statusLabel = days !== null ? `Trial · ${days}d left` : "Free Trial";
-    pillClass =
-      days !== null && days <= 5
-        ? "bg-orange-500/20 text-orange-400 border-orange-500/30"
+    if (days !== null && days <= 5) {
+      pillClass = light
+        ? "bg-orange-50 text-orange-600 border-orange-200"
+        : "bg-orange-500/20 text-orange-400 border-orange-500/30";
+    } else {
+      pillClass = light
+        ? "bg-cyan-50 text-cyan-700 border-cyan-200"
         : "bg-cyan-500/15 text-cyan-400 border-cyan-500/25";
+    }
   } else if (badge.status === "grace") {
     statusLabel = "Grace Period";
-    pillClass = "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+    pillClass = light
+      ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+      : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
   } else {
     statusLabel = "Active";
-    pillClass = "bg-green-500/15 text-green-400 border-green-500/25";
+    pillClass = light
+      ? "bg-green-50 text-green-700 border-green-200"
+      : "bg-green-500/15 text-green-400 border-green-500/25";
   }
 
   return (
     <Link
       href="/dashboard/subscription"
-      className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors cursor-pointer group"
+      className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors cursor-pointer group ${
+        light
+          ? "border-slate-200 bg-slate-50 hover:bg-slate-100"
+          : "border-white/10 bg-white/5 hover:bg-white/10"
+      }`}
       title="Manage subscription"
     >
-      <CreditCard size={14} className="text-slate-400 group-hover:text-cyan-400 transition-colors" />
-      <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">
+      <CreditCard
+        size={14}
+        className={`transition-colors ${
+          light ? "text-slate-500 group-hover:text-blue-600" : "text-slate-400 group-hover:text-cyan-400"
+        }`}
+      />
+      <span
+        className={`text-xs font-semibold transition-colors ${
+          light ? "text-slate-700 group-hover:text-slate-900" : "text-slate-300 group-hover:text-white"
+        }`}
+      >
         {badge.planName}
       </span>
       <span

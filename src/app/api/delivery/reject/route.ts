@@ -73,7 +73,7 @@ export async function PATCH(req: Request) {
         subject: "Delivery Partner Request — Rejected",
         html: `<p>Hello ${partner.name},</p>
                <p>We're sorry — your delivery partner request has been <strong>rejected</strong>. Contact the shop owner for details.</p>
-               <p>— IceCream Inventory</p>`,
+               <p>— Ice Saathi</p>`,
       });
     } catch (e) {
       console.error("[delivery/reject] partner notification failed", e);

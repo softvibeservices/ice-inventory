@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: user.email,
-      subject: "Password Change OTP - Icecream Inventory",
+      subject: "Password Change OTP - Ice Saathi",
       text: `Your OTP to change password is ${otp}. It is valid for 10 minutes.`,
       html: `<p>Your OTP to change password is <b>${otp}</b>.</p><p>It is valid for <b>10 minutes</b>.</p>`,
     });

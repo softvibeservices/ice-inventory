@@ -549,7 +549,7 @@ export default function SubscriptionPage() {
         amount: orderData.amount,
         currency: orderData.currency,
         order_id: orderData.razorpayOrderId,
-        name: "Ice Inventory",
+        name: "Ice Saathi",
         description: `${orderData.planId} Plan - ${BILLING_PERIOD_LABELS[billingPeriod]}`,
         handler: async (response: RazorpayResponse) => {
           try {
@@ -656,7 +656,7 @@ export default function SubscriptionPage() {
         amount: orderData.amount,
         currency: orderData.currency,
         order_id: orderData.razorpayOrderId,
-        name: "Ice Inventory",
+        name: "Ice Saathi",
         description: ADDON_DISPLAY[addonType]?.label || "Add-on Purchase",
         handler: async (response: RazorpayResponse) => {
           try {

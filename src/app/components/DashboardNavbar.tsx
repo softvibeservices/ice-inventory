@@ -255,7 +255,7 @@ export default function DashboardNavbar() {
         {/* Hamburger — mobile only */}
         <button
           onClick={() => setMobileOpen((s) => !s)}
-          className="text-slate-300 hover:text-cyan-400 transition flex-shrink-0 lg:hidden"
+          className="text-slate-600 hover:text-blue-600 transition flex-shrink-0 lg:hidden"
           aria-label="Toggle menu"
         >
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
@@ -264,7 +264,7 @@ export default function DashboardNavbar() {
         {/* Logo — mobile only */}
         <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
           <Image src="/logo.png" alt="Logo" width={28} height={28} className="rounded-md" />
-          <span className="font-semibold text-white text-sm">Ice Inventory</span>
+          <span className="font-semibold text-slate-900 text-sm">Ice Saathi</span>
         </Link>
 
         {/* Breadcrumb Context Label */}
@@ -284,7 +284,7 @@ export default function DashboardNavbar() {
           {/* Subscription badge — admin only, hidden on very small screens */}
           {role !== "manager" && (
             <div className="hidden md:block">
-              <SubscriptionBadge />
+              <SubscriptionBadge light />
             </div>
           )}
 
@@ -300,8 +300,8 @@ export default function DashboardNavbar() {
               <Bell
                 className={`transition ${
                   pendingCount > 0
-                    ? "text-red-400 hover:text-red-300"
-                    : "text-slate-300 hover:text-cyan-400"
+                    ? "text-red-500 hover:text-red-600"
+                    : "text-slate-600 hover:text-blue-600"
                 }`}
                 size={20}
               />
@@ -328,8 +328,8 @@ export default function DashboardNavbar() {
                 size={26}
                 className={`transition ${
                   pathname.startsWith("/dashboard/profile")
-                    ? "text-cyan-400"
-                    : "text-slate-300 hover:text-cyan-400"
+                    ? "text-blue-600"
+                    : "text-slate-600 hover:text-blue-600"
                 }`}
               />
             </Link>
@@ -365,7 +365,7 @@ export default function DashboardNavbar() {
             />
             {!collapsed && (
               <span className="font-semibold text-white text-sm truncate">
-                Ice Inventory
+                Ice Saathi
               </span>
             )}
           </Link>

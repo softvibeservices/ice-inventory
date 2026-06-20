@@ -74,7 +74,7 @@ export async function PATCH(req: Request) {
         subject: "Delivery Partner Approved",
         html: `<p>Hello ${partner.name},</p>
                <p>Your registration as a delivery partner has been <strong>approved</strong>. You can now login using OTP.</p>
-               <p>— IceCream Inventory</p>`,
+               <p>— Ice Saathi</p>`,
       });
     } catch (e) {
       console.error("[delivery/approve] partner notification failed", e);

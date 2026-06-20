@@ -128,7 +128,7 @@ export default function DownloadReportButton({
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(...C.accentLight);
-    doc.text("ICE INVENTORY", ML, 9.2);
+    doc.text("ICE SAATHI", ML, 9.2);
 
     // Report title — center
     doc.setFont("helvetica", "bold");
@@ -576,7 +576,7 @@ export default function DownloadReportButton({
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
       doc.setTextColor(...C.accentLight);
-      doc.text("ICE INVENTORY", w / 2, h / 2 - 42, { align: "center" });
+      doc.text("ICE SAATHI", w / 2, h / 2 - 42, { align: "center" });
 
       // Main title
       doc.setFont("helvetica", "bold");
