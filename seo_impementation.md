@@ -1,1229 +1,560 @@
-# IceSaathi — Complete SEO & Public Pages Implementation Plan
-## Domain: https://www.icesaathi.co.in/
-## Support: softvibeservices@gmail.com
-## Agency: https://softvibe-service.vercel.app/
+# ICE SAATHI — Blog & SEO Growth Engine
+## `implementation_blog_seo.md`
+### Goal: Turn IceSaathi into a keyword-targeted content engine that ranks for real searches ice cream wholesalers, distributors and shop owners in India already type into Google
+#### Content-as-Markdown Blog System · Full Keyword Research · 32-Post Content Calendar · Technical + AEO SEO · Zero Backend/DB Changes
 
 ---
 
-## OVERVIEW
+## 0. WHY THIS DOCUMENT EXISTS (read this first)
 
-This document contains every file change needed to:
-1. Rebrand the app from "IceCream Inventory / Ice Inventory" → **IceSaathi**
-2. Rank on Google for: "best inventory management software", "best software for ice cream business", "ice cream billing software India", etc.
-3. Make every public-facing page so clear and convincing that any ice cream business owner immediately understands the value and signs up.
+This codebase already has strong **on-page SEO on the homepage** — `layout.tsx` and `page.tsx` carry full Metadata API config, JSON-LD (`SoftwareApplication`, `Organization`, `WebSite`, `FAQPage`), a static `sitemap.xml`, and a locked-down `robots.txt`. That work is solid and is **not touched** by this document.
 
-**Total files affected: 8**
-Zero backend / API / dashboard logic is touched.
+What's missing is the thing that actually drives long-tail organic traffic for a niche SaaS product: **a blog**. Right now IceSaathi can only rank for searches that contain the brand name or very close variants of "ice cream business software." It cannot show up for the hundreds of *related* searches real prospects make before they've heard of IceSaathi — "GST rate on ice cream," "how to start an ice cream business in India," "ice cream business profit margin," "FSSAI license for ice cream shop," "reduce ice cream wastage," "ice cream shop names." A blog is how a small SaaS captures that top-of-funnel and mid-funnel traffic and converts a fraction of it into free-trial signups.
 
----
+This document gives a coding AI tool everything it needs to:
+1. Ship a **production-grade blog system** inside the existing Next.js App Router project — file-based, no database, no admin panel, statically generated, fast, and fully wired into the existing SEO infrastructure (sitemap, robots, JSON-LD, Navbar, Footer, homepage).
+2. Use a **researched keyword map** (6 pillar topics → 32 total articles) so every post that gets written targets a real, specific, winnable search query instead of a vague topic.
+3. Follow a **repeatable content pattern** (frontmatter schema + one fully-written example post) so the same AI tool — or any future writer — can keep producing new posts by just dropping a new `.md` file in one folder.
 
-## MARKET ANALYSIS
-
-### Target Keywords (Priority Order)
-
-| Keyword | Monthly Volume (India) | Difficulty | Intent |
-|---|---|---|---|
-| ice cream business software | High | Low | Commercial |
-| best software for ice cream shop | Medium | Low | Commercial |
-| ice cream inventory management software | Medium | Low | Commercial |
-| ice cream billing software India | Medium | Low | Transactional |
-| wholesale ice cream management software | Medium | Very Low | Commercial |
-| ice cream distributor software | Medium | Very Low | Commercial |
-| GST billing software for ice cream shop | Medium | Low | Transactional |
-| ice cream stock management software | Medium | Very Low | Commercial |
-| inventory management software India | High | High | Commercial |
-| best inventory management software for small business | High | Medium | Commercial |
-| ice cream delivery tracking software | Low | Very Low | Commercial |
-| IceSaathi | Branded | None | Navigational |
-
-### Why IceSaathi Can Rank
-
-- Niche specificity: "ice cream business software" has almost zero direct competitors with a dedicated landing page
-- Long-tail dominance: Phrases like "ice cream billing software India" have very low difficulty
-- On-page depth: The current page is already well-structured; adding more targeted content will push it significantly
-- Local intent: India-specific (INR pricing, GST focus) gives a local SEO advantage
-- Schema markup: FAQ + SoftwareApplication schema directly feeds Google's featured snippets
+Every recommendation below was checked against the **actual files in this repository** (`package.json`, `next.config.mjs`, `globals.css`, `layout.tsx`, `page.tsx`, `Navbar.tsx`, `Footer.tsx`, `robots.txt`, `sitemap.xml`) — not assumed. Exact insertion points and exact current code are quoted where edits are needed.
 
 ---
 
-## FILES TO CHANGE (Complete List)
+## 1. STRATEGY SUMMARY — WHAT "PUSH THE SITE FOR THE RIGHT SEARCHES" ACTUALLY MEANS
+
+Ranking is not a switch you flip — it's the result of three things working together, and this plan covers all three:
+
+| Lever | What it means | Where it's covered |
+|---|---|---|
+| **Relevance** | Pages that exist for the exact phrases people type, with real, useful, in-depth answers | §7 Keyword research + §8 sample post + §9 content briefs |
+| **Crawlability / indexing** | Google (and Bing, and AI answer engines) can find, fetch, and understand every page | §6.7–6.9 dynamic sitemap, RSS, robots; §11 indexing checklist |
+| **Trust / authority signals** | Structured data, internal linking, fast pages, a few real backlinks | §6.4 schema, §13 internal linking, §14 off-page plan |
+
+A blog with no plan ranks for nothing. A blog targeting **32 specific, researched queries** with proper on-page SEO, correct schema, and an indexing push has a real shot at ranking for a meaningful share of them within 2–4 months — which is the realistic timeline for a brand-new content section, even with everything done right. Nothing in this document promises faster than that; SEO has no "instant" setting.
+
+**Success metrics to track (see §15):**
+- Indexed blog pages in Google Search Console (target: 100% of published posts within 14 days of each publish)
+- Impressions + average position per target keyword (GSC Performance report, filtered to `/blog/`)
+- Organic sessions landing on `/blog/*` (GA4)
+- Blog → `/register` click-through rate (the CTA block in every post, §6.4)
+
+---
+
+## 2. ARCHITECTURE DECISION — WHY MARKDOWN FILES, NOT A DATABASE OR ADMIN PANEL
+
+This codebase already has a full MongoDB + Mongoose stack (`src/models/*.ts`, `src/lib/mongodb.ts`) and a full admin panel (`src/app/admin/*`). It would be technically possible to add a `Blog` Mongoose model and CRUD routes the same way `Product` or `Customer` work. **This plan deliberately does not do that**, for reasons that matter for *your* stated goal — "easily integrable" content an AI tool can produce:
+
+| Database-backed blog | Markdown-file blog (chosen) |
+|---|---|
+| Needs new model, new API routes, new admin UI, auth checks, image upload wiring | **Zero new backend code.** No model, no API route, no DB connection touched. |
+| Publishing a post = logging into admin, filling a form, hoping the rich-text editor doesn't mangle formatting | Publishing a post = an AI tool (or a human) drops one `.md` file into one folder and commits it |
+| Content lives only in MongoDB — no version history, no diffing, no easy backup | Content lives in **git** — every edit is reviewable, revertible, diffable, like every other file in this repo |
+| Slower (DB round-trip on every request unless cached) | **Statically generated at build time** via `generateStaticParams` — every blog page is pre-rendered HTML, served instantly from Vercel's edge, ideal for Core Web Vitals and SEO crawl speed |
+| Requires the dashboard auth system to gate the editor | No auth surface added at all — nothing for an attacker to probe |
+
+This is the same reasoning Vercel's own blog, Stripe's blog, and most fast-growing SaaS content sites use: **content is data, but it's not transactional data** — it doesn't need a database, it needs a folder and a build step. This keeps the existing product (inventory, billing, payments, delivery) completely untouched, which matches the discipline already established in `implementation_fifth.md` ("Backend untouched," "No option removed").
+
+---
+
+## 3. GROUND RULES (non-negotiable — same discipline as the existing `implementation_*.md` docs in this repo)
+
+| Rule | Detail |
+|---|---|
+| **Zero changes to existing business logic** | Nothing in `api/`, `models/`, `lib/mongodb.ts`, `lib/planConfig.ts`, auth, payments, or the dashboard is touched. This is a pure marketing-site addition. |
+| **No new database collections** | Blog content lives in `src/content/blog/*.md`, not MongoDB. |
+| **No new auth surface** | No login, no admin editor, no public submission form. Content is added by committing a file to the repo — same trust model as any other code change. |
+| **Additive only to shared files** | `Navbar.tsx`, `Footer.tsx`, `page.tsx`, `globals.css`, `robots.txt` get small, additive edits (exact diffs in §6.10–6.11). Nothing existing is removed. |
+| **`public/sitemap.xml` is replaced, not edited** | Next.js cannot serve a static file and a dynamic route at the same URL. §6.7 explains exactly why and how. |
+| **First-party content only** | The Markdown→HTML rendering pipeline in §6.1 does **not** sanitize output, because it only ever processes `.md` files the team/AI tool commits to the repo — never user-submitted input. If a public "submit a guest post" form is ever added later, that pipeline must be re-evaluated and a sanitizer added. This is called out explicitly so it isn't missed. |
+| **Indian English, INR, IST context throughout** | All blog copy, examples, and currency figures should match the existing site's `en_IN` locale and India-first framing already established in `layout.tsx`. |
+
+---
+
+## 4. FULL FILE MANIFEST — EVERYTHING THIS PLAN CREATES OR TOUCHES
 
 ```
-1. src/app/layout.tsx               ← Global metadata, brand name, canonical URL
-2. src/app/page.tsx                 ← Homepage (hero, features, how-it-works, FAQ, footer)
-3. src/app/components/Navbar.tsx    ← Public navbar (brand name + nav links)
-4. src/app/components/Footer.tsx    ← Public footer (links, contact, legal)
-5. src/app/components/PricingSection.tsx  ← Pricing section (schema, copy)
-6. public/robots.txt                ← Crawler instructions
-7. public/sitemap.xml               ← Sitemap for Google Search Console
-8. next.config.mjs                  ← Canonical redirect + security headers
+NEW FILES
+─────────────────────────────────────────────────────────────────────────
+src/lib/blog.ts                                  ← data layer: read/parse markdown, types, helpers
+src/content/blog/.gitkeep                        ← content folder (one .md file per post)
+src/content/blog/best-ice-cream-business-software-india.md   ← cornerstone sample post (full text, see companion file)
+src/app/blog/page.tsx                            ← blog index (list, category filter, pagination)
+src/app/blog/[slug]/page.tsx                     ← blog post detail page
+src/app/blog/category/[category]/page.tsx        ← category archive page
+src/app/blog/components/BlogCard.tsx             ← reusable post card
+src/app/blog/rss.xml/route.ts                    ← RSS 2.0 feed
+src/app/sitemap.ts                               ← dynamic sitemap (replaces public/sitemap.xml)
+public/blog/<slug>/cover.jpg                     ← one cover image per post (see §10 image guidance)
+
+MODIFIED FILES
+─────────────────────────────────────────────────────────────────────────
+package.json                                     ← add 5 dependencies (§5)
+src/app/globals.css                              ← add @tailwindcss/typography plugin line (§6.13)
+src/app/components/Navbar.tsx                    ← add "Blog" link, desktop + mobile (§6.10)
+src/app/components/Footer.tsx                    ← add "Blog" link under Product column (§6.10)
+src/app/page.tsx                                 ← add "From the Blog" teaser section before <footer> (§6.11)
+public/robots.txt                                ← add explicit Allow: /blog/ line (§6.9)
+
+DELETED FILES
+─────────────────────────────────────────────────────────────────────────
+public/sitemap.xml                               ← replaced by src/app/sitemap.ts (§6.7 explains why)
 ```
 
 ---
 
+## 5. DEPENDENCIES TO ADD
+
+Run this once at the start of implementation:
+
+```bash
+npm install gray-matter remark remark-gfm remark-html reading-time
+npm install -D @tailwindcss/typography
+```
+
+| Package | Why |
+|---|---|
+| `gray-matter` | Parses the YAML frontmatter block at the top of each `.md` file into a JS object |
+| `remark` + `remark-gfm` + `remark-html` | Converts Markdown body → HTML, with GitHub-flavored Markdown support (tables, strikethrough, task lists — useful for comparison tables in posts) |
+| `reading-time` | Computes "X min read" from word count, shown on cards and post pages |
+| `@tailwindcss/typography` (dev) | Gives the `prose` class used to style long-form article HTML (headings, lists, blockquotes, tables) without hand-writing CSS for every markdown element |
+
+This repo is on **Tailwind v4** (`"tailwindcss": "^4"`, `@import "tailwindcss";` in `globals.css` — confirmed in the file). Tailwind v4 uses CSS-first plugin registration, not `tailwind.config.js`. The exact one-line addition to `globals.css` is in §6.13 — do not add a `tailwind.config.js` plugins array, it will not work on v4.
+
 ---
 
-## FILE 1: `src/app/layout.tsx`
+## 6. STEP-BY-STEP IMPLEMENTATION
 
-**What to tell the AI:** "Replace the entire file with the code below. Do not change any import that isn't listed here."
+### 6.1 `src/lib/blog.ts` — data layer (new file)
+
+This is the only file that touches the filesystem. Every page in §6.2–6.6 imports from here.
+
+```ts
+// src/lib/blog.ts
+import fs from "fs";
+import path from "path";
+import matter from "gray-matter";
+import { remark } from "remark";
+import remarkGfm from "remark-gfm";
+import remarkHtml from "remark-html";
+import readingTime from "reading-time";
+
+const BLOG_DIR = path.join(process.cwd(), "src/content/blog");
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Types — this is the contract every post's frontmatter must satisfy.
+//  Keep this in sync with the frontmatter template in §6.2.
+// ─────────────────────────────────────────────────────────────────────────
+export interface IBlogFAQ {
+  question: string;
+  answer: string;
+}
+
+export interface IBlogFrontmatter {
+  title: string;
+  slug: string;
+  description: string;          // used as card excerpt + fallback meta description
+  metaTitle?: string;            // overrides <title> if different from title (keep ≤ 60 chars)
+  metaDescription?: string;      // overrides description for <meta name="description"> (keep ≤ 155 chars)
+  category: string;              // must match one of the 6 pillar categories in §7
+  tags: string[];
+  author: string;
+  publishedAt: string;           // ISO date, e.g. "2026-06-25"
+  updatedAt?: string;
+  coverImage: string;            // e.g. "/blog/best-ice-cream-business-software-india/cover.jpg"
+  coverImageAlt: string;         // descriptive, keyword-relevant alt text — never empty
+  primaryKeyword: string;        // the one phrase this post is built to rank for
+  secondaryKeywords?: string[];
+  faqs?: IBlogFAQ[];             // rendered as visible FAQ section + FAQPage schema
+  draft?: boolean;               // true = excluded from all listings, sitemap, and generateStaticParams
+}
+
+export interface IBlogPostMeta extends IBlogFrontmatter {
+  readingTime: string;
+}
+
+export interface IBlogPost extends IBlogFrontmatter {
+  contentHtml: string;
+  readingTime: string;
+  wordCount: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Internal helpers
+// ─────────────────────────────────────────────────────────────────────────
+function getSlugs(): string[] {
+  if (!fs.existsSync(BLOG_DIR)) return [];
+  return fs
+    .readdirSync(BLOG_DIR)
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => f.replace(/\.md$/, ""));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Public API
+// ─────────────────────────────────────────────────────────────────────────
+
+/** All published posts, newest first. Drafts excluded. Use for index/category/related lists. */
+export function getAllPostsMeta(): IBlogPostMeta[] {
+  const posts = getSlugs().map((slug) => {
+    const fullPath = path.join(BLOG_DIR, `${slug}.md`);
+    const raw = fs.readFileSync(fullPath, "utf8");
+    const { data, content } = matter(raw);
+    const stats = readingTime(content);
+    return { ...(data as IBlogFrontmatter), slug, readingTime: stats.text };
+  });
+
+  return posts
+    .filter((p) => !p.draft)
+    .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+}
+
+/** Full post including rendered HTML body. Use on the post detail page only — this does the markdown→HTML conversion. */
+export async function getPostBySlug(slug: string): Promise<IBlogPost | null> {
+  const fullPath = path.join(BLOG_DIR, `${slug}.md`);
+  if (!fs.existsSync(fullPath)) return null;
+
+  const raw = fs.readFileSync(fullPath, "utf8");
+  const { data, content } = matter(raw);
+
+  const processed = await remark().use(remarkGfm).use(remarkHtml, { sanitize: false }).process(content);
+  const contentHtml = processed.toString();
+  const stats = readingTime(content);
+
+  return {
+    ...(data as IBlogFrontmatter),
+    slug,
+    contentHtml,
+    readingTime: stats.text,
+    wordCount: stats.words,
+  };
+}
+
+/** All slugs (including the current one isn't filtered here — callers filter). Used by generateStaticParams. */
+export function getAllSlugs(): string[] {
+  return getAllPostsMeta().map((p) => p.slug);
+}
+
+export function getPostsByCategory(category: string): IBlogPostMeta[] {
+  return getAllPostsMeta().filter(
+    (p) => p.category.toLowerCase() === decodeURIComponent(category).toLowerCase()
+  );
+}
+
+export function getAllCategories(): string[] {
+  return Array.from(new Set(getAllPostsMeta().map((p) => p.category)));
+}
+
+/** Same-category posts first, then anything else, capped at `limit`. Powers the "Related Articles" block. */
+export function getRelatedPosts(
+  current: { slug: string; category: string },
+  limit = 3
+): IBlogPostMeta[] {
+  const all = getAllPostsMeta().filter((p) => p.slug !== current.slug);
+  const sameCategory = all.filter((p) => p.category === current.category);
+  const rest = all.filter((p) => p.category !== current.category);
+  return [...sameCategory, ...rest].slice(0, limit);
+}
+```
+
+---
+
+### 6.2 Content folder + frontmatter template
+
+Create the folder and a placeholder so git tracks it before any posts exist:
+
+```bash
+mkdir -p src/content/blog
+touch src/content/blog/.gitkeep
+```
+
+**Every post is one `.md` file** saved as `src/content/blog/<slug>.md`. The filename (minus `.md`) becomes the URL: `src/content/blog/foo-bar.md` → `icesaathi.co.in/blog/foo-bar`.
+
+Template every new post must start from:
+
+```markdown
+---
+title: ""
+slug: ""
+description: ""
+metaTitle: ""
+metaDescription: ""
+category: ""
+tags: []
+author: "IceSaathi Team"
+publishedAt: "YYYY-MM-DD"
+updatedAt: "YYYY-MM-DD"
+coverImage: "/blog/<slug>/cover.jpg"
+coverImageAlt: ""
+primaryKeyword: ""
+secondaryKeywords: []
+faqs:
+  - question: ""
+    answer: ""
+draft: false
+---
+
+Post body in plain Markdown starts here. Use `##` for H2 section headings (never `#`/H1 — the page template renders the H1 from `title` automatically). Use `###` for H3 sub-points.
+```
+
+A fully written example of this template is provided as a **separate, ready-to-use file**: `best-ice-cream-business-software-india.md` (see the companion file delivered alongside this plan, and §8 below for how it was built). Save it at `src/content/blog/best-ice-cream-business-software-india.md` — that one file, plus the code in this document, is enough to see the whole system render end-to-end before writing the other 31 posts.
+
+---
+
+### 6.3 `src/app/blog/components/BlogCard.tsx` (new file)
 
 ```tsx
-// src/app/layout.tsx
-import "./globals.css";
-import { Toaster } from "react-hot-toast";
-import type { Metadata } from "next";
+// src/app/blog/components/BlogCard.tsx
+import Link from "next/link";
+import Image from "next/image";
+import type { IBlogPostMeta } from "@/lib/blog";
 
-const BASE_URL = "https://www.icesaathi.co.in";
-const BRAND_NAME = "IceSaathi";
-const OG_IMAGE = `${BASE_URL}/og-image.png`;
-
-export const metadata: Metadata = {
-  metadataBase: new URL(BASE_URL),
-
-  title: {
-    default:
-      "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
-    template: `%s | IceSaathi`,
-  },
-
-  description:
-    "IceSaathi is the best software for ice cream business owners in India. Manage inventory, GST billing, customer ledger, orders, stock alerts, delivery partners and sales analytics — all from one easy dashboard. Free 30-day trial, no credit card needed.",
-
-  keywords: [
-    "IceSaathi",
-    "ice cream business software",
-    "best software for ice cream shop",
-    "ice cream inventory management software",
-    "ice cream billing software India",
-    "ice cream wholesale management software",
-    "ice cream distributor software India",
-    "GST billing software for ice cream shop",
-    "ice cream stock management software",
-    "ice cream delivery tracking software",
-    "inventory management software India",
-    "best inventory management software small business",
-    "ice cream order management software",
-    "ice cream ERP India",
-    "wholesale ice cream software India",
-    "frozen food inventory software",
-    "SoftVibe ice cream software",
-    "ice cream business management app",
-  ],
-
-  authors: [{ name: "SoftVibe Services", url: "https://softvibe-service.vercel.app/" }],
-  creator: "SoftVibe Services",
-  publisher: "SoftVibe Services",
-  category: "Business Software",
-
-  alternates: {
-    canonical: BASE_URL,
-  },
-
-  robots: {
-    index: true,
-    follow: true,
-    nocache: false,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
-
-  openGraph: {
-    type: "website",
-    url: BASE_URL,
-    siteName: BRAND_NAME,
-    title:
-      "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
-    description:
-      "Manage stock, GST billing, customer ledger, orders, delivery tracking and sales reports for your ice cream business. Trusted by ice cream wholesalers across India. Free 30-day trial.",
-    locale: "en_IN",
-    images: [
-      {
-        url: OG_IMAGE,
-        width: 1200,
-        height: 630,
-        alt: "IceSaathi — Ice Cream Business Management Software Dashboard",
-      },
-    ],
-  },
-
-  twitter: {
-    card: "summary_large_image",
-    title:
-      "IceSaathi — Best Software for Ice Cream Business in India",
-    description:
-      "Inventory, GST billing, stock alerts, customer ledger, delivery tracking and sales analytics for ice cream businesses. Free 30-day trial.",
-    images: [OG_IMAGE],
-  },
-
-  applicationName: BRAND_NAME,
-  referrer: "origin-when-cross-origin",
-
-  formatDetection: {
-    email: false,
-    address: false,
-    telephone: false,
-  },
-
-  icons: {
-    icon: "/favicon.ico",
-    apple: "/apple-touch-icon.png",
-  },
-
-  verification: {
-    // Add your Google Search Console verification token here after setup
-    // google: "YOUR_VERIFICATION_TOKEN",
-  },
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "SoftwareApplication",
-        "@id": `${BASE_URL}/#software`,
-        name: "IceSaathi",
-        alternateName: [
-          "Ice Saathi",
-          "IceSaathi App",
-          "IceSaathi Software",
-          "Ice Cream Business Software",
-          "Ice Cream Inventory Software",
-        ],
-        url: BASE_URL,
-        applicationCategory: "BusinessApplication",
-        applicationSubCategory: "Inventory Management Software",
-        operatingSystem: "Web Browser",
-        inLanguage: "en-IN",
-        availableOnDevice: "Desktop, Mobile, Tablet",
-        description:
-          "IceSaathi is the best inventory management and billing software for ice cream business owners in India. It handles inventory, GST billing, customer ledger, order management, stock tracking, delivery partner management and sales analytics from one dashboard.",
-        offers: [
-          {
-            "@type": "Offer",
-            name: "Free Trial",
-            price: "0",
-            priceCurrency: "INR",
-            description: "30-day free trial with all features. No credit card required.",
-          },
-          {
-            "@type": "Offer",
-            name: "Starter Plan",
-            price: "499",
-            priceCurrency: "INR",
-            description: "For small ice cream businesses starting out.",
-          },
-          {
-            "@type": "Offer",
-            name: "Growth Plan",
-            price: "1499",
-            priceCurrency: "INR",
-            description: "For growing ice cream wholesale businesses.",
-          },
-          {
-            "@type": "Offer",
-            name: "Business Plan",
-            price: "2499",
-            priceCurrency: "INR",
-            description: "For established ice cream distributors and wholesalers.",
-          },
-        ],
-        featureList: [
-          "Ice cream inventory management",
-          "GST invoice generation for ice cream business",
-          "Customer ledger and payment tracking",
-          "Order and billing management",
-          "Stock tracking with low stock alerts",
-          "Bulk product and restock import via CSV",
-          "Delivery partner management and approval workflow",
-          "Live GPS delivery tracking on interactive map",
-          "Manager role access control",
-          "Sales analytics with date range filtering",
-          "PDF export for invoices and reports",
-          "Customer GPS location mapping",
-          "Sticky notes for pre-order dispatch planning",
-          "Razorpay payment integration",
-          "Auto stock deduction on order creation",
-        ],
-        screenshot: `${BASE_URL}/og-image.png`,
-        softwareVersion: "2.0",
-        datePublished: "2024-01-01",
-        countriesSupported: "IN",
-        softwareRequirements: "Web Browser",
-        aggregateRating: {
-          "@type": "AggregateRating",
-          ratingValue: "4.8",
-          reviewCount: "50",
-          bestRating: "5",
-          worstRating: "1",
-        },
-      },
-      {
-        "@type": "Organization",
-        "@id": `${BASE_URL}/#organization`,
-        name: "SoftVibe Services",
-        url: "https://softvibe-service.vercel.app/",
-        logo: {
-          "@type": "ImageObject",
-          url: `${BASE_URL}/logo.png`,
-        },
-        contactPoint: {
-          "@type": "ContactPoint",
-          email: "softvibeservices@gmail.com",
-          contactType: "customer support",
-          availableLanguage: ["English", "Hindi", "Gujarati"],
-          areaServed: "IN",
-        },
-        sameAs: [
-          "https://softvibe-service.vercel.app/",
-        ],
-      },
-      {
-        "@type": "WebSite",
-        "@id": `${BASE_URL}/#website`,
-        url: BASE_URL,
-        name: "IceSaathi",
-        description:
-          "Best inventory management and billing software for ice cream businesses in India.",
-        publisher: { "@id": `${BASE_URL}/#organization` },
-        inLanguage: "en-IN",
-        potentialAction: {
-          "@type": "SearchAction",
-          target: {
-            "@type": "EntryPoint",
-            urlTemplate: `${BASE_URL}/dashboard/products?search={search_term_string}`,
-          },
-          "query-input": "required name=search_term_string",
-        },
-      },
-      {
-        "@type": "WebPage",
-        "@id": `${BASE_URL}/#webpage`,
-        url: BASE_URL,
-        name: "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
-        isPartOf: { "@id": `${BASE_URL}/#website` },
-        about: { "@id": `${BASE_URL}/#software` },
-        description:
-          "IceSaathi is the best software for ice cream wholesalers, distributors and shop owners in India. Manage inventory, billing, GST invoices, customer ledger, orders, delivery partners and sales analytics from one dashboard.",
-        inLanguage: "en-IN",
-        breadcrumb: {
-          "@type": "BreadcrumbList",
-          itemListElement: [
-            {
-              "@type": "ListItem",
-              position: 1,
-              name: "Home",
-              item: BASE_URL,
-            },
-          ],
-        },
-      },
-      {
-        "@type": "FAQPage",
-        "@id": `${BASE_URL}/#faq`,
-        mainEntity: [
-          {
-            "@type": "Question",
-            name: "What is IceSaathi?",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "IceSaathi is the best inventory management and billing software for ice cream businesses in India. It helps ice cream wholesalers, distributors and shop owners manage products, stock, GST invoices, customers, orders, delivery partners and sales analytics from one dashboard.",
-            },
-          },
-          {
-            "@type": "Question",
-            name: "Is IceSaathi the best software for ice cream business?",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "Yes. IceSaathi is purpose-built for ice cream businesses. Unlike general inventory software, IceSaathi covers every operation an ice cream wholesaler or distributor needs — from stock tracking and GST billing to live GPS delivery tracking and customer ledger management.",
-            },
-          },
-          {
-            "@type": "Question",
-            name: "Does IceSaathi support GST billing?",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "Yes. IceSaathi generates GST-compliant PDF invoices with your business logo, QR code, digital signature, GSTIN and full itemised product details. Every invoice gets a unique serial number automatically.",
-            },
-          },
-          {
-            "@type": "Question",
-            name: "Can I track delivery partners in real time?",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "Yes. IceSaathi has a live GPS delivery tracking feature. Delivery partners share their location from their phone and you see their real-time position on an interactive map directly from your dashboard.",
-            },
-          },
-          {
-            "@type": "Question",
-            name: "Can I import products and stock in bulk?",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "Yes. You can upload products and restock quantities in bulk using a CSV or Excel file. IceSaathi provides a sample file format guide inside the dashboard.",
-            },
-          },
-          {
-            "@type": "Question",
-            name: "Is IceSaathi free to use?",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "IceSaathi offers a free 30-day trial with all features included. No credit card is required to start. After the trial, paid plans start at ₹499/month.",
-            },
-          },
-          {
-            "@type": "Question",
-            name: "Does IceSaathi work for ice cream wholesale businesses?",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "Yes. IceSaathi is specifically designed for ice cream wholesalers and distributors. It handles wholesale billing, customer credit and debit tracking, bulk order management, delivery partner assignment and wholesale stock management.",
-            },
-          },
-          {
-            "@type": "Question",
-            name: "What reports can I generate in IceSaathi?",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "IceSaathi lets you generate sales reports by date range, product-wise sales reports, customer ledger reports, restock history reports and stock history — all exportable as PDF.",
-            },
-          },
-        ],
-      },
-    ],
-  };
-
+export default function BlogCard({ post }: { post: IBlogPostMeta }) {
   return (
-    <html lang="en" className="h-full scroll-smooth" suppressHydrationWarning>
-      <head>
-        <meta name="theme-color" content="#2563eb" />
-        <meta name="apple-mobile-web-app-title" content="IceSaathi" />
-        <meta name="application-name" content="IceSaathi" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="geo.region" content="IN" />
-        <meta name="geo.placename" content="India" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
-      </head>
-
-      <body className="h-full min-h-screen bg-white text-gray-900 antialiased">
-        {/* Hidden semantic content for crawlers / AEO */}
-        <div className="sr-only" aria-hidden="true">
-          <h1>IceSaathi — Best Software for Ice Cream Business</h1>
-          <p>
-            IceSaathi is the best inventory management and billing software for ice cream
-            wholesalers, distributors and shop owners in India. Manage products, GST invoices,
-            stock tracking, customer ledger, orders, delivery partners and sales analytics
-            from one easy dashboard.
-          </p>
-          <p>
-            IceSaathi is specifically designed for ice cream businesses in India. It supports
-            GST billing, inventory workflows, wholesale billing, delivery management, live GPS
-            tracking, customer credit and debit tracking, and sales reporting.
-          </p>
-          <p>
-            Whether you are an ice cream wholesaler, ice cream distributor, or ice cream shop
-            owner, IceSaathi is the complete software solution for your business operations.
-          </p>
+    <article className="group rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-gray-300 transition-all">
+      <Link href={`/blog/${post.slug}`}>
+        <div className="relative w-full h-48 bg-gray-100">
+          <Image
+            src={post.coverImage}
+            alt={post.coverImageAlt}
+            fill
+            sizes="(max-width: 768px) 100vw, 33vw"
+            className="object-cover group-hover:scale-105 transition-transform duration-300"
+          />
         </div>
-
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 2000,
-            style: {
-              background: "#ffffff",
-              color: "#1f2937",
-              border: "1px solid #e5e7eb",
-              borderRadius: "8px",
-              fontSize: "14px",
-            },
-          }}
-        />
-
-        <div id="app-root" className="min-h-screen flex flex-col">
-          {children}
+        <div className="p-5">
+          <span className="inline-block text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">
+            {post.category}
+          </span>
+          <h2 className="text-lg font-bold text-gray-900 mb-2 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">
+            {post.title}
+          </h2>
+          <p className="text-sm text-gray-600 line-clamp-2 mb-3">{post.description}</p>
+          <div className="flex items-center gap-3 text-xs text-gray-400">
+            <span>
+              {new Date(post.publishedAt).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </span>
+            <span>·</span>
+            <span>{post.readingTime}</span>
+          </div>
         </div>
-      </body>
-    </html>
+      </Link>
+    </article>
   );
 }
 ```
 
 ---
 
-## FILE 2: `src/app/page.tsx`
+### 6.4 `src/app/blog/[slug]/page.tsx` (new file) — the most important page in this plan
 
-**What to tell the AI:** "Replace the entire file with the code below."
+This page is statically generated for every post (`generateStaticParams`), carries unique per-post metadata (`generateMetadata`), and injects **three** JSON-LD schema types: `BlogPosting`, `BreadcrumbList`, and — when the post has FAQs — `FAQPage`. The `FAQPage` schema is what makes posts eligible for Google's FAQ rich results and is one of the strongest signals for being cited by AI answer engines (ChatGPT, Perplexity, Google AI Overviews) — see §12.
 
 ```tsx
-// src/app/page.tsx
-// Server Component — fully crawlable, no client JS needed
-// SEO + AEO hardened for IceSaathi
-
+// src/app/blog/[slug]/page.tsx
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import Link from "next/link";
-import PricingSection from "./components/PricingSection";
+import Image from "next/image";
+import Navbar from "../../components/Navbar";
+import Footer from "../../components/Footer";
+import BlogCard from "../components/BlogCard";
+import { getAllSlugs, getPostBySlug, getRelatedPosts } from "@/lib/blog";
 
-// ─── Page-level Metadata ───────────────────────────────────────────────────────
+const BASE_URL = "https://www.icesaathi.co.in";
 
-export const metadata: Metadata = {
-  title:
-    "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
-  description:
-    "IceSaathi is the best software for ice cream wholesalers and distributors in India. Manage inventory, GST billing, stock alerts, customer ledger, delivery tracking and sales reports from one dashboard. Free 30-day trial — no credit card needed.",
-  keywords: [
-    "best software for ice cream business",
-    "ice cream inventory management software",
-    "ice cream billing software India",
-    "IceSaathi",
-    "ice cream wholesale software India",
-    "best inventory management software India",
-    "GST billing software for ice cream",
-    "ice cream distributor software",
-    "ice cream stock management",
-    "ice cream delivery tracking software",
-  ],
-  alternates: {
-    canonical: "https://www.icesaathi.co.in/",
-  },
-  openGraph: {
-    type: "website",
-    url: "https://www.icesaathi.co.in/",
-    siteName: "IceSaathi",
-    title:
-      "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
-    description:
-      "The complete management platform for ice cream wholesalers. Inventory, GST billing, delivery tracking, customer ledger and sales analytics — all in one place. Free 30-day trial.",
-    locale: "en_IN",
-    images: [
+export async function generateStaticParams() {
+  return getAllSlugs().map((slug) => ({ slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { slug: string };
+}): Promise<Metadata> {
+  const post = await getPostBySlug(params.slug);
+  if (!post) return {};
+
+  const url = `${BASE_URL}/blog/${post.slug}`;
+  const title = post.metaTitle || post.title;
+  const description = post.metaDescription || post.description;
+
+  return {
+    title,
+    description,
+    keywords: [post.primaryKeyword, ...(post.secondaryKeywords ?? [])],
+    alternates: { canonical: url },
+    openGraph: {
+      type: "article",
+      url,
+      title,
+      description,
+      siteName: "IceSaathi",
+      locale: "en_IN",
+      images: [{ url: `${BASE_URL}${post.coverImage}`, width: 1200, height: 630, alt: post.coverImageAlt }],
+      publishedTime: post.publishedAt,
+      modifiedTime: post.updatedAt || post.publishedAt,
+      authors: [post.author],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [`${BASE_URL}${post.coverImage}`],
+    },
+  };
+}
+
+export default async function BlogPostPage({ params }: { params: { slug: string } }) {
+  const post = await getPostBySlug(params.slug);
+  if (!post) notFound();
+
+  const url = `${BASE_URL}/blog/${post.slug}`;
+  const related = getRelatedPosts(post, 3);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
       {
-        url: "https://www.icesaathi.co.in/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "IceSaathi Dashboard — Ice Cream Business Management Software",
+        "@type": "BlogPosting",
+        "@id": `${url}#article`,
+        headline: post.title,
+        description: post.description,
+        image: `${BASE_URL}${post.coverImage}`,
+        datePublished: post.publishedAt,
+        dateModified: post.updatedAt || post.publishedAt,
+        inLanguage: "en-IN",
+        author: { "@type": "Organization", name: "IceSaathi", url: BASE_URL },
+        publisher: {
+          "@type": "Organization",
+          name: "IceSaathi",
+          logo: { "@type": "ImageObject", url: `${BASE_URL}/logo.png` },
+        },
+        mainEntityOfPage: { "@type": "WebPage", "@id": url },
       },
+      {
+        "@type": "BreadcrumbList",
+        "@id": `${url}#breadcrumb`,
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: BASE_URL },
+          { "@type": "ListItem", position: 2, name: "Blog", item: `${BASE_URL}/blog` },
+          { "@type": "ListItem", position: 3, name: post.title, item: url },
+        ],
+      },
+      ...(post.faqs && post.faqs.length > 0
+        ? [
+            {
+              "@type": "FAQPage",
+              "@id": `${url}#faq`,
+              mainEntity: post.faqs.map((f) => ({
+                "@type": "Question",
+                name: f.question,
+                acceptedAnswer: { "@type": "Answer", text: f.answer },
+              })),
+            },
+          ]
+        : []),
     ],
-  },
-};
+  };
 
-// ─── Structured Data ──────────────────────────────────────────────────────────
-
-const jsonLd = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "SoftwareApplication",
-      "@id": "https://www.icesaathi.co.in/#software",
-      name: "IceSaathi",
-      applicationCategory: "BusinessApplication",
-      operatingSystem: "Web",
-      description:
-        "IceSaathi is the best inventory management and billing software for ice cream businesses in India. Manage products, customers, GST invoices, stock, delivery partners and sales from one dashboard.",
-      offers: [
-        {
-          "@type": "Offer",
-          name: "Free Trial",
-          price: "0",
-          priceCurrency: "INR",
-          description: "30-day free trial with all features.",
-        },
-        {
-          "@type": "Offer",
-          name: "Starter Plan",
-          price: "499",
-          priceCurrency: "INR",
-        },
-        {
-          "@type": "Offer",
-          name: "Growth Plan",
-          price: "1499",
-          priceCurrency: "INR",
-        },
-        {
-          "@type": "Offer",
-          name: "Business Plan",
-          price: "2499",
-          priceCurrency: "INR",
-        },
-      ],
-      featureList: [
-        "Ice cream product inventory management",
-        "GST-compliant invoice generation",
-        "Customer ledger and payment tracking",
-        "Order management with discount and debt tracking",
-        "Live stock tracking with low stock alerts",
-        "Bulk product import via CSV or Excel",
-        "Delivery partner management with GPS tracking",
-        "Live GPS delivery map",
-        "Manager accounts with role-based access",
-        "Sales analytics dashboard",
-        "PDF export for invoices and reports",
-        "Sticky notes for dispatch planning",
-      ],
-    },
-    {
-      "@type": "FAQPage",
-      mainEntity: [
-        {
-          "@type": "Question",
-          name: "What is IceSaathi?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "IceSaathi is the best inventory management and billing software for ice cream wholesalers, distributors and shop owners in India. It manages products, stock, GST invoices, customer ledger, orders, delivery partners and sales analytics from one dashboard.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Is IceSaathi free to use?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "IceSaathi offers a free 30-day trial with all features. No credit card required. Paid plans start at ₹499/month after the trial ends.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Does IceSaathi support GST billing for ice cream business?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Yes. IceSaathi generates GST-compliant PDF invoices with your business logo, QR code, digital signature, GSTIN and full item details. Every invoice gets a unique serial number.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Can I track my delivery staff with IceSaathi?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Yes. IceSaathi has live GPS delivery tracking. Your delivery partners share their real-time location from their phone and you see them on an interactive map in your dashboard.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Can I bulk import products and stock into IceSaathi?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Yes. You can upload products and restock quantities in bulk using a CSV or Excel file. IceSaathi provides a sample file format guide inside the dashboard.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Does IceSaathi work for ice cream wholesale businesses?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Yes. IceSaathi is purpose-built for ice cream wholesalers and distributors. It handles wholesale billing, customer credit/debit tracking, bulk orders, delivery assignment and wholesale stock management.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "What is the price of IceSaathi?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "IceSaathi offers a free 30-day trial. After the trial, plans start at ₹499/month for the Starter plan, ₹1,499/month for the Growth plan and ₹2,499/month for the Business plan. Annual billing gives additional savings.",
-          },
-        },
-        {
-          "@type": "Question",
-          name: "Can I manage manager accounts in IceSaathi?",
-          acceptedAnswer: {
-            "@type": "Answer",
-            text: "Yes. IceSaathi lets you create manager accounts for your staff. Each manager gets their own secure login and access to the dashboard with permissions you control.",
-          },
-        },
-      ],
-    },
-  ],
-};
-
-// ─── Page data ────────────────────────────────────────────────────────────────
-
-const FEATURES: { id: string; title: string; desc: string; icon: string }[] = [
-  {
-    id: "product-management",
-    icon: "📦",
-    title: "Product Inventory Management",
-    desc: "Add, edit and delete your ice cream products with categories, units, MRP, selling price, pack size and minimum stock level. Import hundreds of products at once from a CSV or Excel file — no manual entry needed.",
-  },
-  {
-    id: "customer-management",
-    icon: "👥",
-    title: "Customer Management",
-    desc: "Store complete customer records — shop name, multiple phone numbers, area, address and GPS location on a map. IceSaathi automatically tracks every customer's credit balance, debit balance and total sales so you never lose track of who owes what.",
-  },
-  {
-    id: "order-management",
-    icon: "🛒",
-    title: "Order Management",
-    desc: "Create orders with paid items and free items, apply discounts and track every order from creation to settlement. Settle orders via Cash or Bank/UPI, mark as Debt, or discard. Stock is deducted automatically the moment you save an order.",
-  },
-  {
-    id: "gst-billing",
-    icon: "🧾",
-    title: "GST Billing & PDF Invoices",
-    desc: "Generate GST-compliant invoices instantly with your business logo, QR code, digital signature and GSTIN. Every bill gets a unique serial number and can be downloaded as a print-ready PDF and shared with customers in seconds.",
-  },
-  {
-    id: "stock-management",
-    icon: "📊",
-    title: "Live Stock Management",
-    desc: "See real-time stock levels for every ice cream product. Get automatic low-stock alerts when a product drops below your set threshold. Reset all stock at once for a new period with one click.",
-  },
-  {
-    id: "restock-history",
-    icon: "🔄",
-    title: "Restock History & Bulk Upload",
-    desc: "Log every restock with product, quantity added and a reason note. Upload bulk restock quantities from a CSV or Excel file in seconds. View the full restock history and export it as a professional PDF report.",
-  },
-  {
-    id: "sales-analytics",
-    icon: "📈",
-    title: "Sales Analytics & Reports",
-    desc: "Filter sales by any date range. View total sales, number of orders, average order value, cash collected, bank/UPI received and outstanding dues. See daily sales trends and your top customers by outstanding balance.",
-  },
-  {
-    id: "customer-ledger",
-    icon: "📒",
-    title: "Customer Ledger",
-    desc: "View a complete transaction history for every customer — every sale, payment and adjustment listed chronologically with running credit, debit and net balance totals. Always know exactly what each customer owes.",
-  },
-  {
-    id: "delivery-partner-management",
-    icon: "🚴",
-    title: "Delivery Partner Management",
-    desc: "Register delivery staff and control exactly who gets access. Review and approve or reject delivery partner requests. Assign orders to specific partners and track delivery status from Pending → On the Way → Delivered.",
-  },
-  {
-    id: "live-gps-tracking",
-    icon: "🗺️",
-    title: "Live GPS Delivery Tracking",
-    desc: "Your delivery partners share their live GPS location from their phone. You see their real-time position on an interactive map so you always know exactly where every delivery is — without calling anyone.",
-  },
-  {
-    id: "manager-roles",
-    icon: "👔",
-    title: "Manager Accounts & Role Access",
-    desc: "Create secure login accounts for your staff with manager-level access. Managers can use the same dashboard with permissions set by you. Each manager has their own credentials and activity log.",
-  },
-  {
-    id: "sticky-notes",
-    icon: "📝",
-    title: "Sticky Notes for Dispatch Planning",
-    desc: "Create quick order notes for a customer and assign them to a delivery partner for dispatch planning. Useful for planning tomorrow's deliveries before a formal order is created.",
-  },
-];
-
-const HOW_IT_WORKS = [
-  {
-    n: "01",
-    title: "Create Your Account",
-    desc: "Register with your name, email and shop name. Verify your email with a one-time password. Then complete your seller profile — add your GST number, business logo, QR code for payments, digital signature and bank details.",
-  },
-  {
-    n: "02",
-    title: "Add Your Products",
-    desc: "Add your ice cream products one by one or import them all at once from an Excel or CSV file. Set the selling price, MRP, category, unit and minimum stock level for each product.",
-  },
-  {
-    n: "03",
-    title: "Add Your Customers",
-    desc: "Create records for each of your wholesale customers. Add their shop name, phone numbers, area and address. IceSaathi tracks their dues and payment history automatically from the first order.",
-  },
-  {
-    n: "04",
-    title: "Create Orders",
-    desc: "Select a customer, add the products they ordered with quantities, include free items if any and apply any discount. Stock is deducted automatically the moment you save the order — no manual update needed.",
-  },
-  {
-    n: "05",
-    title: "Bill and Collect Payment",
-    desc: "Generate a GST invoice as a PDF and share it with your customer. Collect payment via Cash or Bank/UPI and mark the order settled. The customer ledger updates instantly with every transaction.",
-  },
-  {
-    n: "06",
-    title: "Track Your Deliveries",
-    desc: "Assign orders to your delivery staff. They update the delivery status from their phone and share their live GPS location. You see exactly where every delivery is on the interactive map in real time.",
-  },
-];
-
-const BENEFITS = [
-  {
-    title: "Save 3+ Hours Every Day",
-    desc: "Automated stock deduction, auto-generated invoices and real-time customer ledger eliminate manual work. What used to take hours now takes minutes.",
-  },
-  {
-    title: "Never Miss a Payment",
-    desc: "Every customer's credit and debit balance is tracked automatically. Know exactly who owes you money, how much and since when — no more manual register calculations.",
-  },
-  {
-    title: "GST Compliance Made Easy",
-    desc: "Generate GST-compliant PDF invoices in one click with your logo, GSTIN, QR code and digital signature. Share with customers instantly. No accountant needed for invoice generation.",
-  },
-  {
-    title: "Know Where Your Deliveries Are",
-    desc: "Live GPS tracking shows your delivery partners' real-time location on a map. No more calling drivers to ask where they are or when they will reach.",
-  },
-  {
-    title: "Built for Ice Cream Business",
-    desc: "Unlike generic inventory software, IceSaathi is built specifically for ice cream wholesalers, distributors and shop owners. Every feature matches how your business actually works.",
-  },
-  {
-    title: "Access from Anywhere",
-    desc: "IceSaathi is a web-based software. Access your dashboard from any device — computer, phone or tablet — from anywhere, anytime. No installation required.",
-  },
-];
-
-const FAQS: { q: string; a: string }[] = [
-  {
-    q: "What is IceSaathi?",
-    a: "IceSaathi is the best inventory management and billing software for ice cream businesses in India. It is a complete management platform for ice cream wholesalers, distributors and shop owners. It handles your products, customers, orders, GST invoices, stock, delivery partners and sales reports — all from one dashboard.",
-  },
-  {
-    q: "Is IceSaathi really the best software for ice cream business?",
-    a: "IceSaathi is purpose-built for ice cream businesses, which makes it far more suitable than generic inventory software. It covers every operation an ice cream wholesaler or distributor needs — from stock management and GST billing to live GPS delivery tracking and customer ledger — all in one place.",
-  },
-  {
-    q: "Does IceSaathi support GST billing for ice cream businesses?",
-    a: "Yes. IceSaathi generates GST-compliant PDF invoices with your business logo, QR code, digital signature, GSTIN and full itemised product details. Every invoice gets a unique serial number automatically. You can download and share the invoice PDF instantly.",
-  },
-  {
-    q: "Can I track my delivery staff in real time?",
-    a: "Yes. IceSaathi has built-in live GPS delivery tracking. Your delivery partners share their location from their phone and you can see their real-time position on an interactive map directly from your dashboard — no third-party app needed.",
-  },
-  {
-    q: "Can I import products and stock in bulk?",
-    a: "Yes. You can upload products and restock quantities in bulk using a CSV or Excel file. IceSaathi provides a downloadable sample file format inside the dashboard so you know exactly how to prepare your data.",
-  },
-  {
-    q: "Can I add staff or manager accounts?",
-    a: "Yes. IceSaathi lets you create manager accounts for your staff. Each manager gets their own secure login and can access the dashboard with the permissions you set. You stay in full control of who can do what.",
-  },
-  {
-    q: "How do delivery partners log in to IceSaathi?",
-    a: "Delivery partners have a separate mobile-friendly login page. They receive a one-time password on their email to sign in securely. You must approve each delivery partner before they can access any orders — so only authorised staff can see customer information.",
-  },
-  {
-    q: "What can I export as a PDF from IceSaathi?",
-    a: "You can export GST invoices, customer reports, restock history reports and stock history summaries as formatted PDFs directly from the dashboard — no extra software needed.",
-  },
-  {
-    q: "How does stock update when I create an order in IceSaathi?",
-    a: "Stock is deducted automatically every time you create an order. You always see the current quantity for every product without any manual update. If a product goes below your set minimum level, IceSaathi shows you a low-stock alert.",
-  },
-  {
-    q: "Is IceSaathi free to use?",
-    a: "IceSaathi offers a free 30-day trial with all features included — no credit card required. After the trial, plans start at ₹499/month. You can cancel at any time.",
-  },
-  {
-    q: "How do I contact IceSaathi support?",
-    a: "You can reach the IceSaathi support team at softvibeservices@gmail.com. The software is developed and maintained by SoftVibe Services.",
-  },
-];
-
-const TESTIMONIALS = [
-  {
-    name: "Rajesh Patel",
-    role: "Ice Cream Wholesaler, Ahmedabad",
-    text: "Before IceSaathi, I was maintaining everything in a register. Now I generate GST invoices in one click and I always know which customer owes me money. It has saved me hours every single day.",
-    rating: 5,
-  },
-  {
-    name: "Sunita Sharma",
-    role: "Ice Cream Distributor, Surat",
-    text: "The live GPS tracking is a game changer. I can see exactly where my delivery boys are without calling them every 10 minutes. My customers are happier because deliveries are now on time.",
-    rating: 5,
-  },
-  {
-    name: "Arun Mehta",
-    role: "Ice Cream Shop Owner, Vadodara",
-    text: "The stock alert feature alone is worth it. I used to run out of stock without warning. Now I get an alert before it happens. My customers never face an out-of-stock situation anymore.",
-    rating: 5,
-  },
-];
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-export default function HomePage() {
   return (
     <>
-      {/* JSON-LD structured data */}
+      <Navbar />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      <main className="bg-white">
+        <article className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-20">
+          <nav className="text-sm text-gray-500 mb-6" aria-label="Breadcrumb">
+            <Link href="/" className="hover:text-gray-700">Home</Link>{" "}
+            <span className="mx-1">/</span>{" "}
+            <Link href="/blog" className="hover:text-gray-700">Blog</Link>{" "}
+            <span className="mx-1">/</span>{" "}
+            <span className="text-gray-700">{post.title}</span>
+          </nav>
 
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-gray-900 focus:text-white focus:text-sm focus:rounded-lg"
-      >
-        Skip to main content
-      </a>
+          <span className="inline-block text-xs font-semibold text-blue-600 uppercase tracking-wide mb-3">
+            {post.category}
+          </span>
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4 leading-tight">
+            {post.title}
+          </h1>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500 mb-8">
+            <span>By {post.author}</span>
+            <span>·</span>
+            <span>
+              {new Date(post.publishedAt).toLocaleDateString("en-IN", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </span>
+            <span>·</span>
+            <span>{post.readingTime}</span>
+          </div>
 
-      <div className="min-h-screen bg-white">
+          <div className="relative w-full h-72 sm:h-96 rounded-2xl overflow-hidden mb-10 bg-gray-100">
+            <Image
+              src={post.coverImage}
+              alt={post.coverImageAlt}
+              fill
+              priority
+              sizes="(max-width: 768px) 100vw, 768px"
+              className="object-cover"
+            />
+          </div>
 
-        {/* ── HEADER ── */}
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <Link href="/" aria-label="IceSaathi home" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0" aria-hidden="true">
-                <span className="text-white text-sm font-bold">IS</span>
+          <div
+            className="prose prose-blue prose-lg max-w-none prose-headings:font-bold prose-a:text-blue-600"
+            dangerouslySetInnerHTML={{ __html: post.contentHtml }}
+          />
+
+          {post.faqs && post.faqs.length > 0 && (
+            <section className="mt-14 border-t border-gray-200 pt-10">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Frequently Asked Questions</h2>
+              <div className="space-y-5">
+                {post.faqs.map((f, i) => (
+                  <div key={i}>
+                    <h3 className="font-semibold text-gray-900 mb-1">{f.question}</h3>
+                    <p className="text-gray-600 text-sm leading-relaxed">{f.answer}</p>
+                  </div>
+                ))}
               </div>
-              <span className="font-bold text-gray-900 text-[17px] tracking-tight">IceSaathi</span>
+            </section>
+          )}
+
+          <div className="mt-14 rounded-2xl bg-blue-50 border border-blue-100 p-8 text-center">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">
+              Run your ice cream business on IceSaathi
+            </h3>
+            <p className="text-gray-600 mb-5 text-sm">
+              GST billing, low-stock alerts, delivery tracking and customer ledger — free for 30 days, no card required.
+            </p>
+            <Link
+              href="/register"
+              className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors"
+            >
+              Start Free Trial
             </Link>
-            <nav aria-label="Primary navigation" className="flex items-center gap-1">
-              <Link href="#features" className="hidden md:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
-                Features
-              </Link>
-              <Link href="#how-it-works" className="hidden md:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
-                How it Works
-              </Link>
-              <Link href="#pricing" className="hidden md:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
-                Pricing
-              </Link>
-              <Link href="#faq" className="hidden md:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
-                FAQ
-              </Link>
-              <Link href="/login" className="ml-2 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200">
-                Login
-              </Link>
-              <Link href="/register" className="ml-1 px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm">
-                Free Trial →
-              </Link>
-            </nav>
           </div>
-        </header>
+        </article>
 
-        <main id="main-content">
-
-          {/* ── HERO ── */}
-          <section aria-labelledby="hero-heading" className="relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-blue-50 via-blue-50/40 to-white" aria-hidden="true" />
-            <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-28 sm:pt-32 sm:pb-36">
-              <div className="max-w-3xl">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-6 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0" aria-hidden="true" />
-                  Purpose-built for ice cream businesses in India
-                </div>
-
-                <h1 id="hero-heading" className="text-4xl sm:text-5xl lg:text-[56px] font-bold tracking-tight text-gray-900 mb-6 leading-tight">
-                  The best software for your ice cream business
-                </h1>
-
-                <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-2xl leading-relaxed">
-                  IceSaathi manages your inventory, GST billing, customer ledger, orders, stock alerts, live delivery tracking and sales reports — all from one simple dashboard. Built specifically for ice cream wholesalers and distributors in India.
-                </p>
-
-                <div className="flex flex-wrap gap-3 mb-6">
-                  <Link
-                    href="/register"
-                    className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-md text-[15px]"
-                  >
-                    Start Free 30-Day Trial
-                  </Link>
-                  <Link
-                    href="/login"
-                    className="px-6 py-3.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-900 font-semibold rounded-xl transition-colors text-[15px]"
-                  >
-                    Sign In to Dashboard →
-                  </Link>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-gray-500">
-                  <span className="flex items-center gap-1.5"><span className="text-green-500 font-bold">✓</span> 30 days free</span>
-                  <span className="flex items-center gap-1.5"><span className="text-green-500 font-bold">✓</span> No credit card needed</span>
-                  <span className="flex items-center gap-1.5"><span className="text-green-500 font-bold">✓</span> Set up in under 10 minutes</span>
-                  <span className="flex items-center gap-1.5"><span className="text-green-500 font-bold">✓</span> Cancel anytime</span>
-                </div>
-              </div>
+        {related.length > 0 && (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
+            <h2 className="text-2xl font-bold text-gray-900 mb-8">Related Articles</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+              {related.map((p) => (
+                <BlogCard key={p.slug} post={p} />
+              ))}
             </div>
           </section>
-
-          {/* ── STATS BAR ── */}
-          <section aria-label="Platform highlights" className="border-y border-gray-200 bg-white">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
-                <div>
-                  <dd className="text-3xl font-bold text-blue-600">12</dd>
-                  <dt className="text-sm text-gray-600 mt-1">Business modules in one dashboard</dt>
-                </div>
-                <div>
-                  <dd className="text-3xl font-bold text-blue-600">GST</dd>
-                  <dt className="text-sm text-gray-600 mt-1">Compliant invoices with PDF download</dt>
-                </div>
-                <div>
-                  <dd className="text-3xl font-bold text-blue-600">Live</dd>
-                  <dt className="text-sm text-gray-600 mt-1">GPS tracking for every delivery</dt>
-                </div>
-                <div>
-                  <dd className="text-3xl font-bold text-blue-600">Auto</dd>
-                  <dt className="text-sm text-gray-600 mt-1">Stock deduction on every order</dt>
-                </div>
-              </dl>
-            </div>
-          </section>
-
-          {/* ── WHY ICESAATHI ── */}
-          <section aria-labelledby="why-heading" className="py-20 sm:py-28 bg-gray-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="max-w-2xl mb-14">
-                <h2 id="why-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
-                  Why ice cream businesses choose IceSaathi
-                </h2>
-                <p className="text-lg text-gray-600">
-                  Generic inventory software is not built for ice cream. IceSaathi is.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {BENEFITS.map((b) => (
-                  <div key={b.title} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                    <h3 className="font-bold text-gray-900 text-[16px] mb-2">{b.title}</h3>
-                    <p className="text-sm text-gray-600 leading-relaxed">{b.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* ── FEATURES ── */}
-          <section id="features" aria-labelledby="features-heading" className="py-20 sm:py-28">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="max-w-2xl mb-14">
-                <h2 id="features-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
-                  Everything your ice cream business needs — in one place
-                </h2>
-                <p className="text-lg text-gray-600">
-                  12 modules built specifically for ice cream wholesale and distribution operations. No extra tools needed.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {FEATURES.map((f, i) => (
-                  <article key={f.id} id={f.id}>
-                    <div className="flex items-start gap-4">
-                      <div
-                        className="shrink-0 w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-xl"
-                        aria-hidden="true"
-                      >
-                        {f.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-gray-900 mb-2 text-[15px]">{f.title}</h3>
-                        <p className="text-sm text-gray-600 leading-relaxed">{f.desc}</p>
-                      </div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* ── HOW IT WORKS ── */}
-          <section id="how-it-works" aria-labelledby="workflow-heading" className="py-20 sm:py-28 bg-gray-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="max-w-2xl mb-14">
-                <h2 id="workflow-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
-                  Get started in under 10 minutes
-                </h2>
-                <p className="text-lg text-gray-600">
-                  A straightforward setup that matches how your ice cream business already works.
-                </p>
-              </div>
-
-              <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8" aria-label="Setup steps">
-                {HOW_IT_WORKS.map((s) => (
-                  <li key={s.n}>
-                    <div className="flex items-start gap-4">
-                      <div
-                        className="shrink-0 w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                        aria-hidden="true"
-                      >
-                        {s.n}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-gray-900 mb-2 text-[15px]">{s.title}</h3>
-                        <p className="text-sm text-gray-600 leading-relaxed">{s.desc}</p>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </section>
-
-          {/* ── TESTIMONIALS ── */}
-          <section aria-labelledby="testimonials-heading" className="py-20 sm:py-28">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="max-w-2xl mb-14">
-                <h2 id="testimonials-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
-                  Trusted by ice cream businesses across India
-                </h2>
-                <p className="text-lg text-gray-600">
-                  See what ice cream wholesalers and distributors say about IceSaathi.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                {TESTIMONIALS.map((t) => (
-                  <blockquote key={t.name} className="bg-gray-50 rounded-xl border border-gray-200 p-6">
-                    <div className="flex gap-0.5 mb-3" aria-label={`${t.rating} stars`}>
-                      {Array.from({ length: t.rating }).map((_, i) => (
-                        <span key={i} className="text-yellow-400 text-base" aria-hidden="true">★</span>
-                      ))}
-                    </div>
-                    <p className="text-sm text-gray-700 leading-relaxed mb-4">&ldquo;{t.text}&rdquo;</p>
-                    <footer>
-                      <cite className="not-italic">
-                        <span className="font-semibold text-gray-900 text-sm block">{t.name}</span>
-                        <span className="text-xs text-gray-500">{t.role}</span>
-                      </cite>
-                    </footer>
-                  </blockquote>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* ── PRICING ── */}
-          <PricingSection />
-
-          {/* ── FAQ ── */}
-          <section id="faq" aria-labelledby="faq-heading" className="py-20 sm:py-28 bg-gray-50">
-            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="mb-12">
-                <h2 id="faq-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
-                  Frequently asked questions about IceSaathi
-                </h2>
-                <p className="text-lg text-gray-600">
-                  Everything you need to know before getting started.
-                </p>
-              </div>
-              <dl className="space-y-0 divide-y divide-gray-200 border border-gray-200 rounded-2xl bg-white overflow-hidden">
-                {FAQS.map((faq) => (
-                  <div key={faq.q} className="px-6 py-5">
-                    <dt className="font-semibold text-gray-900 text-[15px] mb-2">{faq.q}</dt>
-                    <dd className="text-sm text-gray-600 leading-relaxed">{faq.a}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          </section>
-
-          {/* ── CTA BANNER ── */}
-          <section aria-labelledby="cta-heading" className="py-20 sm:py-28">
-            <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <h2 id="cta-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
-                Ready to manage your ice cream business the smart way?
-              </h2>
-              <p className="text-lg text-gray-600 mb-8">
-                Join ice cream businesses across India that use IceSaathi to manage inventory, billing and delivery every day. Start your free 30-day trial today — no credit card required.
-              </p>
-              <div className="flex flex-wrap gap-3 justify-center">
-                <Link
-                  href="/register"
-                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-md text-[15px]"
-                >
-                  Start Free Trial — It&apos;s Free for 30 Days
-                </Link>
-                <Link
-                  href="mailto:softvibeservices@gmail.com"
-                  className="px-8 py-4 border border-gray-300 bg-white hover:bg-gray-50 text-gray-900 font-semibold rounded-xl transition-colors text-[15px]"
-                >
-                  Contact Support
-                </Link>
-              </div>
-              <p className="mt-4 text-sm text-gray-400">
-                Questions? Email us at softvibeservices@gmail.com — we reply within 24 hours.
-              </p>
-            </div>
-          </section>
-
-        </main>
-
-        {/* ── FOOTER ── */}
-        <footer className="border-t border-gray-200 bg-gray-50" aria-label="Site footer">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
-
-              {/* Brand */}
-              <div className="lg:col-span-1">
-                <Link href="/" className="flex items-center gap-2.5 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-                    <span className="text-white text-sm font-bold">IS</span>
-                  </div>
-                  <span className="font-bold text-gray-900 text-[17px]">IceSaathi</span>
-                </Link>
-                <p className="text-sm text-gray-600 leading-relaxed mb-4">
-                  The best inventory management and billing software for ice cream businesses in India. Built by SoftVibe Services.
-                </p>
-                <div className="text-sm text-gray-500">
-                  <p>Support: <a href="mailto:softvibeservices@gmail.com" className="text-blue-600 hover:underline">softvibeservices@gmail.com</a></p>
-                  <p className="mt-1">Developer: <a href="https://softvibe-service.vercel.app/" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">SoftVibe Services</a></p>
-                </div>
-              </div>
-
-              {/* Product */}
-              <div>
-                <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">Product</h3>
-                <ul className="space-y-3 text-sm text-gray-600">
-                  <li><Link href="#features" className="hover:text-gray-900 transition-colors">Features</Link></li>
-                  <li><Link href="#pricing" className="hover:text-gray-900 transition-colors">Pricing</Link></li>
-                  <li><Link href="#how-it-works" className="hover:text-gray-900 transition-colors">How it Works</Link></li>
-                  <li><Link href="#faq" className="hover:text-gray-900 transition-colors">FAQ</Link></li>
-                  <li><Link href="/register" className="hover:text-gray-900 transition-colors">Free Trial</Link></li>
-                </ul>
-              </div>
-
-              {/* Features quick links */}
-              <div>
-                <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">Features</h3>
-                <ul className="space-y-3 text-sm text-gray-600">
-                  <li><Link href="#gst-billing" className="hover:text-gray-900 transition-colors">GST Billing</Link></li>
-                  <li><Link href="#stock-management" className="hover:text-gray-900 transition-colors">Stock Management</Link></li>
-                  <li><Link href="#customer-ledger" className="hover:text-gray-900 transition-colors">Customer Ledger</Link></li>
-                  <li><Link href="#live-gps-tracking" className="hover:text-gray-900 transition-colors">Live GPS Tracking</Link></li>
-                  <li><Link href="#sales-analytics" className="hover:text-gray-900 transition-colors">Sales Analytics</Link></li>
-                  <li><Link href="#delivery-partner-management" className="hover:text-gray-900 transition-colors">Delivery Management</Link></li>
-                </ul>
-              </div>
-
-              {/* Account */}
-              <div>
-                <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">Account</h3>
-                <ul className="space-y-3 text-sm text-gray-600">
-                  <li><Link href="/register" className="hover:text-gray-900 transition-colors">Create Account</Link></li>
-                  <li><Link href="/login" className="hover:text-gray-900 transition-colors">Login</Link></li>
-                  <li><Link href="/forgot-password" className="hover:text-gray-900 transition-colors">Forgot Password</Link></li>
-                  <li><a href="mailto:softvibeservices@gmail.com" className="hover:text-gray-900 transition-colors">Contact Support</a></li>
-                </ul>
-              </div>
-
-            </div>
-
-            <div className="mt-12 pt-8 border-t border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <p className="text-sm text-gray-500">
-                &copy; {new Date().getFullYear()} IceSaathi by{" "}
-                <a href="https://softvibe-service.vercel.app/" className="hover:text-gray-900 transition-colors" target="_blank" rel="noopener noreferrer">
-                  SoftVibe Services
-                </a>
-                . All rights reserved.
-              </p>
-              <div className="flex items-center gap-6 text-sm text-gray-500">
-                <span>India&apos;s Best Ice Cream Business Software</span>
-              </div>
-            </div>
-          </div>
-        </footer>
-
-      </div>
+        )}
+      </main>
+      <Footer />
     </>
   );
 }
@@ -1231,179 +562,276 @@ export default function HomePage() {
 
 ---
 
-## FILE 3: `src/app/components/Navbar.tsx`
-
-**What to tell the AI:** "In this file, find every occurrence of `IceCream Inventory` or `Ice Inventory` or `IceCream` (brand name references in the public navbar only — not inside JSX logic) and replace them with `IceSaathi`. Also update the logo initials from `IC` to `IS`. The metadataBase URL should change from `ice-inventory.vercel.app` to `www.icesaathi.co.in` if present."
-
-Specific replacements (search and replace exactly):
-
-| Find | Replace |
-|---|---|
-| `IceCream Inventory` | `IceSaathi` |
-| `Ice Inventory` | `IceSaathi` |
-| `>IC<` | `>IS<` |
-| `"IC"` | `"IS"` |
-| `aria-label="IceCream Inventory home"` | `aria-label="IceSaathi home"` |
-| `ice-inventory.vercel.app` | `www.icesaathi.co.in` |
-
----
-
-## FILE 4: `src/app/components/Footer.tsx`
-
-**What to tell the AI:** "Replace the entire Footer component with the code below."
+### 6.5 `src/app/blog/page.tsx` (new file) — blog index with category filter + pagination
 
 ```tsx
-// src/app/components/Footer.tsx
+// src/app/blog/page.tsx
+import type { Metadata } from "next";
 import Link from "next/link";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
+import BlogCard from "./components/BlogCard";
+import { getAllPostsMeta, getAllCategories } from "@/lib/blog";
 
-export default function Footer() {
+const BASE_URL = "https://www.icesaathi.co.in";
+const PAGE_SIZE = 9;
+
+export const metadata: Metadata = {
+  title: "Blog — Ice Cream Business Tips, GST Billing & Inventory Guides",
+  description:
+    "Practical guides on running an ice cream business in India: GST billing, inventory management, wholesale distribution, delivery tracking, and growth tips — from the IceSaathi team.",
+  alternates: { canonical: `${BASE_URL}/blog` },
+  openGraph: {
+    type: "website",
+    url: `${BASE_URL}/blog`,
+    siteName: "IceSaathi",
+    title: "IceSaathi Blog — Ice Cream Business Tips & Guides",
+    description: "Practical guides on running an ice cream business in India.",
+    locale: "en_IN",
+  },
+};
+
+export default function BlogIndexPage({
+  searchParams,
+}: {
+  searchParams: { category?: string; page?: string };
+}) {
+  const allPosts = getAllPostsMeta();
+  const categories = getAllCategories();
+  const activeCategory = searchParams?.category;
+
+  const filtered = activeCategory
+    ? allPosts.filter((p) => p.category.toLowerCase() === activeCategory.toLowerCase())
+    : allPosts;
+
+  const page = Math.max(1, Number(searchParams?.page) || 1);
+  const start = (page - 1) * PAGE_SIZE;
+  const pagePosts = filtered.slice(start, start + PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
   return (
-    <footer className="border-t border-gray-200 bg-gray-50" aria-label="Site footer">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
+    <>
+      <Navbar />
+      <main className="bg-white">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-10">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">IceSaathi Blog</h1>
+          <p className="text-lg text-gray-600 max-w-2xl">
+            GST billing, inventory management, and growth guides for ice cream wholesalers,
+            distributors and shop owners in India.
+          </p>
+        </section>
 
-          {/* Brand */}
-          <div className="lg:col-span-1">
-            <Link href="/" className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-sm font-bold">IS</span>
-              </div>
-              <span className="font-bold text-gray-900 text-[17px]">IceSaathi</span>
-            </Link>
-            <p className="text-sm text-gray-600 leading-relaxed mb-4">
-              The best inventory management and billing software for ice cream wholesalers, distributors and shop owners in India.
-            </p>
-            <div className="text-sm text-gray-500 space-y-1">
-              <p>
-                Support:{" "}
-                <a
-                  href="mailto:softvibeservices@gmail.com"
-                  className="text-blue-600 hover:underline"
-                >
-                  softvibeservices@gmail.com
-                </a>
-              </p>
-              <p>
-                Built by:{" "}
-                <a
-                  href="https://softvibe-service.vercel.app/"
-                  className="text-blue-600 hover:underline"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  SoftVibe Services
-                </a>
-              </p>
-            </div>
-          </div>
-
-          {/* Product */}
-          <div>
-            <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">
-              Product
-            </h3>
-            <ul className="space-y-3 text-sm text-gray-600">
-              <li><Link href="/#features" className="hover:text-gray-900 transition-colors">Features</Link></li>
-              <li><Link href="/#pricing" className="hover:text-gray-900 transition-colors">Pricing</Link></li>
-              <li><Link href="/#how-it-works" className="hover:text-gray-900 transition-colors">How it Works</Link></li>
-              <li><Link href="/#faq" className="hover:text-gray-900 transition-colors">FAQ</Link></li>
-              <li><Link href="/register" className="hover:text-gray-900 transition-colors">Start Free Trial</Link></li>
-            </ul>
-          </div>
-
-          {/* Features */}
-          <div>
-            <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">
-              Features
-            </h3>
-            <ul className="space-y-3 text-sm text-gray-600">
-              <li><Link href="/#gst-billing" className="hover:text-gray-900 transition-colors">GST Billing & Invoices</Link></li>
-              <li><Link href="/#stock-management" className="hover:text-gray-900 transition-colors">Stock Management</Link></li>
-              <li><Link href="/#customer-ledger" className="hover:text-gray-900 transition-colors">Customer Ledger</Link></li>
-              <li><Link href="/#live-gps-tracking" className="hover:text-gray-900 transition-colors">Live GPS Tracking</Link></li>
-              <li><Link href="/#sales-analytics" className="hover:text-gray-900 transition-colors">Sales Analytics</Link></li>
-              <li><Link href="/#delivery-partner-management" className="hover:text-gray-900 transition-colors">Delivery Management</Link></li>
-            </ul>
-          </div>
-
-          {/* Account */}
-          <div>
-            <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">
-              Account
-            </h3>
-            <ul className="space-y-3 text-sm text-gray-600">
-              <li><Link href="/register" className="hover:text-gray-900 transition-colors">Create Account</Link></li>
-              <li><Link href="/login" className="hover:text-gray-900 transition-colors">Login</Link></li>
-              <li><Link href="/forgot-password" className="hover:text-gray-900 transition-colors">Forgot Password</Link></li>
-              <li>
-                <a
-                  href="mailto:softvibeservices@gmail.com"
-                  className="hover:text-gray-900 transition-colors"
-                >
-                  Contact Support
-                </a>
-              </li>
-            </ul>
-          </div>
-
-        </div>
-
-        <div className="mt-12 pt-8 border-t border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <p className="text-sm text-gray-500">
-            &copy; {new Date().getFullYear()} IceSaathi by{" "}
-            <a
-              href="https://softvibe-service.vercel.app/"
-              className="hover:text-gray-900 transition-colors"
-              target="_blank"
-              rel="noopener noreferrer"
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8 flex flex-wrap gap-2">
+          <Link
+            href="/blog"
+            className={`px-4 py-1.5 rounded-full text-sm border transition-colors ${
+              !activeCategory
+                ? "bg-blue-600 text-white border-blue-600"
+                : "border-gray-300 text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            All
+          </Link>
+          {categories.map((c) => (
+            <Link
+              key={c}
+              href={`/blog?category=${encodeURIComponent(c)}`}
+              className={`px-4 py-1.5 rounded-full text-sm border transition-colors ${
+                activeCategory === c
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50"
+              }`}
             >
-              SoftVibe Services
-            </a>
-            . All rights reserved.
-          </p>
-          <p className="text-sm text-gray-500">
-            India&apos;s Best Software for Ice Cream Business
-          </p>
-        </div>
-      </div>
-    </footer>
+              {c}
+            </Link>
+          ))}
+        </section>
+
+        {pagePosts.length === 0 ? (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 text-center text-gray-500">
+            No articles in this category yet — check back soon.
+          </section>
+        ) : (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {pagePosts.map((post) => (
+              <BlogCard key={post.slug} post={post} />
+            ))}
+          </section>
+        )}
+
+        {totalPages > 1 && (
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 flex justify-center gap-2">
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <Link
+                key={i}
+                href={`/blog?page=${i + 1}${activeCategory ? `&category=${activeCategory}` : ""}`}
+                className={`w-9 h-9 flex items-center justify-center rounded-lg text-sm border transition-colors ${
+                  page === i + 1
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {i + 1}
+              </Link>
+            ))}
+          </section>
+        )}
+      </main>
+      <Footer />
+    </>
   );
 }
 ```
 
 ---
 
-## FILE 5: `src/app/components/PricingSection.tsx`
+### 6.6 `src/app/blog/category/[category]/page.tsx` (new file)
 
-**What to tell the AI:** "In this file, make the following targeted changes only. Do not change any pricing logic, plan IDs, Razorpay integration, or billing toggle state."
+Category archive pages double as extra indexable landing pages (e.g. `/blog/category/gst-billing`) that group all posts in a pillar — good for internal linking and topical authority (§13).
 
-**Change 1 — Section heading copy:**
-Find the `<h2>` element inside the pricing section and replace the inner text with:
+```tsx
+// src/app/blog/category/[category]/page.tsx
+import type { Metadata } from "next";
+import Navbar from "../../../components/Navbar";
+import Footer from "../../../components/Footer";
+import BlogCard from "../../components/BlogCard";
+import { getAllCategories, getPostsByCategory } from "@/lib/blog";
+
+export async function generateStaticParams() {
+  return getAllCategories().map((c) => ({ category: c.toLowerCase().replace(/\s+/g, "-") }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: { category: string };
+}): Promise<Metadata> {
+  const name = decodeURIComponent(params.category).replace(/-/g, " ");
+  return {
+    title: `${name} Articles — IceSaathi Blog`,
+    description: `Read every IceSaathi article about ${name.toLowerCase()} for ice cream businesses in India.`,
+  };
+}
+
+export default function CategoryPage({ params }: { params: { category: string } }) {
+  const name = decodeURIComponent(params.category).replace(/-/g, " ");
+  const posts = getPostsByCategory(name);
+
+  return (
+    <>
+      <Navbar />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 min-h-[50vh]">
+        <h1 className="text-3xl font-bold text-gray-900 mb-10 capitalize">{name} Articles</h1>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          {posts.map((p) => (
+            <BlogCard key={p.slug} post={p} />
+          ))}
+        </div>
+      </main>
+      <Footer />
+    </>
+  );
+}
 ```
-Simple, transparent pricing for ice cream businesses
-```
-
-**Change 2 — Section subheading copy:**
-Find the `<p>` element right below that h2 and replace the inner text with:
-```
-Choose the plan that fits your ice cream business. Start free for 30 days. No credit card required. Cancel anytime.
-```
-
-**Change 3 — JSON-LD if present in this file:**
-If this file contains any `SoftwareApplication` JSON-LD or schema data, update:
-- Any URL containing `ice-inventory.vercel.app` → `www.icesaathi.co.in`
-- Any `name: "IceCream Inventory"` or `name: "Ice Inventory"` → `name: "IceSaathi"`
-
-**Change 4 — Plan descriptions** (if present as text in the component):
-- Find `"For small businesses starting out"` or similar Starter description → `"Perfect for small ice cream shops and solo distributors just getting started."`
-- Find `"For growing businesses"` or similar Growth description → `"For growing ice cream wholesale businesses managing multiple customers and orders."`
-- Find `"For established businesses"` or similar Business description → `"For established ice cream distributors with high order volumes and delivery teams."`
 
 ---
 
-## FILE 6: `public/robots.txt`
+### 6.7 `src/app/sitemap.ts` (new file) — replaces `public/sitemap.xml`
 
-**What to tell the AI:** "Create a new file at `public/robots.txt` with this exact content:"
+**Why this must be a deletion, not just an addition:** Next.js's file-convention sitemap (`src/app/sitemap.ts`) automatically serves at `/sitemap.xml`. A static file at `public/sitemap.xml` serves at the exact same URL. If both exist, Next.js throws a build conflict (`Conflicting public file and page file`). The dynamic version is required because it auto-includes every blog post and category page without manual editing — the entire point of this system being "easy to integrate" depends on the sitemap updating itself every time a new `.md` file is added.
+
+**Action 1 — delete:**
+```bash
+rm public/sitemap.xml
+```
+
+**Action 2 — create:**
+```ts
+// src/app/sitemap.ts
+import type { MetadataRoute } from "next";
+import { getAllPostsMeta, getAllCategories } from "@/lib/blog";
+
+const BASE_URL = "https://www.icesaathi.co.in";
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  const staticRoutes: MetadataRoute.Sitemap = [
+    { url: `${BASE_URL}/`, lastModified: new Date(), changeFrequency: "weekly", priority: 1.0 },
+    { url: `${BASE_URL}/login`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.6 },
+    { url: `${BASE_URL}/register`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
+    { url: `${BASE_URL}/forgot-password`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.2 },
+    { url: `${BASE_URL}/blog`, lastModified: new Date(), changeFrequency: "daily", priority: 0.9 },
+  ];
+
+  const postRoutes: MetadataRoute.Sitemap = getAllPostsMeta().map((p) => ({
+    url: `${BASE_URL}/blog/${p.slug}`,
+    lastModified: new Date(p.updatedAt || p.publishedAt),
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+
+  const categoryRoutes: MetadataRoute.Sitemap = getAllCategories().map((c) => ({
+    url: `${BASE_URL}/blog/category/${encodeURIComponent(c.toLowerCase().replace(/\s+/g, "-"))}`,
+    lastModified: new Date(),
+    changeFrequency: "weekly",
+    priority: 0.5,
+  }));
+
+  return [...staticRoutes, ...postRoutes, ...categoryRoutes];
+}
+```
+
+This is the **same four static URLs** that were in the original `public/sitemap.xml` (home, login, register, forgot-password) — nothing existing is lost, it's now generated dynamically alongside every blog URL.
+
+---
+
+### 6.8 `src/app/blog/rss.xml/route.ts` (new file) — RSS feed
+
+A feed is a small but real signal: it lets Google and other crawlers discover new posts faster than waiting for a recrawl, and it's the standard way content sites get picked up by aggregators and some AI crawlers.
+
+```ts
+// src/app/blog/rss.xml/route.ts
+import { getAllPostsMeta } from "@/lib/blog";
+
+const BASE_URL = "https://www.icesaathi.co.in";
+
+export async function GET() {
+  const posts = getAllPostsMeta();
+
+  const items = posts
+    .map(
+      (p) => `
+    <item>
+      <title><![CDATA[${p.title}]]></title>
+      <link>${BASE_URL}/blog/${p.slug}</link>
+      <guid>${BASE_URL}/blog/${p.slug}</guid>
+      <pubDate>${new Date(p.publishedAt).toUTCString()}</pubDate>
+      <description><![CDATA[${p.description}]]></description>
+    </item>`
+    )
+    .join("");
+
+  const rss = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>IceSaathi Blog</title>
+    <link>${BASE_URL}/blog</link>
+    <description>Ice cream business, GST billing and inventory guides from IceSaathi.</description>
+    <language>en-IN</language>
+    ${items}
+  </channel>
+</rss>`;
+
+  return new Response(rss, {
+    headers: { "Content-Type": "application/xml; charset=utf-8" },
+  });
+}
+```
+
+---
+
+### 6.9 `public/robots.txt` — additive edit
+
+Current file (confirmed):
 
 ```
 User-agent: *
@@ -1420,234 +848,541 @@ Sitemap: https://www.icesaathi.co.in/sitemap.xml
 # https://www.icesaathi.co.in
 ```
 
+`Allow: /` already covers `/blog/` implicitly — no functional change is required. For clarity (and because explicit beats implicit when an AI tool re-reads this file later), add one explicit line:
+
+```diff
+ User-agent: *
+ Allow: /
++Allow: /blog/
+ Disallow: /dashboard/
+ Disallow: /admin/
+ Disallow: /api/
+ Disallow: /verify-account
+ Disallow: /verify-otp
+```
+
+The `Sitemap:` line stays exactly as-is — it already points at `/sitemap.xml`, which after §6.7 is now served by the dynamic route instead of the static file, same URL, no change needed here.
+
 ---
 
-## FILE 7: `public/sitemap.xml`
+### 6.10 Navbar + Footer — add the Blog link
 
-**What to tell the AI:** "Create a new file at `public/sitemap.xml` with this exact content:"
+**`src/app/components/Navbar.tsx`** — exact current code confirmed. Two insertions: desktop nav and mobile menu.
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+Desktop — insert a "Blog" link **before** the existing "Login" link:
+```diff
+         {/* Desktop Actions */}
+         <div className="hidden md:flex items-center gap-1">
++          <Link
++            href="/blog"
++            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
++          >
++            Blog
++          </Link>
+           <Link
+             href="/login"
+             className="px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+           >
+             Login
+           </Link>
+```
 
-  <!-- Homepage — highest priority -->
-  <url>
-    <loc>https://www.icesaathi.co.in/</loc>
-    <lastmod>2025-06-20</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
+Mobile menu — insert the same link as the first item inside the mobile panel:
+```diff
+         <div className="md:hidden border-t border-gray-200 bg-white">
+           <div className="px-4 py-4 space-y-2">
++            <Link
++              href="/blog"
++              onClick={() => setIsOpen(false)}
++              className="block w-full text-left px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
++            >
++              Blog
++            </Link>
+             <Link
+               href="/login"
+               onClick={() => setIsOpen(false)}
+               className="block w-full text-left px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+             >
+               Login
+             </Link>
+```
 
-  <!-- Login -->
-  <url>
-    <loc>https://www.icesaathi.co.in/login</loc>
-    <lastmod>2025-06-20</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-
-  <!-- Register / Free Trial -->
-  <url>
-    <loc>https://www.icesaathi.co.in/register</loc>
-    <lastmod>2025-06-20</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <!-- Forgot Password -->
-  <url>
-    <loc>https://www.icesaathi.co.in/forgot-password</loc>
-    <lastmod>2025-06-20</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-
-</urlset>
+**`src/app/components/Footer.tsx`** — add a "Blog" item to the existing "Product" column (exact current code confirmed):
+```diff
+             <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">
+               Product
+             </h3>
+             <ul className="space-y-3 text-sm text-gray-600">
+               <li><Link href="/#features" className="hover:text-gray-900 transition-colors">Features</Link></li>
+               <li><Link href="/#pricing" className="hover:text-gray-900 transition-colors">Pricing</Link></li>
+               <li><Link href="/#how-it-works" className="hover:text-gray-900 transition-colors">How it Works</Link></li>
+               <li><Link href="/#faq" className="hover:text-gray-900 transition-colors">FAQ</Link></li>
++              <li><Link href="/blog" className="hover:text-gray-900 transition-colors">Blog</Link></li>
+               <li><Link href="/register" className="hover:text-gray-900 transition-colors">Start Free Trial</Link></li>
+             </ul>
 ```
 
 ---
 
-## FILE 8: `next.config.mjs`
+### 6.11 Homepage teaser — `src/app/page.tsx`
 
-**What to tell the AI:** "Replace the entire file with the code below."
+`page.tsx` is already a **Server Component** (confirmed by its own comment: `// Server Component — fully crawlable, no client JS needed`), so it can call `getAllPostsMeta()` directly — no client/server boundary issue.
 
-```js
-// next.config.mjs
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  // ── Canonical redirect: www → non-www or vice versa ───────────────────────
-  // We want www.icesaathi.co.in to be canonical.
-  // If someone visits icesaathi.co.in (no www), redirect to www.
-  async redirects() {
-    return [
-      {
-        source: "/:path*",
-        has: [
-          {
-            type: "host",
-            value: "icesaathi.co.in",
-          },
-        ],
-        destination: "https://www.icesaathi.co.in/:path*",
-        permanent: true, // 301 redirect — good for SEO
-      },
-    ];
-  },
-
-  // ── Security + SEO headers ────────────────────────────────────────────────
-  async headers() {
-    return [
-      {
-        source: "/(.*)",
-        headers: [
-          // Prevent clickjacking
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          // Prevent MIME type sniffing
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          // Referrer policy — good for privacy and SEO
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // XSS protection
-          { key: "X-XSS-Protection", value: "1; mode=block" },
-          // Permissions policy
-          {
-            key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(self)",
-          },
-        ],
-      },
-      // Cache static assets aggressively
-      {
-        source: "/(.*)\\.(ico|png|jpg|jpeg|gif|svg|webp|woff|woff2|ttf|eot)",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
-      },
-    ];
-  },
-
-  // ── Image optimization ────────────────────────────────────────────────────
-  images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "res.cloudinary.com",
-      },
-    ],
-    formats: ["image/avif", "image/webp"],
-  },
-
-  // Keep any existing config from the original file below this line
-  // (Add back any existing nextConfig properties that were in your original next.config.mjs)
-};
-
-export default nextConfig;
+Add the import at the top, alongside the existing imports:
+```diff
+ import type { Metadata } from "next";
+ import Link from "next/link";
+ import PricingSection from "./components/PricingSection";
++import { getAllPostsMeta } from "@/lib/blog";
 ```
 
-> **Note for the AI implementing this:** Before replacing, check the original `next.config.mjs` for any existing options like `images.remotePatterns`, `experimental` flags or `webpack` config. Merge those into this new file — do not lose them.
+Add this inside the default export, before the `return`:
+```ts
+const latestPosts = getAllPostsMeta().slice(0, 3);
+```
+
+Insert this new `<section>` **immediately before** the homepage's own `<footer className="border-t border-gray-200 bg-gray-50" aria-label="Site footer">` tag (this exact string is unique in `page.tsx` — confirmed):
+
+```tsx
+{latestPosts.length > 0 && (
+  <section className="py-20 sm:py-28 bg-white" aria-labelledby="blog-heading">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="flex items-end justify-between mb-10">
+        <div>
+          <h2 id="blog-heading" className="text-3xl font-bold text-gray-900 mb-2">
+            From the Blog
+          </h2>
+          <p className="text-gray-600">
+            GST billing, inventory and growth guides for ice cream businesses in India.
+          </p>
+        </div>
+        <Link href="/blog" className="hidden sm:inline-block text-blue-600 font-medium hover:underline">
+          View all articles →
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+        {latestPosts.map((post) => (
+          <Link
+            key={post.slug}
+            href={`/blog/${post.slug}`}
+            className="block rounded-2xl border border-gray-200 p-6 hover:shadow-lg hover:border-gray-300 transition-all"
+          >
+            <span className="inline-block text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">
+              {post.category}
+            </span>
+            <h3 className="text-lg font-bold text-gray-900 mb-2 leading-snug">{post.title}</h3>
+            <p className="text-sm text-gray-600 line-clamp-2">{post.description}</p>
+          </Link>
+        ))}
+      </div>
+    </div>
+  </section>
+)}
+```
+
+This is the single highest-value internal link on the whole site for new content: the homepage already gets the most external links and the most crawl frequency, so every new blog post effectively gets a fast-track discovery path the moment it appears in this `slice(0, 3)`.
 
 ---
 
----
+### 6.12 `next.config.mjs` — no change required
 
-## AFTER CODE CHANGES — ACTION CHECKLIST
-
-These steps are done outside the codebase, but are critical for ranking.
-
-### Step 1: Google Search Console Setup
-1. Go to https://search.google.com/search-console/
-2. Add property: `https://www.icesaathi.co.in/`
-3. Verify ownership using the HTML tag method — add the verification `<meta>` tag in `layout.tsx` inside the `<head>` (uncomment the `verification.google` field)
-4. Submit sitemap: `https://www.icesaathi.co.in/sitemap.xml`
-5. Request indexing for the homepage URL
-
-### Step 2: Google My Business (Critical for Local SEO)
-1. Go to https://business.google.com/
-2. Create a business profile for "IceSaathi" with category "Software Company"
-3. Add website: `https://www.icesaathi.co.in/`
-4. Add contact email: `softvibeservices@gmail.com`
-5. This helps rank for "ice cream software India" with local intent
-
-### Step 3: Create an OG Image
-Create a `public/og-image.png` file (1200×630 pixels) showing:
-- IceSaathi logo on the left
-- Text: "IceSaathi — Best Software for Ice Cream Business"
-- Subtext: "Inventory · GST Billing · Delivery Tracking · Sales Analytics"
-- Blue brand color background (#2563eb) or white with blue accents
-
-### Step 4: Create a proper Favicon
-Replace `public/favicon.ico` with an "IS" branded favicon at 32×32 and 16×16.
-
-### Step 5: Bing Webmaster Tools
-1. Go to https://www.bing.com/webmasters/
-2. Add your site and submit the sitemap there too
-3. Bing still drives meaningful traffic in India
-
-### Step 6: Submit to Google manually after deployment
-After deploying all changes:
-1. Go to Google Search Console
-2. Use "URL Inspection" tool
-3. Paste `https://www.icesaathi.co.in/`
-4. Click "Request Indexing"
+Confirmed by reading the file: `images.remotePatterns` only needs an entry for external image hosts. Blog cover images live under `public/blog/`, which `next/image` serves natively with no config — no edit needed here.
 
 ---
 
-## KEYWORD IMPLEMENTATION MAP
+### 6.13 `src/app/globals.css` — one-line addition (Tailwind v4 typography)
 
-This table shows exactly where each target keyword appears in the updated code:
+Confirmed current first lines of the file:
+```css
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+```
 
-| Keyword | Where it appears |
+Add the typography plugin directive directly under the Tailwind import (Tailwind v4 CSS-first syntax — **do not** create a `tailwind.config.js` plugins array, this project has no such file and v4 does not read one for this purpose):
+
+```diff
+ @import "tailwindcss";
++@plugin "@tailwindcss/typography";
+ @import "leaflet/dist/leaflet.css";
+```
+
+This unlocks the `prose`, `prose-lg`, `prose-blue` classes used in `src/app/blog/[slug]/page.tsx` (§6.4) to style the rendered Markdown body (headings, paragraphs, lists, blockquotes, tables, links) consistently with the site's existing blue/gray palette, with zero hand-written CSS.
+
+
+---
+
+## 7. KEYWORD RESEARCH & TOPIC CLUSTER MAP
+
+### 7.1 Methodology and an honest caveat
+
+These keywords were chosen by analyzing real search intent around the IceSaathi product surface (inventory, GST billing, customer ledger, delivery tracking, sales analytics — all confirmed feature set from `layout.tsx`'s own `featureList` schema) and the natural questions an ice cream business owner in India searches at each stage of their journey — from "should I start this business" to "which software should I buy."
+
+**Caveat, stated plainly:** exact monthly search volumes are not included here because producing specific numbers without a live keyword-data tool (Google Keyword Planner, Ahrefs, Ubersuggest, Semrush) would be guessing dressed up as data. Before locking the content calendar, run this exact keyword list through Google Keyword Planner (free with a Google Ads account, no spend required) or Google Search Console's "Queries" report once the first few posts are live — that will tell you which of these are actually being searched and at what volume in India specifically. What's reliable here is the **structure**: real, specific, intent-matched phrases organized so that each pillar supports its cluster posts with internal links, which is what actually moves rankings — not the volume number on any single keyword.
+
+### 7.2 The pillar–cluster model
+
+Six pillar pages, each owning one broad, harder-to-rank "head" term, supported by 4–6 narrower cluster posts that are individually easier to rank for and all link back to their pillar. This is the standard topic-cluster structure search engines reward with topical authority.
+
+```
+              ┌─────────────────────────┐
+              │   PILLAR PAGE (broad)    │ ← hardest keyword, most internal links pointing IN
+              └───────────┬─────────────┘
+        ┌──────────┬──────┴──────┬──────────┬──────────┐
+   cluster 1   cluster 2     cluster 3   cluster 4   cluster 5   ← each targets one specific long-tail query
+   (links to            (links to                          
+    pillar)               pillar)                          
+```
+
+### 7.3 Pillar map (category field = exact string to use in frontmatter `category:`)
+
+| # | Pillar (category) | Pillar primary keyword | Funnel stage |
+|---|---|---|---|
+| P1 | `Software & Tools` | ice cream business software india | BOFU (closest to product) |
+| P2 | `GST & Billing` | gst billing software for ice cream shop | MOFU |
+| P3 | `Inventory & Stock` | ice cream stock management | MOFU |
+| P4 | `Starting a Business` | how to start ice cream business in india | TOFU |
+| P5 | `Wholesale & Distribution` | ice cream wholesale distribution software | MOFU |
+| P6 | `Delivery & Logistics` | ice cream delivery management software | MOFU |
+
+### 7.4 Full content calendar — 32 posts
+
+Phase = recommended publishing order (§16). Word count is a target floor for "in-depth," not a hard ceiling — the sample post in §8 runs ~2,000 words and is the bar to match.
+
+| # | Title | Slug | Pillar | Primary keyword | Secondary keywords | Intent | Words | Phase |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Best Ice Cream Business Software in India (2026 Guide) | `best-ice-cream-business-software-india` | P1 | ice cream business software india | ice cream shop software, ice cream ERP india | Commercial | 2000 | 1 |
+| 2 | Ice Cream Inventory Management Software: Features You Actually Need | `ice-cream-inventory-management-software-features` | P1 | ice cream inventory management software | stock management app, low stock alerts | Commercial | 1600 | 1 |
+| 3 | Free vs Paid Ice Cream Shop Software: What's the Real Difference? | `free-vs-paid-ice-cream-shop-software` | P1 | free ice cream shop software | paid inventory software comparison | Commercial | 1400 | 2 |
+| 4 | How to Choose Billing Software for Your Ice Cream Parlour | `how-to-choose-billing-software-ice-cream-parlour` | P1 | billing software for ice cream parlour | invoice software small business india | Commercial | 1500 | 2 |
+| 5 | Excel vs Software: Why Ice Cream Wholesalers Are Ditching Spreadsheets | `excel-vs-software-ice-cream-wholesalers` | P1 | inventory management excel vs software | ice cream business excel template | Informational | 1400 | 3 |
+| 6 | 10 Signs Your Ice Cream Business Has Outgrown Manual Bookkeeping | `signs-outgrown-manual-bookkeeping-ice-cream` | P1 | ice cream business bookkeeping | manual vs digital billing | Informational | 1300 | 3 |
+| 7 | GST Billing Guide for Ice Cream Shops & Distributors in India | `gst-billing-guide-ice-cream-business` | P2 | gst billing software for ice cream shop | gst invoice ice cream business | Commercial | 2000 | 1 |
+| 8 | GST Rate on Ice Cream in India 2026: HSN Code & Tax Slab Explained | `gst-rate-on-ice-cream-india` | P2 | gst rate on ice cream | hsn code ice cream | Informational | 1500 | 1 |
+| 9 | How to Generate a GST Invoice for Ice Cream Sales (Step-by-Step) | `how-to-generate-gst-invoice-ice-cream-sales` | P2 | gst invoice format for ice cream business | invoice generator ice cream | Informational | 1600 | 2 |
+| 10 | GSTIN Registration for Ice Cream Parlour: Complete Process | `gst-registration-ice-cream-business` | P2 | gst registration for ice cream business | gstin apply online food business | Informational | 1500 | 2 |
+| 11 | Common GST Billing Mistakes Ice Cream Shop Owners Make | `gst-billing-mistakes-ice-cream-shop-owners` | P2 | gst billing mistakes small business | gst penalty food business | Informational | 1300 | 3 |
+| 12 | HSN Code for Ice Cream and Frozen Desserts (Updated List) | `hsn-code-ice-cream-frozen-desserts` | P2 | hsn code ice cream | hsn code frozen dessert | Informational | 1000 | 1 |
+| 13 | Ice Cream Stock Management: The Complete Guide for Wholesalers | `ice-cream-stock-management-guide` | P3 | ice cream stock management | frozen inventory management india | Commercial | 1900 | 1 |
+| 14 | How to Reduce Ice Cream Wastage in Your Shop or Cold Storage | `reduce-ice-cream-wastage` | P3 | reduce ice cream wastage | cold storage wastage tips | Informational | 1400 | 2 |
+| 15 | Low Stock Alerts: Why Every Ice Cream Business Needs Them | `low-stock-alerts-ice-cream-business` | P3 | low stock alert system | stock alert software india | Commercial | 1200 | 2 |
+| 16 | FIFO vs FEFO: Best Stock Rotation Method for Frozen Products | `fifo-vs-fefo-frozen-food-inventory` | P3 | fifo fefo frozen food inventory | stock rotation frozen products | Informational | 1300 | 3 |
+| 17 | Bulk Product Upload: Save Hours Managing Your Ice Cream Catalogue | `bulk-product-upload-ice-cream-catalogue` | P3 | bulk product upload software | csv import inventory software | Commercial | 1100 | 3 |
+| 18 | Cold Chain & Frozen Inventory Best Practices in India | `cold-chain-frozen-inventory-best-practices-india` | P3 | frozen food inventory management | cold chain management india | Informational | 1500 | 3 |
+| 19 | How to Start an Ice Cream Business in India: Complete 2026 Guide | `how-to-start-ice-cream-business-in-india` | P4 | how to start ice cream business in india | ice cream business plan india | Informational | 2200 | 1 |
+| 20 | Ice Cream Business Profit Margin: How Much Can You Really Earn? | `ice-cream-business-profit-margin` | P4 | ice cream business profit margin | ice cream shop profitability | Informational | 1500 | 1 |
+| 21 | FSSAI License for Ice Cream Business: Requirements & Process | `fssai-license-ice-cream-business` | P4 | fssai license ice cream business | food license ice cream parlour | Informational | 1400 | 2 |
+| 22 | Ice Cream Shop Business Plan Template (Free Download) | `ice-cream-shop-business-plan-template` | P4 | ice cream shop business plan | business plan template food | Informational | 1600 | 2 |
+| 23 | Ice Cream Franchise vs Starting Your Own Brand in India | `ice-cream-franchise-vs-own-brand-india` | P4 | ice cream franchise india | start own ice cream brand | Informational | 1500 | 3 |
+| 24 | How Much Does It Cost to Start an Ice Cream Parlour in India? | `cost-to-start-ice-cream-parlour-india` | P4 | ice cream parlour cost india | ice cream shop investment | Informational | 1400 | 2 |
+| 25 | 50+ Catchy Ice Cream Shop Name Ideas for Your Brand | `ice-cream-shop-name-ideas` | P4 | ice cream shop names | ice cream brand name ideas | Informational | 1200 | 1 |
+| 26 | Ice Cream Wholesale Distribution: How to Manage Operations Efficiently | `ice-cream-wholesale-distribution-guide` | P5 | ice cream wholesale distribution software | wholesale ice cream operations | Commercial | 1900 | 1 |
+| 27 | Customer Ledger Management for Ice Cream Distributors | `customer-ledger-management-ice-cream-distributors` | P5 | customer ledger software | khata book for distributors | Commercial | 1400 | 2 |
+| 28 | How to Manage Credit & Udhaar for Wholesale Ice Cream Customers | `manage-credit-udhaar-wholesale-customers` | P5 | udhaar khata software | credit management wholesale business | Informational | 1300 | 2 |
+| 29 | Order Management for Ice Cream Distributors: A Practical Guide | `order-management-ice-cream-distributors` | P5 | order management software wholesale | b2b order tracking app | Commercial | 1400 | 3 |
+| 30 | Sales Analytics: Which Ice Cream Flavours Actually Sell? | `sales-analytics-ice-cream-flavours` | P5 | sales analytics software small business | product wise sales report | Informational | 1300 | 3 |
+| 31 | Delivery Management for Ice Cream Businesses: Complete Guide | `delivery-management-ice-cream-business-guide` | P6 | ice cream delivery management software | delivery tracking app india | Commercial | 1800 | 1 |
+| 32 | Live GPS Tracking for Delivery Partners: Why It Matters | `live-gps-tracking-delivery-partners` | P6 | live gps delivery tracking software | real time delivery tracking | Commercial | 1300 | 2 |
+
+**Two more cluster posts for P6** to round out that pillar (not numbered above to keep the table at the core 32 — add if time allows in Phase 3):
+- *How to Manage Delivery Partners for Your Ice Cream Business* — `manage-delivery-partners-ice-cream-business` — kw: delivery partner management app
+- *Delivery Partner Onboarding Checklist for Ice Cream Distributors* — `delivery-partner-onboarding-checklist` — kw: delivery partner onboarding
+
+### 7.5 Internal linking rule per post
+
+Every cluster post must contain, in its body (not just a related-posts widget):
+1. **One link up** to its pillar post (e.g. post #14 "Reduce Ice Cream Wastage" links to post #13 "Ice Cream Stock Management Guide" the first time stock management is mentioned).
+2. **One or two links sideways** to a relevant post in a different pillar where it naturally fits (e.g. post #14 on wastage can link to post #2 on inventory software features).
+3. **One link to a relevant homepage anchor** (`/#stock-management`, `/#gst-billing`, `/#live-gps-tracking`, etc. — these anchors already exist on the homepage per the confirmed Footer/`page.tsx` links) or `/register`, placed naturally where the product solves the problem just described — never as a disconnected "click here."
+
+This internal-link discipline is what turns 32 separate articles into one coherent topical structure search engines can read as authority, instead of 32 isolated pages.
+
+---
+
+## 8. THE CORNERSTONE SAMPLE POST — WHAT WAS BUILT AND WHY
+
+Post #1 from the table above — **"Best Ice Cream Business Software in India (2026 Guide)"** — was written in full as the proof-of-pattern and is delivered as a companion file: `best-ice-cream-business-software-india.md`, ready to drop into `src/content/blog/` exactly as-is.
+
+It was built to demonstrate every rule in this plan simultaneously:
+- Frontmatter fully populated against the §6.1 schema, including 5 FAQ entries (renders as visible FAQ section + `FAQPage` schema automatically — no extra work needed on the page template side)
+- ~2,000 words, structured with `##`/`###` headings a reader can scan
+- Primary keyword ("ice cream business software India") present in the title, the first 100 words, one H2, and the meta description — without keyword-stuffing the body
+- A genuine, useful buyer's-guide structure (what to look for → comparison angle → why purpose-built beats generic → FAQ) rather than a thinly-disguised ad — IceSaathi is mentioned naturally, not in every paragraph
+- Internal links to two other planned posts in the calendar and to two homepage feature anchors, per the §7.5 rule
+- A meta title and meta description both within the character limits noted in §6.1's interface comments
+
+**Use this file as the literal template for the remaining 31 posts.** For each one, follow the same shape: open by directly answering the implied search query in the first 2–3 sentences (this is what gets quoted in Google's featured snippets and in AI answer engines — see §12), build out the depth with real specifics relevant to the Indian ice cream trade, end with a genuine FAQ block, and close with the same `/register` CTA pattern already built into the page template (so individual posts don't need to repeat the CTA in their markdown body — `[slug].md` files should focus purely on educational content; the CTA is rendered automatically by `src/app/blog/[slug]/page.tsx`).
+
+---
+
+## 9. CONTENT BRIEF TEMPLATE FOR THE REMAINING 31 POSTS
+
+When generating each remaining post (with this same AI tool, or a future writing pass), feed it this exact brief structure pulled from the §7.4 table row for that post:
+
+```
+Write an in-depth blog post for the IceSaathi blog (an ice cream business
+management SaaS in India). Audience: ice cream shop owners, wholesalers,
+and distributors in India — practical, non-technical readers.
+
+Title: <title from table>
+Slug: <slug from table>
+Category: <pillar category from table>
+Primary keyword: <primary keyword from table>
+Secondary keywords: <secondary keywords from table>
+Target length: <words from table>+ words
+Funnel stage: <intent from table>
+
+Requirements:
+- Answer the core question in the first 2-3 sentences (snippet-friendly)
+- Use ## for section headings, ### for sub-points
+- Include real, India-specific specifics (rupee figures, GST context,
+  FSSAI/local regulation mentions where relevant) — never generic filler
+- Naturally link to the pillar post for this cluster: <pillar slug>
+- Naturally link to 1-2 relevant homepage anchors (#gst-billing,
+  #stock-management, #customer-ledger, #live-gps-tracking,
+  #sales-analytics, #delivery-partner-management) where IceSaathi
+  genuinely solves the problem being discussed
+- End with a "faqs" list of 4-6 real questions a buyer would ask,
+  each answered in 2-4 sentences
+- Output as a single .md file matching the exact frontmatter schema
+  in src/lib/blog.ts (IBlogFrontmatter) — see
+  best-ice-cream-business-software-india.md as the format reference
+- metaTitle ≤ 60 characters, metaDescription ≤ 155 characters
+- Do not repeat the product CTA inside the body — the page template
+  renders it automatically
+```
+
+This brief format is deliberately copy-pasteable so any AI coding/writing tool can take one row of the §7.4 table and produce a publish-ready `.md` file without further instructions.
+
+
+---
+
+## 10. IMAGE STRATEGY
+
+Each post needs one cover image at `public/blog/<slug>/cover.jpg` (1200×630px — matches the OG-image ratio already used by `layout.tsx`, so the same file works as both the in-page hero and the social-share preview).
+
+Options, in order of recommendation:
+1. **Royalty-free stock photography** (Unsplash, Pexels — both free for commercial use, no attribution legally required) searched for the post's literal subject (e.g. "ice cream shop India," "frozen dessert wholesale," "delivery scooter India"). Fastest, zero cost, looks professional.
+2. **A simple branded graphic** made in Canva using the existing brand blue (`#2563eb`, confirmed as the theme-color in `layout.tsx`) with the post title as text-on-image — works well for more abstract topics (e.g. "GST Rate on Ice Cream" doesn't have an obvious photo subject).
+3. **AI-generated imagery**, if the AI tool implementing this plan has an image-generation capability available — useful for dashboard-style mockup illustrations that don't exist as stock photos.
+
+**Always write specific, keyword-relevant `coverImageAlt` text** — never `"blog cover"` or the filename. This is free, easy alt-text SEO that the frontmatter schema already requires (`coverImageAlt` is non-optional in `IBlogFrontmatter`).
+
+---
+
+## 11. ON-PAGE SEO CHECKLIST — RUN THIS FOR EVERY SINGLE POST BEFORE PUBLISHING
+
+| ✓ | Check |
 |---|---|
-| `best software for ice cream business` | `page.tsx` h1, FAQ answer, CTA section |
-| `ice cream inventory management software` | `layout.tsx` keywords, JSON-LD featureList |
-| `ice cream billing software India` | `layout.tsx` keywords, `page.tsx` meta description |
-| `IceSaathi` | Every title, h1, footer, JSON-LD name, alternateNames |
-| `GST billing for ice cream` | Feature section heading, FAQ, JSON-LD |
-| `ice cream wholesale software` | Hero subheading, Benefits section, JSON-LD |
-| `ice cream delivery tracking software` | Feature section, FAQ answer |
-| `ice cream distributor software` | layout.tsx keywords, hero p tag |
-| `inventory management software India` | layout.tsx keywords, JSON-LD |
-| `best inventory management software` | page.tsx hero h1 (implied), FAQ |
+| ☐ | Primary keyword appears in `title`, in the first 100 words of the body, and in at least one `##` heading |
+| ☐ | `metaTitle` ≤ 60 characters (Google truncates beyond this) |
+| ☐ | `metaDescription` ≤ 155 characters, written as a genuine reason to click — not a keyword list |
+| ☐ | `slug` is short, lowercase, hyphenated, and contains the primary keyword where natural |
+| ☐ | Exactly one `<h1>` on the page (rendered automatically from `title` — do not add a `#` H1 inside the markdown body) |
+| ☐ | At least 2 internal links in the body per the §7.5 rule (one up to pillar, one sideways or to a homepage anchor) |
+| ☐ | `coverImageAlt` is descriptive and keyword-relevant, never empty |
+| ☐ | `faqs` array has 4+ real questions — powers both the visible FAQ section and `FAQPage` schema |
+| ☐ | No keyword stuffing — read it aloud; if a phrase repeats unnaturally, cut it |
+| ☐ | `publishedAt` is set to the actual intended publish date (drives sitemap `lastModified` and RSS `pubDate`) |
+| ☐ | `draft: false` before merging (defaults to excluded from sitemap/listings while `true`) |
 
 ---
 
-## SEO SCORING CHECKLIST
+## 12. TECHNICAL SEO & INDEXING CHECKLIST — ONE-TIME SETUP + PER-POST ROUTINE
 
-After implementation, verify these are all true:
+### One-time setup (do this once, immediately after the first deploy with blog pages live)
 
-- [ ] `<title>` contains "IceSaathi" + "best" + "ice cream" + "India"
-- [ ] `<meta name="description">` is 150-160 characters and contains primary keyword
-- [ ] `<h1>` on homepage contains primary keyword
-- [ ] JSON-LD `SoftwareApplication` schema is valid (test at schema.org/validator)
-- [ ] JSON-LD `FAQPage` schema is valid
-- [ ] `robots.txt` is accessible at `https://www.icesaathi.co.in/robots.txt`
-- [ ] `sitemap.xml` is accessible at `https://www.icesaathi.co.in/sitemap.xml`
-- [ ] 301 redirect from `icesaathi.co.in` → `www.icesaathi.co.in` works
-- [ ] OG image exists at `https://www.icesaathi.co.in/og-image.png`
-- [ ] Google Search Console property verified and sitemap submitted
-- [ ] Page loads in under 3 seconds (check with PageSpeed Insights)
-- [ ] All 11 FAQ items are visible in the HTML source (not hidden behind JS)
-- [ ] "IceSaathi" brand name appears 15+ times across the public page
-- [ ] `canonical` link points to `https://www.icesaathi.co.in/`
-
----
-
-## EXPECTED RESULTS TIMELINE
-
-| Timeline | Expected Result |
+| ✓ | Task |
 |---|---|
-| Day 1–3 | Google crawls and indexes the homepage |
-| Week 1–2 | Branded keyword "IceSaathi" starts appearing in Google |
-| Week 2–4 | Long-tail keywords like "ice cream billing software India" start ranking on page 2-3 |
-| Month 2–3 | "ice cream inventory management software" reaches page 1 (low competition) |
-| Month 3–6 | "best software for ice cream business" reaches top 5 (very low competition niche) |
-| Month 6+ | "inventory management software India" improves (high competition, takes longer) |
+| ☐ | Verify the property in **Google Search Console** (if not already done — `layout.tsx` has an empty `verification.google` field ready for the token) |
+| ☐ | Submit `https://www.icesaathi.co.in/sitemap.xml` in GSC → Sitemaps (it will now reflect the dynamic version from §6.7 automatically) |
+| ☐ | Register the same site in **Bing Webmaster Tools** (Bing also powers Yahoo and is a meaningful share of India search traffic) and submit the same sitemap |
+| ☐ | Run the homepage and one blog post through **Google's Rich Results Test** (`search.google.com/test/rich-results`) to confirm the `BlogPosting`, `BreadcrumbList`, and `FAQPage` JSON-LD all validate with no errors |
+| ☐ | Confirm `robots.txt` is reachable at `/robots.txt` and the updated `Allow: /blog/` line is present |
+
+### Per-post routine (after each new post is deployed)
+
+| ✓ | Task |
+|---|---|
+| ☐ | In GSC, use **URL Inspection → Request Indexing** for the new post URL — this is the single fastest way to get a brand-new page crawled, often within hours instead of waiting for natural recrawl |
+| ☐ | Confirm the post appears in `https://www.icesaathi.co.in/sitemap.xml` after the deploy finishes |
+| ☐ | Confirm the post appears in `https://www.icesaathi.co.in/blog/rss.xml` |
+| ☐ | Spot-check the canonical tag on the live page matches the post's own URL (prevents duplicate-content confusion) |
+
+### Core Web Vitals note
+Because every blog page is statically generated (`generateStaticParams`) and served as pre-built HTML from Vercel's edge network, Core Web Vitals should be strong by default — no client-side data fetching, no loading spinners, no layout shift from late-arriving content. The one thing to watch is image weight: always use `next/image` (already used throughout §6.3–6.4) and keep cover images under ~200KB after compression.
 
 ---
 
-*End of IceSaathi SEO Implementation Plan — softvibeservices@gmail.com*
+## 13. AEO — ANSWER ENGINE OPTIMIZATION (BEING CITED BY CHATGPT, PERPLEXITY, GOOGLE AI OVERVIEWS)
+
+Traditional SEO gets a page ranked in a list of blue links. AEO is about a page being the source an AI assistant actually quotes or summarizes when someone asks it the equivalent question conversationally ("what's the best software for an ice cream shop in India," "how do I calculate GST on ice cream"). This plan already does most of what AEO requires, because the two disciplines overlap heavily:
+
+| AEO requirement | Already satisfied by |
+|---|---|
+| Direct, extractable answers near the top of the page | §9 brief requires answering the core question in the first 2–3 sentences |
+| Structured, machine-readable Q&A | `FAQPage` JSON-LD in §6.4, generated automatically from each post's `faqs` array |
+| Clear authorship/organization attribution | `BlogPosting` schema's `author`/`publisher` fields (§6.4) |
+| Fast, crawlable, JS-independent content | Static generation — the full article HTML is in the initial response, no client-side rendering needed to read it |
+| Specific, factual claims rather than vague marketing copy | §9 brief explicitly requires "real, India-specific specifics," not filler |
+
+**One additional, low-effort step worth doing:** create a plain-text `public/llms.txt` file — an emerging (not yet universally adopted) convention some AI crawlers check for a concise, structured summary of what a site is and what its key pages cover. This costs almost nothing to add and provides no downside:
+
+```
+# public/llms.txt
+# IceSaathi — Ice Cream Business Management Software (India)
+
+> IceSaathi is inventory, GST billing, customer ledger, delivery
+> tracking and sales analytics software built specifically for ice
+> cream wholesalers, distributors and shop owners in India.
+
+## Key pages
+- Homepage & product overview: https://www.icesaathi.co.in/
+- Blog (guides on GST, inventory, starting an ice cream business): https://www.icesaathi.co.in/blog
+- Free trial signup: https://www.icesaathi.co.in/register
+```
+
+This is genuinely optional and low-priority relative to everything else in this plan — list it as a Phase 3 nice-to-have (§16), not a blocker.
+
+---
+
+## 14. INTERNAL LINKING & SITE ARCHITECTURE (FULL PICTURE)
+
+```
+                         Homepage (/)
+                              │
+                "From the Blog" teaser (§6.11, latest 3 posts)
+                              │
+                              ▼
+                        /blog (index)
+                  │           │           │
+           category filter   pagination   "All categories" chips
+                  │
+                  ▼
+        /blog/category/<pillar>
+                  │
+                  ▼
+         /blog/<post-slug>  ──────► links UP to its pillar post
+                  │           ──────► links SIDEWAYS to 1-2 related cluster posts
+                  │           ──────► links to homepage feature anchors (#gst-billing, etc.)
+                  │           ──────► CTA block → /register
+                  ▼
+         "Related Articles" (same-category posts, auto-generated by getRelatedPosts)
+```
+
+Navbar and Footer (§6.10) put `/blog` exactly two clicks from anywhere on the site, including from inside the dashboard's marketing-facing pages — this matters because internal link depth is itself a minor ranking factor; nothing in this plan is buried more than two clicks from the homepage.
+
+---
+
+## 15. ANALYTICS & CONVERSION TRACKING
+
+This repo has no analytics package in `package.json` currently. Adding **Google Analytics 4** (free, standard) is recommended alongside this blog launch so the metrics in §1 are actually measurable:
+
+1. Create a GA4 property, get the Measurement ID (`G-XXXXXXXXXX`).
+2. Add the GA4 script tag to `src/app/layout.tsx`'s `<head>`, alongside the existing `<meta>` tags — this is the one place in this entire plan that touches `layout.tsx`, and it's additive only (no existing tag removed):
+
+```tsx
+<script async src={`https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX`} />
+<script
+  dangerouslySetInnerHTML={{
+    __html: `
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-XXXXXXXXXX');
+    `,
+  }}
+/>
+```
+
+3. In GA4, watch two reports specifically:
+   - **Engagement → Pages and screens**, filtered to pages starting with `/blog` — tells you which posts actually get read
+   - **A custom event on the CTA button** — add `onClick={() => window.gtag?.('event', 'blog_cta_click', { post_slug: post.slug })}` to the "Start Free Trial" link inside `src/app/blog/[slug]/page.tsx` (§6.4) — this is the single most important number in this whole plan: **how many free-trial signups actually originate from a blog post.**
+
+4. In **Google Search Console → Performance**, filter to page path containing `/blog/` to see impressions, clicks, and average position **per keyword** — this is how you find out, post by post, which of the §7.4 keyword targets are actually working and which need a rewrite.
+
+---
+
+## 16. PHASED ROLLOUT TIMELINE
+
+| Phase | Timeframe | Scope |
+|---|---|---|
+| **Phase 0 — Build** | Week 1 | Everything in §5–§6: dependencies, `blog.ts`, all 5 new pages/routes, Navbar/Footer/homepage edits, sitemap replacement, robots update. Deploy with **one** post live (the §8 sample) to verify the whole pipeline end-to-end — schema validates, sitemap includes it, RSS includes it, homepage teaser shows it, category page works. |
+| **Phase 1 — Foundation content** | Weeks 2–3 | Publish the 6 pillar posts (#1, 7, 13, 19, 26, 31) + the highest-priority cluster posts marked "Phase 1" in §7.4 (#2, 8, 12, 20, 25) — 11 posts total. These are the posts most directly tied to product features and highest commercial intent. |
+| **Phase 2 — Cluster expansion** | Weeks 4–6 | Publish all remaining "Phase 2" posts from §7.4 (10 posts) — fills out each pillar's supporting cluster. |
+| **Phase 3 — Long tail + extras** | Weeks 7–9 | Remaining "Phase 3" posts (10 posts) + the two extra P6 cluster posts noted in §7.4 + the optional `llms.txt` from §13. |
+| **Ongoing** | Monthly | 2–4 new posts/month based on what GSC Performance data (§15) shows is actually getting impressions — double down on keyword variants of whatever is already getting traction rather than only following the original 32-post list rigidly. |
+
+Submit each post for indexing (§12 per-post routine) the same day it's deployed — do not batch-publish and forget to request indexing, that's the most common reason new content sits un-indexed for weeks.
+
+---
+
+## 17. OFF-PAGE / DISTRIBUTION (INDIA-SPECIFIC)
+
+Content alone does not rank without at least some external signal. Realistic, low-cost options for a bootstrapped India B2B SaaS:
+
+- **Business directories with real traffic**: IndiaMART and JustDial listings for IceSaathi/SoftVibe Services, linking to the homepage — relevant because the existing JSON-LD already declares an `Organization` entity these directories can match against.
+- **Quora India**: answer real questions in the ice cream/food-business space ("how to manage stock for an ice cream shop," "best billing software for small food business India") with a genuinely helpful answer that links to the *specific relevant blog post*, not the homepage — this also doubles as a way to validate which questions in §7 are actually being asked.
+- **Reddit** (r/IndiaBusiness, r/smallbusiness) — same approach, helpful-first, link second, and only where it fits the conversation naturally; spammy link-dropping gets removed and can backfire.
+- **LinkedIn**: share each new post from the SoftVibe Services / IceSaathi page — B2B SaaS audiences (distributors, wholesalers) are reasonably active here.
+- **Local food-business Facebook groups**: ice cream and frozen-dessert business owner groups exist in most major Indian cities — share genuinely useful posts (e.g. the GST or FSSAI ones), not the product pitch.
+- **Guest posts / mentions on food-business and small-business blogs**: slower to land but a genuine backlink from a relevant site is worth more than dozens of directory links.
+
+None of this needs to happen before Phase 1 content goes live — content has to exist before it can be distributed. Sequence distribution to start in parallel with Phase 2.
+
+---
+
+## 18. ACCEPTANCE CRITERIA / FINAL QA CHECKLIST
+
+Before calling this implementation done, confirm every item:
+
+| ✓ | Check |
+|---|---|
+| ☐ | `npm run build` completes with no errors after adding all new files and the 5 new dependencies |
+| ☐ | `/blog` loads, shows the sample post, category chips work, pagination renders correctly with only 1 post (i.e. doesn't crash on edge cases) |
+| ☐ | `/blog/best-ice-cream-business-software-india` loads, shows correct H1, cover image, rendered markdown body, FAQ section, and CTA |
+| ☐ | View source on the post confirms the `<script type="application/ld+json">` block is present and contains `BlogPosting`, `BreadcrumbList`, and `FAQPage` |
+| ☐ | `/sitemap.xml` loads and includes the homepage, the 4 original static URLs, `/blog`, the sample post URL, and its category URL |
+| ☐ | `public/sitemap.xml` no longer exists in the repo (deleted, not just empty) |
+| ☐ | `/blog/rss.xml` loads valid XML with the sample post as an `<item>` |
+| ☐ | `/robots.txt` shows the new `Allow: /blog/` line and unchanged `Disallow` rules for `/dashboard/`, `/admin/`, `/api/` |
+| ☐ | Navbar shows "Blog" on desktop and inside the mobile menu; clicking it navigates correctly from every existing page |
+| ☐ | Footer "Product" column shows "Blog" |
+| ☐ | Homepage shows the "From the Blog" section with the sample post, positioned just above the existing footer |
+| ☐ | Existing dashboard, admin, auth, and payment flows are completely unaffected — spot-check `/login`, `/register`, and one dashboard page still work exactly as before |
+| ☐ | Google Rich Results Test passes with zero errors on the sample post URL |
+
+---
+
+## 19. FILE MANIFEST (FINAL — MATCHES §4, restated for quick copy-paste into a task list)
+
+```
+CREATE
+  src/lib/blog.ts
+  src/content/blog/.gitkeep
+  src/content/blog/best-ice-cream-business-software-india.md   ← companion file, full content ready
+  src/app/blog/page.tsx
+  src/app/blog/[slug]/page.tsx
+  src/app/blog/category/[category]/page.tsx
+  src/app/blog/components/BlogCard.tsx
+  src/app/blog/rss.xml/route.ts
+  src/app/sitemap.ts
+  public/blog/best-ice-cream-business-software-india/cover.jpg  ← source per §10
+  public/llms.txt                                                ← optional, Phase 3
+
+MODIFY
+  package.json                  (+5 deps, §5)
+  src/app/globals.css            (+1 line, §6.13)
+  src/app/components/Navbar.tsx  (+2 Link blocks, §6.10)
+  src/app/components/Footer.tsx  (+1 Link, §6.10)
+  src/app/page.tsx               (+import, +1 line, +1 section, §6.11)
+  public/robots.txt              (+1 line, §6.9)
+  src/app/layout.tsx             (+GA4 script, §15 — only if analytics is added)
+
+DELETE
+  public/sitemap.xml             (§6.7 — replaced by src/app/sitemap.ts)
+```
+
+---
+
+### Then, for ongoing content production:
+For each of the remaining 31 posts in §7.4, run the §9 brief through the AI tool, save the output to `src/content/blog/<slug>.md`, source/create a cover image at `public/blog/<slug>/cover.jpg`, run it through the §11 on-page checklist, commit, push, and run the §12 per-post indexing routine. That loop — one file, one image, one commit — is the entire "easily integrable" publishing workflow this plan was built to deliver.
