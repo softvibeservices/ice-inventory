@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /verify-account
+Disallow: /verify-otp
+
+Sitemap: https://www.icesaathi.co.in/sitemap.xml
+
+# IceSaathi — Best Software for Ice Cream Business in India
+# https://www.icesaathi.co.in

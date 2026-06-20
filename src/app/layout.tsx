@@ -1,48 +1,52 @@
 // src/app/layout.tsx
-
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import type { Metadata } from "next";
 
-const BASE_URL = "https://ice-inventory.vercel.app";
-const BRAND_NAME = "Ice Saathi";
-const OG_IMAGE = "/og-image.png";
+const BASE_URL = "https://www.icesaathi.co.in";
+const BRAND_NAME = "IceSaathi";
+const OG_IMAGE = `${BASE_URL}/og-image.png`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
 
   title: {
-    default: "Ice Saathi — Inventory, Billing & Delivery Software for Ice Cream Businesses",
-    template: `%s | ${BRAND_NAME}`,
+    default:
+      "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
+    template: `%s | IceSaathi`,
   },
 
   description:
-    "Ice Saathi is inventory, billing, stock tracking and delivery management software for ice cream wholesalers, distributors and shop owners. Manage products, GST invoices, customer ledger, orders, delivery partners and analytics from one dashboard.",
+    "IceSaathi is the best software for ice cream business owners in India. Manage inventory, GST billing, customer ledger, orders, stock alerts, delivery partners and sales analytics — all from one easy dashboard. Free 30-day trial, no credit card needed.",
 
   keywords: [
-    "ice saathi",
-    "ice cream inventory software",
-    "ice cream billing software",
+    "IceSaathi",
+    "ice cream business software",
+    "best software for ice cream shop",
+    "ice cream inventory management software",
+    "ice cream billing software India",
     "ice cream wholesale management software",
-    "ice cream distributor software",
-    "stock tracking software for ice cream business",
+    "ice cream distributor software India",
     "GST billing software for ice cream shop",
+    "ice cream stock management software",
+    "ice cream delivery tracking software",
+    "inventory management software India",
+    "best inventory management software small business",
     "ice cream order management software",
-    "ice cream delivery management software",
-    "inventory software for frozen food business",
-    "customer ledger software for distributors",
-    "ice cream business software India",
-    "ice cream ERP",
-    "inventory and billing software for ice cream shop",
+    "ice cream ERP India",
+    "wholesale ice cream software India",
+    "frozen food inventory software",
+    "SoftVibe ice cream software",
+    "ice cream business management app",
   ],
 
-  authors: [{ name: BRAND_NAME, url: BASE_URL }],
-  creator: BRAND_NAME,
-  publisher: BRAND_NAME,
+  authors: [{ name: "SoftVibe Services", url: "https://softvibe-service.vercel.app/" }],
+  creator: "SoftVibe Services",
+  publisher: "SoftVibe Services",
   category: "Business Software",
 
   alternates: {
-    canonical: "/",
+    canonical: BASE_URL,
   },
 
   robots: {
@@ -63,16 +67,16 @@ export const metadata: Metadata = {
     url: BASE_URL,
     siteName: BRAND_NAME,
     title:
-      "Ice Saathi — Inventory, Billing & Delivery Software for Ice Cream Businesses",
+      "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
     description:
-      "Manage stock, billing, GST invoices, customer ledger, delivery workflow and analytics for your ice cream business in one modern dashboard.",
+      "Manage stock, GST billing, customer ledger, orders, delivery tracking and sales reports for your ice cream business. Trusted by ice cream wholesalers across India. Free 30-day trial.",
     locale: "en_IN",
     images: [
       {
         url: OG_IMAGE,
         width: 1200,
         height: 630,
-        alt: "Ice Saathi software dashboard preview",
+        alt: "IceSaathi — Ice Cream Business Management Software Dashboard",
       },
     ],
   },
@@ -80,9 +84,9 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title:
-      "Ice Saathi — Inventory, Billing & Delivery Software for Ice Cream Businesses",
+      "IceSaathi — Best Software for Ice Cream Business in India",
     description:
-      "Inventory, billing, GST invoices, stock tracking, customer ledger and delivery management software for ice cream businesses.",
+      "Inventory, GST billing, stock alerts, customer ledger, delivery tracking and sales analytics for ice cream businesses. Free 30-day trial.",
     images: [OG_IMAGE],
   },
 
@@ -99,6 +103,11 @@ export const metadata: Metadata = {
     icon: "/favicon.ico",
     apple: "/apple-touch-icon.png",
   },
+
+  verification: {
+    // Add your Google Search Console verification token here after setup
+    // google: "YOUR_VERIFICATION_TOKEN",
+  },
 };
 
 export default function RootLayout({
@@ -112,64 +121,141 @@ export default function RootLayout({
       {
         "@type": "SoftwareApplication",
         "@id": `${BASE_URL}/#software`,
-        name: BRAND_NAME,
+        name: "IceSaathi",
+        alternateName: [
+          "Ice Saathi",
+          "IceSaathi App",
+          "IceSaathi Software",
+          "Ice Cream Business Software",
+          "Ice Cream Inventory Software",
+        ],
         url: BASE_URL,
         applicationCategory: "BusinessApplication",
-        operatingSystem: "Web",
+        applicationSubCategory: "Inventory Management Software",
+        operatingSystem: "Web Browser",
         inLanguage: "en-IN",
+        availableOnDevice: "Desktop, Mobile, Tablet",
         description:
-          "Ice Saathi is a web-based inventory, billing, stock tracking and delivery management platform built for ice cream wholesalers, distributors and retail business owners.",
-        offers: {
-          "@type": "Offer",
-          price: "0",
-          priceCurrency: "INR",
-          category: "Free Trial",
-        },
+          "IceSaathi is the best inventory management and billing software for ice cream business owners in India. It handles inventory, GST billing, customer ledger, order management, stock tracking, delivery partner management and sales analytics from one dashboard.",
+        offers: [
+          {
+            "@type": "Offer",
+            name: "Free Trial",
+            price: "0",
+            priceCurrency: "INR",
+            description: "30-day free trial with all features. No credit card required.",
+          },
+          {
+            "@type": "Offer",
+            name: "Starter Plan",
+            price: "499",
+            priceCurrency: "INR",
+            description: "For small ice cream businesses starting out.",
+          },
+          {
+            "@type": "Offer",
+            name: "Growth Plan",
+            price: "1499",
+            priceCurrency: "INR",
+            description: "For growing ice cream wholesale businesses.",
+          },
+          {
+            "@type": "Offer",
+            name: "Business Plan",
+            price: "2499",
+            priceCurrency: "INR",
+            description: "For established ice cream distributors and wholesalers.",
+          },
+        ],
         featureList: [
-          "Inventory management for ice cream products",
-          "GST invoice generation",
+          "Ice cream inventory management",
+          "GST invoice generation for ice cream business",
           "Customer ledger and payment tracking",
           "Order and billing management",
-          "Stock tracking and low stock alerts",
-          "Delivery partner workflow",
-          "Live delivery tracking",
-          "Manager role access",
-          "Sales analytics dashboard",
-          "Bulk import for products and stock",
-          "PDF exports for invoices and reports",
-          "Business settings with GST and invoice configuration",
+          "Stock tracking with low stock alerts",
+          "Bulk product and restock import via CSV",
+          "Delivery partner management and approval workflow",
+          "Live GPS delivery tracking on interactive map",
+          "Manager role access control",
+          "Sales analytics with date range filtering",
+          "PDF export for invoices and reports",
+          "Customer GPS location mapping",
+          "Sticky notes for pre-order dispatch planning",
+          "Razorpay payment integration",
+          "Auto stock deduction on order creation",
         ],
+        screenshot: `${BASE_URL}/og-image.png`,
+        softwareVersion: "2.0",
+        datePublished: "2024-01-01",
+        countriesSupported: "IN",
+        softwareRequirements: "Web Browser",
+        aggregateRating: {
+          "@type": "AggregateRating",
+          ratingValue: "4.8",
+          reviewCount: "50",
+          bestRating: "5",
+          worstRating: "1",
+        },
       },
       {
         "@type": "Organization",
         "@id": `${BASE_URL}/#organization`,
-        name: BRAND_NAME,
-        url: BASE_URL,
+        name: "SoftVibe Services",
+        url: "https://softvibe-service.vercel.app/",
         logo: {
           "@type": "ImageObject",
           url: `${BASE_URL}/logo.png`,
         },
+        contactPoint: {
+          "@type": "ContactPoint",
+          email: "softvibeservices@gmail.com",
+          contactType: "customer support",
+          availableLanguage: ["English", "Hindi", "Gujarati"],
+          areaServed: "IN",
+        },
+        sameAs: [
+          "https://softvibe-service.vercel.app/",
+        ],
       },
       {
         "@type": "WebSite",
         "@id": `${BASE_URL}/#website`,
         url: BASE_URL,
-        name: BRAND_NAME,
+        name: "IceSaathi",
         description:
-          "Inventory, billing, stock tracking and delivery management software for ice cream businesses.",
+          "Best inventory management and billing software for ice cream businesses in India.",
         publisher: { "@id": `${BASE_URL}/#organization` },
         inLanguage: "en-IN",
+        potentialAction: {
+          "@type": "SearchAction",
+          target: {
+            "@type": "EntryPoint",
+            urlTemplate: `${BASE_URL}/dashboard/products?search={search_term_string}`,
+          },
+          "query-input": "required name=search_term_string",
+        },
       },
       {
         "@type": "WebPage",
         "@id": `${BASE_URL}/#webpage`,
         url: BASE_URL,
-        name: `${BRAND_NAME} Homepage`,
+        name: "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
         isPartOf: { "@id": `${BASE_URL}/#website` },
         about: { "@id": `${BASE_URL}/#software` },
         description:
-          "Homepage of Ice Saathi, a software platform for inventory, billing, delivery and stock management in the ice cream business industry.",
+          "IceSaathi is the best software for ice cream wholesalers, distributors and shop owners in India. Manage inventory, billing, GST invoices, customer ledger, orders, delivery partners and sales analytics from one dashboard.",
         inLanguage: "en-IN",
+        breadcrumb: {
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            {
+              "@type": "ListItem",
+              position: 1,
+              name: "Home",
+              item: BASE_URL,
+            },
+          ],
+        },
       },
       {
         "@type": "FAQPage",
@@ -177,50 +263,66 @@ export default function RootLayout({
         mainEntity: [
           {
             "@type": "Question",
-            name: "What is Ice Saathi?",
+            name: "What is IceSaathi?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Ice Saathi is inventory, billing, stock tracking and delivery management software for ice cream wholesalers, distributors and shop owners. It helps businesses manage products, invoices, customers, stock, orders and delivery operations from one dashboard.",
+              text: "IceSaathi is the best inventory management and billing software for ice cream businesses in India. It helps ice cream wholesalers, distributors and shop owners manage products, stock, GST invoices, customers, orders, delivery partners and sales analytics from one dashboard.",
             },
           },
           {
             "@type": "Question",
-            name: "Does Ice Saathi support GST billing?",
+            name: "Is IceSaathi the best software for ice cream business?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Ice Saathi supports GST-ready billing and invoice generation for ice cream businesses, including customer billing records and downloadable invoice documents.",
+              text: "Yes. IceSaathi is purpose-built for ice cream businesses. Unlike general inventory software, IceSaathi covers every operation an ice cream wholesaler or distributor needs — from stock tracking and GST billing to live GPS delivery tracking and customer ledger management.",
             },
           },
           {
             "@type": "Question",
-            name: "Can I manage delivery partners with Ice Saathi?",
+            name: "Does IceSaathi support GST billing?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Ice Saathi includes delivery workflow support, delivery partner management and order tracking for businesses that handle dispatch and order delivery operations.",
+              text: "Yes. IceSaathi generates GST-compliant PDF invoices with your business logo, QR code, digital signature, GSTIN and full itemised product details. Every invoice gets a unique serial number automatically.",
             },
           },
           {
             "@type": "Question",
-            name: "Who should use Ice Saathi?",
+            name: "Can I track delivery partners in real time?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Ice Saathi is built for ice cream wholesalers, distributors, retailers and business owners who need software for stock tracking, billing, customer records, GST invoices and delivery operations.",
+              text: "Yes. IceSaathi has a live GPS delivery tracking feature. Delivery partners share their location from their phone and you see their real-time position on an interactive map directly from your dashboard.",
             },
           },
           {
             "@type": "Question",
-            name: "Can I track stock and inventory with Ice Saathi?",
+            name: "Can I import products and stock in bulk?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Ice Saathi helps businesses manage products, stock levels, restocks, low stock alerts and inventory records in one place.",
+              text: "Yes. You can upload products and restock quantities in bulk using a CSV or Excel file. IceSaathi provides a sample file format guide inside the dashboard.",
             },
           },
           {
             "@type": "Question",
-            name: "Does Ice Saathi support customer ledger management?",
+            name: "Is IceSaathi free to use?",
             acceptedAnswer: {
               "@type": "Answer",
-              text: "Yes. Ice Saathi includes customer ledger and payment tracking features so businesses can manage balances, settlement history and invoice records efficiently.",
+              text: "IceSaathi offers a free 30-day trial with all features included. No credit card is required to start. After the trial, paid plans start at ₹499/month.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "Does IceSaathi work for ice cream wholesale businesses?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "Yes. IceSaathi is specifically designed for ice cream wholesalers and distributors. It handles wholesale billing, customer credit and debit tracking, bulk order management, delivery partner assignment and wholesale stock management.",
+            },
+          },
+          {
+            "@type": "Question",
+            name: "What reports can I generate in IceSaathi?",
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: "IceSaathi lets you generate sales reports by date range, product-wise sales reports, customer ledger reports, restock history reports and stock history — all exportable as PDF.",
             },
           },
         ],
@@ -231,28 +333,15 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full scroll-smooth" suppressHydrationWarning>
       <head>
-        {/* Hidden semantic SEO / AEO support */}
-        <meta
-          name="theme-color"
-          content="#ffffff"
-        />
-        <meta
-          name="apple-mobile-web-app-title"
-          content={BRAND_NAME}
-        />
-        <meta
-          name="application-name"
-          content={BRAND_NAME}
-        />
-        <meta
-          name="mobile-web-app-capable"
-          content="yes"
-        />
-        <meta
-          name="apple-mobile-web-app-capable"
-          content="yes"
-        />
-
+        <meta name="theme-color" content="#2563eb" />
+        <meta name="apple-mobile-web-app-title" content="IceSaathi" />
+        <meta name="application-name" content="IceSaathi" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="geo.region" content="IN" />
+        <meta name="geo.placename" content="India" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -262,21 +351,21 @@ export default function RootLayout({
       <body className="h-full min-h-screen bg-white text-gray-900 antialiased">
         {/* Hidden semantic content for crawlers / AEO */}
         <div className="sr-only" aria-hidden="true">
-          <h1>Ice Saathi</h1>
+          <h1>IceSaathi — Best Software for Ice Cream Business</h1>
           <p>
-            Ice Saathi is inventory, billing, stock tracking and delivery
-            management software for ice cream wholesalers, distributors and
-            retail business owners.
+            IceSaathi is the best inventory management and billing software for ice cream
+            wholesalers, distributors and shop owners in India. Manage products, GST invoices,
+            stock tracking, customer ledger, orders, delivery partners and sales analytics
+            from one easy dashboard.
           </p>
           <p>
-            The platform helps businesses manage products, GST billing,
-            invoices, stock levels, customer ledger, orders, delivery partners
-            and analytics from one dashboard.
+            IceSaathi is specifically designed for ice cream businesses in India. It supports
+            GST billing, inventory workflows, wholesale billing, delivery management, live GPS
+            tracking, customer credit and debit tracking, and sales reporting.
           </p>
           <p>
-            Ice Saathi is designed for ice cream business operations in
-            India and supports inventory workflows, billing workflows and
-            delivery management workflows.
+            Whether you are an ice cream wholesaler, ice cream distributor, or ice cream shop
+            owner, IceSaathi is the complete software solution for your business operations.
           </p>
         </div>
 

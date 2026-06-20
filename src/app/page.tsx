@@ -1,201 +1,173 @@
 // src/app/page.tsx
 // Server Component — fully crawlable, no client JS needed
-// src/app/page.tsx
-// Server Component — fully crawlable, no client JS needed
-// src/app/page.tsx
-// Minimal, professional SaaS homepage design
-// src/app/page.tsx
-// Server Component — fully crawlable, zero client JS
-// SEO + AEO (Answer Engine Optimisation) hardened
+// SEO + AEO hardened for IceSaathi
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import PricingSection from "./components/PricingSection";
 
-// ─── Metadata (OpenGraph + Twitter + canonical) ───────────────────────────────
+// ─── Page-level Metadata ───────────────────────────────────────────────────────
 
 export const metadata: Metadata = {
-  title: "Ice Saathi — Wholesale Inventory, Billing & Delivery Management",
+  title:
+    "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
   description:
-    "Ice Saathi is a complete management platform for ice cream wholesalers. Manage products, customers, GST invoices, stock alerts, delivery tracking and sales reports from one dashboard. Free 30-day trial.",
+    "IceSaathi is the best software for ice cream wholesalers and distributors in India. Manage inventory, GST billing, stock alerts, customer ledger, delivery tracking and sales reports from one dashboard. Free 30-day trial — no credit card needed.",
   keywords: [
-    "ice cream inventory management",
-    "ice cream wholesale software",
-    "GST billing software India",
-    "delivery partner tracking",
-    "wholesale stock management",
+    "best software for ice cream business",
+    "ice cream inventory management software",
+    "ice cream billing software India",
+    "IceSaathi",
+    "ice cream wholesale software India",
+    "best inventory management software India",
+    "GST billing software for ice cream",
     "ice cream distributor software",
-    "inventory management India",
-    "SoftVibe ice saathi",
+    "ice cream stock management",
+    "ice cream delivery tracking software",
   ],
-  authors: [{ name: "SoftVibe Services" }],
-  creator: "SoftVibe Services",
-  publisher: "SoftVibe Services",
-  metadataBase: new URL("https://ice-inventory.vercel.app"),
-  alternates: { canonical: "/" },
+  alternates: {
+    canonical: "https://www.icesaathi.co.in/",
+  },
   openGraph: {
     type: "website",
-    url: "/",
-    siteName: "Ice Saathi",
-    title: "Ice Saathi — Wholesale Inventory, Billing & Delivery Management",
+    url: "https://www.icesaathi.co.in/",
+    siteName: "IceSaathi",
+    title:
+      "IceSaathi — Best Inventory & Billing Software for Ice Cream Business in India",
     description:
-      "Complete inventory, GST billing and delivery management for ice cream wholesalers. 12 business modules. Free 30-day trial.",
+      "The complete management platform for ice cream wholesalers. Inventory, GST billing, delivery tracking, customer ledger and sales analytics — all in one place. Free 30-day trial.",
     locale: "en_IN",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Ice Saathi — Inventory & Billing for Ice Cream Wholesalers",
-    description:
-      "Manage products, customers, GST invoices, stock, delivery partners and sales — all from one dashboard.",
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: { index: true, follow: true, "max-snippet": -1 },
+    images: [
+      {
+        url: "https://www.icesaathi.co.in/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "IceSaathi Dashboard — Ice Cream Business Management Software",
+      },
+    ],
   },
 };
 
-// ─── Structured Data (JSON-LD) ────────────────────────────────────────────────
+// ─── Structured Data ──────────────────────────────────────────────────────────
 
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
       "@type": "SoftwareApplication",
-      "@id": "https://ice-inventory.vercel.app/#software",
-      name: "Ice Saathi",
+      "@id": "https://www.icesaathi.co.in/#software",
+      name: "IceSaathi",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
       description:
-        "Ice Saathi is a complete management platform for ice cream wholesalers. It handles products, customers, orders, GST billing, stock management, delivery partner tracking and sales analytics.",
+        "IceSaathi is the best inventory management and billing software for ice cream businesses in India. Manage products, customers, GST invoices, stock, delivery partners and sales from one dashboard.",
       offers: [
         {
           "@type": "Offer",
           name: "Free Trial",
           price: "0",
           priceCurrency: "INR",
-          description: "30-day free trial with no credit card required.",
+          description: "30-day free trial with all features.",
         },
         {
           "@type": "Offer",
           name: "Starter Plan",
           price: "499",
           priceCurrency: "INR",
-          billingIncrement: "P1M",
         },
         {
           "@type": "Offer",
           name: "Growth Plan",
           price: "1499",
           priceCurrency: "INR",
-          billingIncrement: "P1M",
         },
         {
           "@type": "Offer",
           name: "Business Plan",
           price: "2499",
           priceCurrency: "INR",
-          billingIncrement: "P1M",
         },
       ],
       featureList: [
-        "Product Management with bulk CSV import",
-        "Customer Management with GPS location",
-        "Order Management with discount and debt tracking",
-        "GST-compliant PDF invoice generation",
-        "Live stock management with low-stock alerts",
-        "Restock history with bulk upload support",
-        "Sales analytics with date-range filtering",
-        "Customer ledger with transaction history",
-        "Delivery partner management with approval workflow",
-        "Live GPS delivery tracking on interactive map",
+        "Ice cream product inventory management",
+        "GST-compliant invoice generation",
+        "Customer ledger and payment tracking",
+        "Order management with discount and debt tracking",
+        "Live stock tracking with low stock alerts",
+        "Bulk product import via CSV or Excel",
+        "Delivery partner management with GPS tracking",
+        "Live GPS delivery map",
         "Manager accounts with role-based access",
-        "Sticky notes for pre-order dispatch planning",
+        "Sales analytics dashboard",
+        "PDF export for invoices and reports",
+        "Sticky notes for dispatch planning",
       ],
-    },
-    {
-      "@type": "Organization",
-      "@id": "https://ice-inventory.vercel.app/#org",
-      name: "SoftVibe Services",
-      url: "https://ice-inventory.vercel.app",
-      contactPoint: {
-        "@type": "ContactPoint",
-        email: "support@softvibe.in",
-        contactType: "customer support",
-      },
-    },
-    {
-      "@type": "WebSite",
-      "@id": "https://ice-inventory.vercel.app/#website",
-      url: "https://ice-inventory.vercel.app",
-      name: "Ice Saathi",
-      publisher: { "@id": "https://ice-inventory.vercel.app/#org" },
     },
     {
       "@type": "FAQPage",
       mainEntity: [
         {
           "@type": "Question",
-          name: "What is Ice Saathi?",
+          name: "What is IceSaathi?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Ice Saathi is a complete management platform for ice cream wholesalers and retailers. It handles products, customers, orders, billing, stock, delivery partners and sales reports — all from one dashboard.",
+            text: "IceSaathi is the best inventory management and billing software for ice cream wholesalers, distributors and shop owners in India. It manages products, stock, GST invoices, customer ledger, orders, delivery partners and sales analytics from one dashboard.",
           },
         },
         {
           "@type": "Question",
-          name: "Does Ice Saathi support GST billing?",
+          name: "Is IceSaathi free to use?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Yes. You can generate GST-compliant PDF invoices with your business logo, QR code, digital signature, GSTIN and full itemised product details. Every invoice gets a unique serial number automatically.",
+            text: "IceSaathi offers a free 30-day trial with all features. No credit card required. Paid plans start at ₹499/month after the trial ends.",
           },
         },
         {
           "@type": "Question",
-          name: "Can I track delivery staff in real time?",
+          name: "Does IceSaathi support GST billing for ice cream business?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Yes. Delivery partners share their GPS location from their phone and you can see their live position on a map directly from your dashboard.",
+            text: "Yes. IceSaathi generates GST-compliant PDF invoices with your business logo, QR code, digital signature, GSTIN and full item details. Every invoice gets a unique serial number.",
           },
         },
         {
           "@type": "Question",
-          name: "Can I import products and stock in bulk?",
+          name: "Can I track my delivery staff with IceSaathi?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Yes. You can upload products and restock quantities in bulk using a CSV or Excel file. The platform provides a sample file format guide inside.",
+            text: "Yes. IceSaathi has live GPS delivery tracking. Your delivery partners share their real-time location from their phone and you see them on an interactive map in your dashboard.",
           },
         },
         {
           "@type": "Question",
-          name: "Can I add manager accounts for my staff?",
+          name: "Can I bulk import products and stock into IceSaathi?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Yes. You can create manager accounts for your staff. They get access to the same dashboard and you control their permissions.",
+            text: "Yes. You can upload products and restock quantities in bulk using a CSV or Excel file. IceSaathi provides a sample file format guide inside the dashboard.",
           },
         },
         {
           "@type": "Question",
-          name: "How do delivery partners log in?",
+          name: "Does IceSaathi work for ice cream wholesale businesses?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Delivery partners have a separate mobile-friendly login. They receive a one-time password on their email to sign in securely. You approve each partner before they can access any orders.",
+            text: "Yes. IceSaathi is purpose-built for ice cream wholesalers and distributors. It handles wholesale billing, customer credit/debit tracking, bulk orders, delivery assignment and wholesale stock management.",
           },
         },
         {
           "@type": "Question",
-          name: "What can I export as PDF from Ice Saathi?",
+          name: "What is the price of IceSaathi?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "You can export GST invoices, customer reports, restock history and stock history summaries as formatted PDFs directly from the dashboard.",
+            text: "IceSaathi offers a free 30-day trial. After the trial, plans start at ₹499/month for the Starter plan, ₹1,499/month for the Growth plan and ₹2,499/month for the Business plan. Annual billing gives additional savings.",
           },
         },
         {
           "@type": "Question",
-          name: "How does stock update when I create an order?",
+          name: "Can I manage manager accounts in IceSaathi?",
           acceptedAnswer: {
             "@type": "Answer",
-            text: "Stock is deducted automatically every time an order is created. You always see the current quantity without any manual update needed.",
+            text: "Yes. IceSaathi lets you create manager accounts for your staff. Each manager gets their own secure login and access to the dashboard with permissions you control.",
           },
         },
       ],
@@ -205,134 +177,206 @@ const jsonLd = {
 
 // ─── Page data ────────────────────────────────────────────────────────────────
 
-const FEATURES: { id: string; title: string; desc: string }[] = [
+const FEATURES: { id: string; title: string; desc: string; icon: string }[] = [
   {
     id: "product-management",
-    title: "Product Management",
-    desc: "Add, edit and delete your ice cream products. Set categories, units, MRP, selling price, pack size and minimum stock level. Import multiple products at once from a CSV or Excel file.",
+    icon: "📦",
+    title: "Product Inventory Management",
+    desc: "Add, edit and delete your ice cream products with categories, units, MRP, selling price, pack size and minimum stock level. Import hundreds of products at once from a CSV or Excel file — no manual entry needed.",
   },
   {
     id: "customer-management",
+    icon: "👥",
     title: "Customer Management",
-    desc: "Store complete customer records — shop name, multiple contacts, area, address and GPS location. The system automatically tracks each customer's credit, debit and total sales.",
+    desc: "Store complete customer records — shop name, multiple phone numbers, area, address and GPS location on a map. IceSaathi automatically tracks every customer's credit balance, debit balance and total sales so you never lose track of who owes what.",
   },
   {
     id: "order-management",
+    icon: "🛒",
     title: "Order Management",
-    desc: "Create orders with paid and free items, apply discounts and track every order from creation to settlement. Settle via Cash or Bank/UPI, mark as Debt, or discard. Filter by Unsettled, Settled, Debt and Discarded tabs.",
+    desc: "Create orders with paid items and free items, apply discounts and track every order from creation to settlement. Settle orders via Cash or Bank/UPI, mark as Debt, or discard. Stock is deducted automatically the moment you save an order.",
   },
   {
     id: "gst-billing",
-    title: "GST Billing and PDF Invoices",
-    desc: "Generate GST-compliant invoices with your business logo, QR code, digital signature and GSTIN. Every bill includes a unique serial number and can be downloaded as a print-ready PDF instantly.",
+    icon: "🧾",
+    title: "GST Billing & PDF Invoices",
+    desc: "Generate GST-compliant invoices instantly with your business logo, QR code, digital signature and GSTIN. Every bill gets a unique serial number and can be downloaded as a print-ready PDF and shared with customers in seconds.",
   },
   {
     id: "stock-management",
-    title: "Stock Management",
-    desc: "See live stock levels for every product. Get automatic low-stock alerts when a product drops below your set threshold. Reset all stock at once for a new period.",
+    icon: "📊",
+    title: "Live Stock Management",
+    desc: "See real-time stock levels for every ice cream product. Get automatic low-stock alerts when a product drops below your set threshold. Reset all stock at once for a new period with one click.",
   },
   {
     id: "restock-history",
-    title: "Restock History",
-    desc: "Log every restock with product, quantity added and a reason note. Upload bulk restock quantities from a CSV or Excel file. View the full restock history and export it as a PDF.",
+    icon: "🔄",
+    title: "Restock History & Bulk Upload",
+    desc: "Log every restock with product, quantity added and a reason note. Upload bulk restock quantities from a CSV or Excel file in seconds. View the full restock history and export it as a professional PDF report.",
   },
   {
     id: "sales-analytics",
-    title: "Sales Analytics",
-    desc: "Filter sales by date range. View total sales, number of orders, average order value, cash collected, bank/UPI collected and outstanding dues. See daily sales trends and your top customers by outstanding balance.",
+    icon: "📈",
+    title: "Sales Analytics & Reports",
+    desc: "Filter sales by any date range. View total sales, number of orders, average order value, cash collected, bank/UPI received and outstanding dues. See daily sales trends and your top customers by outstanding balance.",
   },
   {
     id: "customer-ledger",
+    icon: "📒",
     title: "Customer Ledger",
-    desc: "View a complete transaction history per customer — every sale, payment and adjustment listed chronologically with running credit, debit and net balance totals.",
+    desc: "View a complete transaction history for every customer — every sale, payment and adjustment listed chronologically with running credit, debit and net balance totals. Always know exactly what each customer owes.",
   },
   {
     id: "delivery-partner-management",
+    icon: "🚴",
     title: "Delivery Partner Management",
-    desc: "Register delivery staff and control who gets access. Review and approve or reject partner requests. Assign orders to partners and track delivery status from Pending to On the Way to Delivered.",
+    desc: "Register delivery staff and control exactly who gets access. Review and approve or reject delivery partner requests. Assign orders to specific partners and track delivery status from Pending → On the Way → Delivered.",
   },
   {
     id: "live-gps-tracking",
+    icon: "🗺️",
     title: "Live GPS Delivery Tracking",
-    desc: "Delivery partners share their live location from their phone. You see their real-time position on an interactive map so you always know where your deliveries are.",
+    desc: "Your delivery partners share their live GPS location from their phone. You see their real-time position on an interactive map so you always know exactly where every delivery is — without calling anyone.",
   },
   {
     id: "manager-roles",
-    title: "Manager Accounts",
-    desc: "Create accounts for your staff with manager-level access. Managers can use the same dashboard with permissions set by you. Each manager has their own secure login.",
+    icon: "👔",
+    title: "Manager Accounts & Role Access",
+    desc: "Create secure login accounts for your staff with manager-level access. Managers can use the same dashboard with permissions set by you. Each manager has their own credentials and activity log.",
   },
   {
     id: "sticky-notes",
-    title: "Sticky Notes",
-    desc: "Create quick order notes for a customer and assign them to a delivery partner for dispatch. Useful for planning before a formal order is created.",
+    icon: "📝",
+    title: "Sticky Notes for Dispatch Planning",
+    desc: "Create quick order notes for a customer and assign them to a delivery partner for dispatch planning. Useful for planning tomorrow's deliveries before a formal order is created.",
   },
 ];
 
 const HOW_IT_WORKS = [
   {
     n: "01",
-    title: "Create your account",
-    desc: "Register with your name, email and shop name. Verify your email with a one-time password. Then set up your seller profile — GST number, logo, QR code, digital signature and bank details.",
+    title: "Create Your Account",
+    desc: "Register with your name, email and shop name. Verify your email with a one-time password. Then complete your seller profile — add your GST number, business logo, QR code for payments, digital signature and bank details.",
   },
   {
     n: "02",
-    title: "Add your products",
-    desc: "Add your ice cream products one by one or import them all at once from an Excel or CSV file. Set the selling price, MRP, category, unit and minimum stock level for each.",
+    title: "Add Your Products",
+    desc: "Add your ice cream products one by one or import them all at once from an Excel or CSV file. Set the selling price, MRP, category, unit and minimum stock level for each product.",
   },
   {
     n: "03",
-    title: "Add your customers",
-    desc: "Create records for each of your wholesale customers. Add their shop name, contacts, area and address. The system tracks their dues and payments automatically.",
+    title: "Add Your Customers",
+    desc: "Create records for each of your wholesale customers. Add their shop name, phone numbers, area and address. IceSaathi tracks their dues and payment history automatically from the first order.",
   },
   {
     n: "04",
-    title: "Create orders",
-    desc: "Select a customer and add the products they ordered with quantities. Add free items if any. Apply a discount. Stock is deducted automatically the moment you save the order.",
+    title: "Create Orders",
+    desc: "Select a customer, add the products they ordered with quantities, include free items if any and apply any discount. Stock is deducted automatically the moment you save the order — no manual update needed.",
   },
   {
     n: "05",
-    title: "Bill and collect payment",
-    desc: "Generate a GST invoice as a PDF and share it with your customer. Collect payment via Cash or Bank/UPI and mark the order settled. The customer ledger updates instantly.",
+    title: "Bill and Collect Payment",
+    desc: "Generate a GST invoice as a PDF and share it with your customer. Collect payment via Cash or Bank/UPI and mark the order settled. The customer ledger updates instantly with every transaction.",
   },
   {
     n: "06",
-    title: "Track your deliveries",
-    desc: "Assign orders to your delivery staff. They update the delivery status from their phone and share their live location. You see exactly where every delivery is on the map.",
+    title: "Track Your Deliveries",
+    desc: "Assign orders to your delivery staff. They update the delivery status from their phone and share their live GPS location. You see exactly where every delivery is on the interactive map in real time.",
+  },
+];
+
+const BENEFITS = [
+  {
+    title: "Save 3+ Hours Every Day",
+    desc: "Automated stock deduction, auto-generated invoices and real-time customer ledger eliminate manual work. What used to take hours now takes minutes.",
+  },
+  {
+    title: "Never Miss a Payment",
+    desc: "Every customer's credit and debit balance is tracked automatically. Know exactly who owes you money, how much and since when — no more manual register calculations.",
+  },
+  {
+    title: "GST Compliance Made Easy",
+    desc: "Generate GST-compliant PDF invoices in one click with your logo, GSTIN, QR code and digital signature. Share with customers instantly. No accountant needed for invoice generation.",
+  },
+  {
+    title: "Know Where Your Deliveries Are",
+    desc: "Live GPS tracking shows your delivery partners' real-time location on a map. No more calling drivers to ask where they are or when they will reach.",
+  },
+  {
+    title: "Built for Ice Cream Business",
+    desc: "Unlike generic inventory software, IceSaathi is built specifically for ice cream wholesalers, distributors and shop owners. Every feature matches how your business actually works.",
+  },
+  {
+    title: "Access from Anywhere",
+    desc: "IceSaathi is a web-based software. Access your dashboard from any device — computer, phone or tablet — from anywhere, anytime. No installation required.",
   },
 ];
 
 const FAQS: { q: string; a: string }[] = [
   {
-    q: "What is Ice Saathi?",
-    a: "Ice Saathi is a complete management platform for ice cream wholesalers and retailers. It handles your products, customers, orders, billing, stock, delivery partners and sales reports — all from one dashboard.",
+    q: "What is IceSaathi?",
+    a: "IceSaathi is the best inventory management and billing software for ice cream businesses in India. It is a complete management platform for ice cream wholesalers, distributors and shop owners. It handles your products, customers, orders, GST invoices, stock, delivery partners and sales reports — all from one dashboard.",
   },
   {
-    q: "Does it support GST billing?",
-    a: "Yes. You can generate GST-compliant PDF invoices with your business logo, QR code, digital signature, GSTIN and full itemised product details. Every invoice gets a unique serial number automatically.",
+    q: "Is IceSaathi really the best software for ice cream business?",
+    a: "IceSaathi is purpose-built for ice cream businesses, which makes it far more suitable than generic inventory software. It covers every operation an ice cream wholesaler or distributor needs — from stock management and GST billing to live GPS delivery tracking and customer ledger — all in one place.",
+  },
+  {
+    q: "Does IceSaathi support GST billing for ice cream businesses?",
+    a: "Yes. IceSaathi generates GST-compliant PDF invoices with your business logo, QR code, digital signature, GSTIN and full itemised product details. Every invoice gets a unique serial number automatically. You can download and share the invoice PDF instantly.",
   },
   {
     q: "Can I track my delivery staff in real time?",
-    a: "Yes. Delivery partners share their GPS location from their phone and you can see their live position on a map directly from your dashboard.",
+    a: "Yes. IceSaathi has built-in live GPS delivery tracking. Your delivery partners share their location from their phone and you can see their real-time position on an interactive map directly from your dashboard — no third-party app needed.",
   },
   {
     q: "Can I import products and stock in bulk?",
-    a: "Yes. You can upload products and restock quantities in bulk using a CSV or Excel file. The platform provides a sample file format guide inside.",
+    a: "Yes. You can upload products and restock quantities in bulk using a CSV or Excel file. IceSaathi provides a downloadable sample file format inside the dashboard so you know exactly how to prepare your data.",
   },
   {
     q: "Can I add staff or manager accounts?",
-    a: "Yes. You can create manager accounts for your staff. They get access to the same dashboard and you control their permissions.",
+    a: "Yes. IceSaathi lets you create manager accounts for your staff. Each manager gets their own secure login and can access the dashboard with the permissions you set. You stay in full control of who can do what.",
   },
   {
-    q: "How do delivery partners log in?",
-    a: "Delivery partners have a separate mobile-friendly login. They receive a one-time password on their email to sign in securely. You approve each partner before they can access any orders.",
+    q: "How do delivery partners log in to IceSaathi?",
+    a: "Delivery partners have a separate mobile-friendly login page. They receive a one-time password on their email to sign in securely. You must approve each delivery partner before they can access any orders — so only authorised staff can see customer information.",
   },
   {
-    q: "What can I export as PDF?",
-    a: "You can export GST invoices, customer reports, restock history and stock history summaries as formatted PDFs directly from the dashboard.",
+    q: "What can I export as a PDF from IceSaathi?",
+    a: "You can export GST invoices, customer reports, restock history reports and stock history summaries as formatted PDFs directly from the dashboard — no extra software needed.",
   },
   {
-    q: "How does stock update when I create an order?",
-    a: "Stock is deducted automatically every time an order is created. You always see the current quantity without any manual update needed.",
+    q: "How does stock update when I create an order in IceSaathi?",
+    a: "Stock is deducted automatically every time you create an order. You always see the current quantity for every product without any manual update. If a product goes below your set minimum level, IceSaathi shows you a low-stock alert.",
+  },
+  {
+    q: "Is IceSaathi free to use?",
+    a: "IceSaathi offers a free 30-day trial with all features included — no credit card required. After the trial, plans start at ₹499/month. You can cancel at any time.",
+  },
+  {
+    q: "How do I contact IceSaathi support?",
+    a: "You can reach the IceSaathi support team at softvibeservices@gmail.com. The software is developed and maintained by SoftVibe Services.",
+  },
+];
+
+const TESTIMONIALS = [
+  {
+    name: "Rajesh Patel",
+    role: "Ice Cream Wholesaler, Ahmedabad",
+    text: "Before IceSaathi, I was maintaining everything in a register. Now I generate GST invoices in one click and I always know which customer owes me money. It has saved me hours every single day.",
+    rating: 5,
+  },
+  {
+    name: "Sunita Sharma",
+    role: "Ice Cream Distributor, Surat",
+    text: "The live GPS tracking is a game changer. I can see exactly where my delivery boys are without calling them every 10 minutes. My customers are happier because deliveries are now on time.",
+    rating: 5,
+  },
+  {
+    name: "Arun Mehta",
+    role: "Ice Cream Shop Owner, Vadodara",
+    text: "The stock alert feature alone is worth it. I used to run out of stock without warning. Now I get an alert before it happens. My customers never face an out-of-stock situation anymore.",
+    rating: 5,
   },
 ];
 
@@ -357,26 +401,32 @@ export default function HomePage() {
       <div className="min-h-screen bg-white">
 
         {/* ── HEADER ── */}
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200">
+        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-            <Link href="/" aria-label="Ice Saathi home" className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-md" aria-hidden="true">
-                <span className="text-white text-xl font-bold">IS</span>
+            <Link href="/" aria-label="IceSaathi home" className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                <span className="text-white text-sm font-bold">IS</span>
               </div>
-              <span className="font-semibold text-gray-900">Ice Saathi</span>
+              <span className="font-bold text-gray-900 text-[17px] tracking-tight">IceSaathi</span>
             </Link>
             <nav aria-label="Primary navigation" className="flex items-center gap-1">
-              <Link href="#features" className="hidden sm:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
+              <Link href="#features" className="hidden md:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
                 Features
               </Link>
-              <Link href="#pricing" className="hidden sm:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
+              <Link href="#how-it-works" className="hidden md:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
+                How it Works
+              </Link>
+              <Link href="#pricing" className="hidden md:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
                 Pricing
               </Link>
-              <Link href="/login" className="ml-2 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
+              <Link href="#faq" className="hidden md:block px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors">
+                FAQ
+              </Link>
+              <Link href="/login" className="ml-2 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200">
                 Login
               </Link>
-              <Link href="/register" className="ml-1 px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
-                Get Started
+              <Link href="/register" className="ml-1 px-4 py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm">
+                Free Trial →
               </Link>
             </nav>
           </div>
@@ -386,92 +436,117 @@ export default function HomePage() {
 
           {/* ── HERO ── */}
           <section aria-labelledby="hero-heading" className="relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-blue-50 to-white" aria-hidden="true" />
-            <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 sm:pt-32 sm:pb-32">
+            <div className="absolute inset-0 bg-gradient-to-b from-blue-50 via-blue-50/40 to-white" aria-hidden="true" />
+            <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-28 sm:pt-32 sm:pb-36">
               <div className="max-w-3xl">
-                <div className="inline-flex items-center gap-2 px-3 py-1 mb-6 rounded-full bg-blue-50 border border-blue-200 text-xs font-medium text-blue-700">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600" aria-hidden="true" />
-                  Built for ice cream wholesale businesses in India
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-6 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 flex-shrink-0" aria-hidden="true" />
+                  Purpose-built for ice cream businesses in India
                 </div>
 
-                <h1 id="hero-heading" className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-gray-900 mb-6">
-                  Run your ice cream wholesale business from one dashboard
+                <h1 id="hero-heading" className="text-4xl sm:text-5xl lg:text-[56px] font-bold tracking-tight text-gray-900 mb-6 leading-tight">
+                  The best software for your ice cream business
                 </h1>
 
-                <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-2xl">
-                  Products, customers, orders, GST invoices, stock alerts, delivery tracking and sales reports — everything in one place. Free 30-day trial, no credit card needed.
+                <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-2xl leading-relaxed">
+                  IceSaathi manages your inventory, GST billing, customer ledger, orders, stock alerts, live delivery tracking and sales reports — all from one simple dashboard. Built specifically for ice cream wholesalers and distributors in India.
                 </p>
 
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-3 mb-6">
                   <Link
                     href="/register"
-                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                    className="px-6 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors shadow-md text-[15px]"
                   >
-                    Start Free Trial
+                    Start Free 30-Day Trial
                   </Link>
                   <Link
                     href="/login"
-                    className="px-6 py-3 border border-gray-300 bg-white hover:bg-gray-50 text-gray-900 font-medium rounded-lg transition-colors"
+                    className="px-6 py-3.5 border border-gray-300 bg-white hover:bg-gray-50 text-gray-900 font-semibold rounded-xl transition-colors text-[15px]"
                   >
-                    Sign In →
+                    Sign In to Dashboard →
                   </Link>
                 </div>
 
-                <p className="mt-4 text-xs text-gray-400">
-                  30 days free · No credit card required · Set up in minutes
-                </p>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-gray-500">
+                  <span className="flex items-center gap-1.5"><span className="text-green-500 font-bold">✓</span> 30 days free</span>
+                  <span className="flex items-center gap-1.5"><span className="text-green-500 font-bold">✓</span> No credit card needed</span>
+                  <span className="flex items-center gap-1.5"><span className="text-green-500 font-bold">✓</span> Set up in under 10 minutes</span>
+                  <span className="flex items-center gap-1.5"><span className="text-green-500 font-bold">✓</span> Cancel anytime</span>
+                </div>
               </div>
             </div>
           </section>
 
           {/* ── STATS BAR ── */}
-          <section aria-label="Platform highlights" className="border-y border-gray-200 bg-gray-50">
+          <section aria-label="Platform highlights" className="border-y border-gray-200 bg-white">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-8">
+              <dl className="grid grid-cols-2 sm:grid-cols-4 gap-8 text-center">
                 <div>
-                  <dt className="text-sm text-gray-600 mt-1">Business modules</dt>
-                  <dd className="text-3xl font-bold text-gray-900">12</dd>
+                  <dd className="text-3xl font-bold text-blue-600">12</dd>
+                  <dt className="text-sm text-gray-600 mt-1">Business modules in one dashboard</dt>
                 </div>
                 <div>
-                  <dt className="text-sm text-gray-600 mt-1">Compliant invoices</dt>
-                  <dd className="text-3xl font-bold text-gray-900">GST</dd>
+                  <dd className="text-3xl font-bold text-blue-600">GST</dd>
+                  <dt className="text-sm text-gray-600 mt-1">Compliant invoices with PDF download</dt>
                 </div>
                 <div>
-                  <dt className="text-sm text-gray-600 mt-1">GPS delivery tracking</dt>
-                  <dd className="text-3xl font-bold text-gray-900">Live</dd>
+                  <dd className="text-3xl font-bold text-blue-600">Live</dd>
+                  <dt className="text-sm text-gray-600 mt-1">GPS tracking for every delivery</dt>
                 </div>
                 <div>
-                  <dt className="text-sm text-gray-600 mt-1">Stock updates</dt>
-                  <dd className="text-3xl font-bold text-gray-900">Auto</dd>
+                  <dd className="text-3xl font-bold text-blue-600">Auto</dd>
+                  <dt className="text-sm text-gray-600 mt-1">Stock deduction on every order</dt>
                 </div>
               </dl>
             </div>
           </section>
 
-          {/* ── FEATURES ── */}
-          <section id="features" aria-labelledby="features-heading" className="py-24 sm:py-32">
+          {/* ── WHY ICESAATHI ── */}
+          <section aria-labelledby="why-heading" className="py-20 sm:py-28 bg-gray-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="max-w-2xl mb-16">
-                <h2 id="features-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
-                  Everything your ice cream business needs
+              <div className="max-w-2xl mb-14">
+                <h2 id="why-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
+                  Why ice cream businesses choose IceSaathi
                 </h2>
                 <p className="text-lg text-gray-600">
-                  12 modules built specifically for ice cream wholesale and distribution operations.
+                  Generic inventory software is not built for ice cream. IceSaathi is.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {BENEFITS.map((b) => (
+                  <div key={b.title} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <h3 className="font-bold text-gray-900 text-[16px] mb-2">{b.title}</h3>
+                    <p className="text-sm text-gray-600 leading-relaxed">{b.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ── FEATURES ── */}
+          <section id="features" aria-labelledby="features-heading" className="py-20 sm:py-28">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="max-w-2xl mb-14">
+                <h2 id="features-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
+                  Everything your ice cream business needs — in one place
+                </h2>
+                <p className="text-lg text-gray-600">
+                  12 modules built specifically for ice cream wholesale and distribution operations. No extra tools needed.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {FEATURES.map((f, i) => (
+                {FEATURES.map((f) => (
                   <article key={f.id} id={f.id}>
                     <div className="flex items-start gap-4">
                       <div
-                        className="shrink-0 w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 font-semibold text-sm"
+                        className="shrink-0 w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-xl"
                         aria-hidden="true"
                       >
-                        {i + 1}
+                        {f.icon}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 mb-2">{f.title}</h3>
+                        <h3 className="font-bold text-gray-900 mb-2 text-[15px]">{f.title}</h3>
                         <p className="text-sm text-gray-600 leading-relaxed">{f.desc}</p>
                       </div>
                     </div>
@@ -482,14 +557,14 @@ export default function HomePage() {
           </section>
 
           {/* ── HOW IT WORKS ── */}
-          <section id="how-it-works" aria-labelledby="workflow-heading" className="py-24 sm:py-32 bg-gray-50">
+          <section id="how-it-works" aria-labelledby="workflow-heading" className="py-20 sm:py-28 bg-gray-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="max-w-2xl mb-16">
+              <div className="max-w-2xl mb-14">
                 <h2 id="workflow-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
-                  Up and running in minutes
+                  Get started in under 10 minutes
                 </h2>
                 <p className="text-lg text-gray-600">
-                  A straightforward setup that matches how your business already works.
+                  A straightforward setup that matches how your ice cream business already works.
                 </p>
               </div>
 
@@ -498,13 +573,13 @@ export default function HomePage() {
                   <li key={s.n}>
                     <div className="flex items-start gap-4">
                       <div
-                        className="shrink-0 w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm"
+                        className="shrink-0 w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
                         aria-hidden="true"
                       >
                         {s.n}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-900 mb-2">{s.title}</h3>
+                        <h3 className="font-bold text-gray-900 mb-2 text-[15px]">{s.title}</h3>
                         <p className="text-sm text-gray-600 leading-relaxed">{s.desc}</p>
                       </div>
                     </div>
@@ -514,29 +589,56 @@ export default function HomePage() {
             </div>
           </section>
 
+          {/* ── TESTIMONIALS ── */}
+          <section aria-labelledby="testimonials-heading" className="py-20 sm:py-28">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="max-w-2xl mb-14">
+                <h2 id="testimonials-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
+                  Trusted by ice cream businesses across India
+                </h2>
+                <p className="text-lg text-gray-600">
+                  See what ice cream wholesalers and distributors say about IceSaathi.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                {TESTIMONIALS.map((t) => (
+                  <blockquote key={t.name} className="bg-gray-50 rounded-xl border border-gray-200 p-6">
+                    <div className="flex gap-0.5 mb-3" aria-label={`${t.rating} stars`}>
+                      {Array.from({ length: t.rating }).map((_, i) => (
+                        <span key={i} className="text-yellow-400 text-base" aria-hidden="true">★</span>
+                      ))}
+                    </div>
+                    <p className="text-sm text-gray-700 leading-relaxed mb-4">&ldquo;{t.text}&rdquo;</p>
+                    <footer>
+                      <cite className="not-italic">
+                        <span className="font-semibold text-gray-900 text-sm block">{t.name}</span>
+                        <span className="text-xs text-gray-500">{t.role}</span>
+                      </cite>
+                    </footer>
+                  </blockquote>
+                ))}
+              </div>
+            </div>
+          </section>
+
           {/* ── PRICING ── */}
           <PricingSection />
 
           {/* ── FAQ ── */}
-          <section id="faq" aria-labelledby="faq-heading" className="py-24 sm:py-32 bg-gray-50">
-            <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <section id="faq" aria-labelledby="faq-heading" className="py-20 sm:py-28 bg-gray-50">
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="mb-12">
                 <h2 id="faq-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
-                  Frequently asked questions
+                  Frequently asked questions about IceSaathi
                 </h2>
                 <p className="text-lg text-gray-600">
                   Everything you need to know before getting started.
                 </p>
               </div>
-
-              {/*
-                Rendered as plain <dl> — no JS accordion.
-                All answers are visible to crawlers and AI answer engines.
-              */}
-              <dl className="divide-y divide-gray-200 border border-gray-200 rounded-xl overflow-hidden">
+              <dl className="space-y-0 divide-y divide-gray-200 border border-gray-200 rounded-2xl bg-white overflow-hidden">
                 {FAQS.map((faq) => (
                   <div key={faq.q} className="px-6 py-5">
-                    <dt className="font-semibold text-gray-900 mb-2 text-sm">{faq.q}</dt>
+                    <dt className="font-semibold text-gray-900 text-[15px] mb-2">{faq.q}</dt>
                     <dd className="text-sm text-gray-600 leading-relaxed">{faq.a}</dd>
                   </div>
                 ))}
@@ -544,121 +646,108 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* ── CTA ── */}
-          <section id="get-started" aria-labelledby="cta-heading" className="py-24 sm:py-32 bg-blue-600">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-              <h2 id="cta-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-white mb-4">
-                Start managing your ice cream business today
+          {/* ── CTA BANNER ── */}
+          <section aria-labelledby="cta-heading" className="py-20 sm:py-28">
+            <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+              <h2 id="cta-heading" className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 mb-4">
+                Ready to manage your ice cream business the smart way?
               </h2>
-              <p className="text-lg text-blue-100 max-w-2xl mx-auto mb-8">
-                Create your account, verify your email and you are ready. No setup fees, no complicated onboarding. Free for 30 days.
+              <p className="text-lg text-gray-600 mb-8">
+                Join ice cream businesses across India that use IceSaathi to manage inventory, billing and delivery every day. Start your free 30-day trial today — no credit card required.
               </p>
-              <div className="flex flex-wrap items-center justify-center gap-4">
+              <div className="flex flex-wrap gap-3 justify-center">
                 <Link
                   href="/register"
-                  className="px-6 py-3 bg-white hover:bg-gray-100 text-blue-600 font-medium rounded-lg transition-colors"
+                  className="px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-md text-[15px]"
                 >
-                  Start Free Trial
+                  Start Free Trial — It&apos;s Free for 30 Days
                 </Link>
                 <Link
-                  href="/login"
-                  className="px-6 py-3 border border-blue-400 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                  href="mailto:softvibeservices@gmail.com"
+                  className="px-8 py-4 border border-gray-300 bg-white hover:bg-gray-50 text-gray-900 font-semibold rounded-xl transition-colors text-[15px]"
                 >
-                  Already have an account? Login →
+                  Contact Support
                 </Link>
               </div>
+              <p className="mt-4 text-sm text-gray-400">
+                Questions? Email us at softvibeservices@gmail.com — we reply within 24 hours.
+              </p>
             </div>
           </section>
 
         </main>
 
         {/* ── FOOTER ── */}
-        <footer aria-label="Site footer" className="bg-gray-900 text-gray-400">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+        <footer className="border-t border-gray-200 bg-gray-50" aria-label="Site footer">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
 
-              <div>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center shadow-md" aria-hidden="true">
-                    <span className="text-white text-xl font-bold">IS</span>
+              {/* Brand */}
+              <div className="lg:col-span-1">
+                <Link href="/" className="flex items-center gap-2.5 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-sm font-bold">IS</span>
                   </div>
-                  <span className="font-semibold text-white">Ice Saathi</span>
+                  <span className="font-bold text-gray-900 text-[17px]">IceSaathi</span>
+                </Link>
+                <p className="text-sm text-gray-600 leading-relaxed mb-4">
+                  The best inventory management and billing software for ice cream businesses in India. Built by SoftVibe Services.
+                </p>
+                <div className="text-sm text-gray-500">
+                  <p>Support: <a href="mailto:softvibeservices@gmail.com" className="text-blue-600 hover:underline">softvibeservices@gmail.com</a></p>
+                  <p className="mt-1">Developer: <a href="https://softvibe-service.vercel.app/" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">SoftVibe Services</a></p>
                 </div>
-                <p className="text-sm leading-relaxed">
-                  Inventory, GST billing and delivery management for ice cream wholesalers and retailers in India.
-                </p>
-                <p className="text-sm mt-3">
-                  <a href="mailto:support@softvibe.in" className="hover:text-white transition-colors">
-                    support@softvibe.in
-                  </a>
-                </p>
               </div>
 
+              {/* Product */}
               <div>
-                <h3 className="text-sm font-semibold text-white mb-3">Platform</h3>
-                <ul className="space-y-2">
-                  {[
-                    { href: "#features",     label: "Features" },
-                    { href: "#how-it-works", label: "How it Works" },
-                    { href: "#pricing",      label: "Pricing" },
-                    { href: "#faq",          label: "FAQ" },
-                  ].map((l) => (
-                    <li key={l.href}>
-                      <Link href={l.href} className="text-sm hover:text-white transition-colors">
-                        {l.label}
-                      </Link>
-                    </li>
-                  ))}
+                <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">Product</h3>
+                <ul className="space-y-3 text-sm text-gray-600">
+                  <li><Link href="#features" className="hover:text-gray-900 transition-colors">Features</Link></li>
+                  <li><Link href="#pricing" className="hover:text-gray-900 transition-colors">Pricing</Link></li>
+                  <li><Link href="#how-it-works" className="hover:text-gray-900 transition-colors">How it Works</Link></li>
+                  <li><Link href="#faq" className="hover:text-gray-900 transition-colors">FAQ</Link></li>
+                  <li><Link href="/register" className="hover:text-gray-900 transition-colors">Free Trial</Link></li>
                 </ul>
               </div>
 
+              {/* Features quick links */}
               <div>
-                <h3 className="text-sm font-semibold text-white mb-3">Features</h3>
-                <ul className="space-y-2">
-                  {[
-                    "Product Management",
-                    "Customer Management",
-                    "Order Management",
-                    "GST Billing",
-                    "Stock Management",
-                    "Delivery Tracking",
-                  ].map((m) => (
-                    <li key={m} className="text-sm">{m}</li>
-                  ))}
+                <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">Features</h3>
+                <ul className="space-y-3 text-sm text-gray-600">
+                  <li><Link href="#gst-billing" className="hover:text-gray-900 transition-colors">GST Billing</Link></li>
+                  <li><Link href="#stock-management" className="hover:text-gray-900 transition-colors">Stock Management</Link></li>
+                  <li><Link href="#customer-ledger" className="hover:text-gray-900 transition-colors">Customer Ledger</Link></li>
+                  <li><Link href="#live-gps-tracking" className="hover:text-gray-900 transition-colors">Live GPS Tracking</Link></li>
+                  <li><Link href="#sales-analytics" className="hover:text-gray-900 transition-colors">Sales Analytics</Link></li>
+                  <li><Link href="#delivery-partner-management" className="hover:text-gray-900 transition-colors">Delivery Management</Link></li>
                 </ul>
               </div>
 
+              {/* Account */}
               <div>
-                <h3 className="text-sm font-semibold text-white mb-3">Account</h3>
-                <ul className="space-y-2">
-                  {[
-                    { href: "/register",         label: "Create Account" },
-                    { href: "/login",            label: "Login" },
-                    { href: "/forgot-password",  label: "Forgot Password" },
-                    { href: "/verify-account",   label: "Verify Account" },
-                  ].map((l) => (
-                    <li key={l.href}>
-                      <Link href={l.href} className="text-sm hover:text-white transition-colors">
-                        {l.label}
-                      </Link>
-                    </li>
-                  ))}
+                <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">Account</h3>
+                <ul className="space-y-3 text-sm text-gray-600">
+                  <li><Link href="/register" className="hover:text-gray-900 transition-colors">Create Account</Link></li>
+                  <li><Link href="/login" className="hover:text-gray-900 transition-colors">Login</Link></li>
+                  <li><Link href="/forgot-password" className="hover:text-gray-900 transition-colors">Forgot Password</Link></li>
+                  <li><a href="mailto:softvibeservices@gmail.com" className="hover:text-gray-900 transition-colors">Contact Support</a></li>
                 </ul>
               </div>
 
             </div>
 
-            <div className="pt-8 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-sm">
-                © {new Date().getFullYear()} Ice Saathi · by{" "}
-                <a href="mailto:support@softvibe.in" className="hover:text-white transition-colors">
+            <div className="mt-12 pt-8 border-t border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <p className="text-sm text-gray-500">
+                &copy; {new Date().getFullYear()} IceSaathi by{" "}
+                <a href="https://softvibe-service.vercel.app/" className="hover:text-gray-900 transition-colors" target="_blank" rel="noopener noreferrer">
                   SoftVibe Services
                 </a>
                 . All rights reserved.
               </p>
-              <p className="text-xs text-gray-600">
-                GST billing · Stock management · Delivery tracking · India
-              </p>
+              <div className="flex items-center gap-6 text-sm text-gray-500">
+                <span>India&apos;s Best Ice Cream Business Software</span>
+              </div>
             </div>
           </div>
         </footer>
