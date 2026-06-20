@@ -239,7 +239,7 @@ export default function StockTable({
 
       {/* ── Desktop Table ── */}
       <div className="hidden sm:block overflow-x-auto bg-white rounded-xl border border-gray-200 shadow-sm">
-        <table className="w-full text-sm">
+        <table className="saas-table-modern text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
               <th

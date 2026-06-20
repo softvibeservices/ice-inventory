@@ -245,7 +245,7 @@ export default function CustomerList({
           overflowY: viewAll ? "visible" : "auto",
         }}
       >
-        <table className="w-full text-sm border-collapse">
+        <table className="saas-table-modern text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="bg-slate-50 border-b border-slate-200">
               {[

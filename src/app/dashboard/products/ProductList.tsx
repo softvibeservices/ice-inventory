@@ -1004,8 +1004,8 @@ doc.text("Ice Saathi — Inventory Management", PW - MR, 20, { align: "right" })
       </div>
 
       {/* ── DESKTOP TABLE ── */}
-      <div className="hidden sm:block overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
+      <div className="hidden sm:block overflow-x-auto bg-white rounded-xl border border-gray-200 shadow-sm">
+        <table className="saas-table-modern text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200 text-left">
               <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider w-10">#</th>
