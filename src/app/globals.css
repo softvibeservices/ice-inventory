@@ -662,3 +662,9 @@ input[type="number"] {
 
 /* ── Phase C — flush card variant for widget components ────────────────── */
 .saas-card-flush { padding: 0; }
+
+/* ── Prevent transition animation flash on page load / mount ──────────────── */
+.no-transition,
+.no-transition * {
+  transition: none !important;
+}

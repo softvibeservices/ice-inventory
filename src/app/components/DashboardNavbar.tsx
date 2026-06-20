@@ -5,7 +5,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useLayoutEffect } from "react";
 import {
   Package,
   Boxes,
@@ -35,6 +35,12 @@ const stocksSubLinks = [
 
 
 
+// Persistent singleton state across client-side page transitions
+let globalCollapsed: boolean | null = null;
+
+// Safe layout effect to prevent console warnings on SSR/server environment
+const useSafeLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 export default function DashboardNavbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -45,8 +51,19 @@ export default function DashboardNavbar() {
   const [showDialog, setShowDialog] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Sidebar collapse state — persisted to localStorage
-  const [collapsed, setCollapsed] = useState(false);
+  // Sidebar collapse state — persisted to localStorage and singleton module cache
+  const [collapsed, setCollapsed] = useState(() => {
+    if (globalCollapsed !== null) return globalCollapsed;
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("sidebarCollapsed");
+        return stored === "true";
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
 
   // Subsidebar expand state — stocks only now
   const [expandedGroup, setExpandedGroup] = useState<string | null>(() => {
@@ -57,19 +74,38 @@ export default function DashboardNavbar() {
   });
 
   // Load collapse preference from localStorage
-  useEffect(() => {
+  useSafeLayoutEffect(() => {
+    // Disable transitions during initial mount layout sync
+    document.documentElement.classList.add("no-transition");
+
     try {
       const stored = localStorage.getItem("sidebarCollapsed");
-      if (stored !== null) setCollapsed(stored === "true");
+      if (stored !== null) {
+        const isCollapsed = stored === "true";
+        setCollapsed(isCollapsed);
+        // Force the custom property synchronously before transitions are re-enabled
+        document.documentElement.style.setProperty(
+          "--sidebar-current-w",
+          isCollapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w-expanded)"
+        );
+      }
     } catch {
       // ignore
     }
+
+    // Re-enable transition animations in the next frame
+    const timer = setTimeout(() => {
+      document.documentElement.classList.remove("no-transition");
+    }, 50);
+
+    return () => clearTimeout(timer);
   }, []);
 
   // Persist collapse preference
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
+      globalCollapsed = next;
       try { localStorage.setItem("sidebarCollapsed", String(next)); } catch { /* ignore */ }
       return next;
     });
@@ -79,7 +115,8 @@ export default function DashboardNavbar() {
   // .dash-topbar and .dash-content-offset always have the correct left/margin-left.
   // CSS sibling selectors (.dash-sidebar-collapsed ~ .dash-topbar) cannot reach
   // across Next.js layout subtree boundaries, so we drive it from JS instead.
-  useEffect(() => {
+  useSafeLayoutEffect(() => {
+    globalCollapsed = collapsed;
     document.documentElement.style.setProperty(
       "--sidebar-current-w",
       collapsed ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w-expanded)"
