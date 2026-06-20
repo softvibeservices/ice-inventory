@@ -299,13 +299,14 @@ export default function OrderRow({
 
         {/* Actions */}
         <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-end gap-1">
+          <div className="flex items-center justify-end gap-1.5">
             <button
               onClick={() => onOpenView(order)}
               title="View details"
-              className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold hover:bg-blue-100 transition"
             >
               <Eye className="w-3.5 h-3.5" />
+              <span>Details</span>
             </button>
 
             {tab === "Unsettled" && (
@@ -313,13 +314,14 @@ export default function OrderRow({
                 onClick={() => onEdit(order)}
                 disabled={editDisabled}
                 title={editDisabled ? "Cannot edit delivered orders" : "Edit bill"}
-                className={`p-1.5 rounded-md transition-colors ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
                   editDisabled
-                    ? "text-slate-300 cursor-not-allowed"
-                    : "text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                    ? "bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed"
+                    : "bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100"
                 }`}
               >
                 <Pencil className="w-3.5 h-3.5" />
+                <span>Edit</span>
               </button>
             )}
 
@@ -327,9 +329,10 @@ export default function OrderRow({
               <button
                 onClick={() => onOpenSettle(order)}
                 title="Settle order"
-                className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 transition"
               >
                 <CheckCircle className="w-3.5 h-3.5" />
+                <span>Settle</span>
               </button>
             )}
 
@@ -337,9 +340,10 @@ export default function OrderRow({
               <button
                 onClick={() => onOpenDebtSettle(order)}
                 title="Settle debt"
-                className="p-1.5 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-semibold hover:bg-emerald-100 transition"
               >
                 <CheckCircle className="w-3.5 h-3.5" />
+                <span>Settle Debt</span>
               </button>
             )}
 
@@ -347,9 +351,10 @@ export default function OrderRow({
               <button
                 onClick={() => onRevertDelivery(order)}
                 title="Revert delivery"
-                className="p-1.5 rounded-md text-slate-400 hover:text-orange-600 hover:bg-orange-50 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-50 text-orange-600 border border-orange-200 text-xs font-semibold hover:bg-orange-100 transition"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
+                <span>Revert</span>
               </button>
             )}
 
@@ -364,24 +369,25 @@ export default function OrderRow({
                       : "Change delivery status before discarding"
                     : "Discard order"
                 }
-                className={`p-1.5 rounded-md transition-colors ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition ${
                   discardDisabled
-                    ? "text-slate-300 cursor-not-allowed"
-                    : "text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    ? "bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed"
+                    : "bg-red-50 text-red-500 border-red-200 hover:bg-red-100"
                 }`}
               >
                 <Trash2 className="w-3.5 h-3.5" />
+                <span>Discard</span>
               </button>
             )}
 
             {/* Expand toggle */}
             <button
               onClick={() => setExpanded(v => !v)}
-              className="p-1.5 rounded-md text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
             >
               {expanded
-                ? <ChevronDown className="w-3.5 h-3.5" />
-                : <ChevronRight className="w-3.5 h-3.5" />}
+                ? <ChevronDown className="w-4 h-4" />
+                : <ChevronRight className="w-4 h-4" />}
             </button>
           </div>
         </td>

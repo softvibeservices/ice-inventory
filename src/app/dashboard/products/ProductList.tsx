@@ -906,8 +906,17 @@ doc.text("Ice Saathi — Inventory Management", PW - MR, 20, { align: "right" })
         ) : paginatedProducts.length === 0 ? (
           <div className="py-16 text-center space-y-2">
             <Package className="mx-auto h-12 w-12 text-gray-200" />
-            <p className="text-gray-600 font-semibold">No products found</p>
-            <p className="text-gray-400 text-sm">Try adjusting your search or filters</p>
+            {products.length === 0 ? (
+              <>
+                <p className="text-gray-600 font-semibold">No products yet</p>
+                <p className="text-gray-400 text-sm">You haven't added any products yet. Use the <strong>Add Product</strong> button above to get started.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-600 font-semibold">No products found</p>
+                <p className="text-gray-400 text-sm">Try adjusting your search or filters</p>
+              </>
+            )}
           </div>
         ) : (
           paginatedProducts.map((p, index) => {
@@ -1023,8 +1032,17 @@ doc.text("Ice Saathi — Inventory Management", PW - MR, 20, { align: "right" })
               <tr>
                 <td colSpan={9} className="py-20 text-center">
                   <Package className="mx-auto h-12 w-12 text-gray-200 mb-3" />
-                  <p className="text-gray-600 font-semibold mb-1">No products found</p>
-                  <p className="text-gray-400 text-sm">Adjust your search, sort, or category filter</p>
+                  {products.length === 0 ? (
+                    <>
+                      <p className="text-gray-600 font-semibold mb-1">No products yet</p>
+                      <p className="text-gray-400 text-sm">You haven't added any products yet. Use the <strong>Add Product</strong> button above to get started.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-gray-600 font-semibold mb-1">No products found</p>
+                      <p className="text-gray-400 text-sm">Adjust your search, sort, or category filter</p>
+                    </>
+                  )}
                 </td>
               </tr>
             ) : (
@@ -1094,20 +1112,22 @@ doc.text("Ice Saathi — Inventory Management", PW - MR, 20, { align: "right" })
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1.5">
+                      <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => handleEdit(p)}
-                          className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-100 transition-colors"
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 text-xs font-semibold hover:bg-blue-100 transition"
                           title="Edit"
                         >
-                          <Edit size={14} />
+                          <Edit size={12} />
+                          <span>Edit</span>
                         </button>
                         <button
                           onClick={() => setConfirmDeleteId(p._id ?? null)}
-                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-100 transition-colors"
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-50 text-red-500 border border-red-200 text-xs font-semibold hover:bg-red-100 transition"
                           title="Delete"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={12} />
+                          <span>Delete</span>
                         </button>
                       </div>
                     </td>

@@ -286,12 +286,25 @@ export default function CustomerList({
                 <td colSpan={9} className="px-4 py-16 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Users size={32} className="text-slate-300" />
-                    <p className="text-sm font-medium text-slate-500">
-                      No customers found
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      Try adjusting your search or filters
-                    </p>
+                    {customers.length === 0 ? (
+                      <>
+                        <p className="text-sm font-medium text-slate-500">
+                          No customers yet
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          You haven't added any customers yet. Use the <strong>Add Customer</strong> button above to get started.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium text-slate-500">
+                          No customers found
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Try adjusting your search or filters
+                        </p>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -395,14 +408,15 @@ export default function CustomerList({
 
                     {/* Actions */}
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex items-center justify-center gap-1.5">
                         {/* View */}
                         <ActionBtn
                           onClick={() => handleView(c)}
                           title="View details"
                           color="blue"
+                          label="View"
                         >
-                          <Eye size={13} />
+                          <Eye size={12} />
                         </ActionBtn>
 
                         {/* History */}
@@ -410,8 +424,9 @@ export default function CustomerList({
                           onClick={() => openHistory(c._id)}
                           title="Transaction history"
                           color="violet"
+                          label="History"
                         >
-                          <History size={13} />
+                          <History size={12} />
                         </ActionBtn>
 
                         {/* Edit */}
@@ -419,8 +434,9 @@ export default function CustomerList({
                           onClick={() => handleEdit(c)}
                           title="Edit customer"
                           color="amber"
+                          label="Edit"
                         >
-                          <Edit size={13} />
+                          <Edit size={12} />
                         </ActionBtn>
 
                         {/* Quick Settle — only active when both credit & debit > 0 */}
@@ -429,16 +445,18 @@ export default function CustomerList({
                             onClick={() => openSettlementModal(c)}
                             title="Quick settle balance"
                             color="emerald"
+                            label="Settle"
                           >
-                            <Zap size={13} />
+                            <Zap size={12} />
                           </ActionBtn>
                         ) : (
                           <button
                             disabled
                             title="No settlement available"
-                            className="flex h-7 w-7 items-center justify-center rounded-md bg-slate-50 text-slate-300 cursor-not-allowed"
+                            className="flex h-8 px-2 items-center justify-center gap-1.5 rounded-lg bg-slate-50 text-slate-300 border border-slate-100 text-xs font-semibold cursor-not-allowed"
                           >
-                            <Zap size={13} />
+                            <Zap size={12} />
+                            <span>Settle</span>
                           </button>
                         )}
 
@@ -447,8 +465,9 @@ export default function CustomerList({
                           onClick={() => openDeleteModal(c._id)}
                           title="Delete customer"
                           color="red"
+                          label="Delete"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={12} />
                         </ActionBtn>
                       </div>
                     </td>
@@ -476,11 +495,27 @@ export default function CustomerList({
             <p className="text-sm text-slate-500">Loading…</p>
           </div>
         ) : paginatedCustomers.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16">
+          <div className="flex flex-col items-center gap-2 py-16 text-center px-4">
             <Users size={32} className="text-slate-300" />
-            <p className="text-sm font-medium text-slate-500">
-              No customers found
-            </p>
+            {customers.length === 0 ? (
+              <>
+                <p className="text-sm font-medium text-slate-500">
+                  No customers yet
+                </p>
+                <p className="text-xs text-slate-400">
+                  You haven't added any customers yet. Use the <strong>Add Customer</strong> button above to get started.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-slate-500">
+                  No customers found
+                </p>
+                <p className="text-xs text-slate-400">
+                  Try adjusting your search or filters
+                </p>
+              </>
+            )}
           </div>
         ) : (
           paginatedCustomers.map((c, idx) => {
@@ -638,27 +673,30 @@ function ActionBtn({
   onClick,
   title,
   color,
+  label,
   children,
 }: {
   onClick: () => void;
   title: string;
   color: "blue" | "violet" | "amber" | "emerald" | "red";
+  label?: string;
   children: React.ReactNode;
 }) {
   const colorMap = {
-    blue:    "bg-blue-50 text-blue-600 hover:bg-blue-100",
-    violet:  "bg-violet-50 text-violet-600 hover:bg-violet-100",
-    amber:   "bg-amber-50 text-amber-600 hover:bg-amber-100",
-    emerald: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100",
-    red:     "bg-red-50 text-red-500 hover:bg-red-100",
+    blue:    "bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200",
+    violet:  "bg-violet-50 text-violet-600 hover:bg-violet-100 border-violet-200",
+    amber:   "bg-amber-50 text-amber-600 hover:bg-amber-100 border-amber-200",
+    emerald: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-200",
+    red:     "bg-red-50 text-red-500 hover:bg-red-100 border-red-200",
   };
   return (
     <button
       onClick={onClick}
       title={title}
-      className={`flex h-7 w-7 items-center justify-center rounded-md transition ${colorMap[color]}`}
+      className={`flex h-8 px-2.5 items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold transition ${colorMap[color]}`}
     >
       {children}
+      {label && <span>{label}</span>}
     </button>
   );
 }

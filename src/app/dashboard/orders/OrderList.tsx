@@ -359,8 +359,30 @@ export default function OrderList({
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-1">
               <Filter className="w-5 h-5 text-slate-400" />
             </div>
-            <p className="text-sm font-semibold text-slate-600">No {tab.toLowerCase()} orders</p>
-            <p className="text-xs text-slate-400">Orders will appear here once they're created.</p>
+            {tab === "Unsettled" && (
+              <>
+                <p className="text-sm font-semibold text-slate-600">No unsettled orders right now</p>
+                <p className="text-xs text-slate-400">All orders have been settled or marked as debt.</p>
+              </>
+            )}
+            {tab === "Settled" && (
+              <>
+                <p className="text-sm font-semibold text-slate-600">No settled orders yet</p>
+                <p className="text-xs text-slate-400">Orders will appear here once they are settled.</p>
+              </>
+            )}
+            {tab === "Debt" && (
+              <>
+                <p className="text-sm font-semibold text-slate-600">No unsettled debt orders</p>
+                <p className="text-xs text-slate-400">There are no pending recovery payments.</p>
+              </>
+            )}
+            {tab === "Discarded" && (
+              <>
+                <p className="text-sm font-semibold text-slate-600">No discarded orders</p>
+                <p className="text-xs text-slate-400">Removed or invalid orders will be listed here.</p>
+              </>
+            )}
           </div>
         ) : displayOrders.length === 0 ? (
           <div className="py-20 flex flex-col items-center gap-2 text-center px-4">

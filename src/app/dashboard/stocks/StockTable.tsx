@@ -35,6 +35,33 @@ export default function StockTable({
 }: StockTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [viewAll, setViewAll] = useState(false);
+  const [isFilterActive, setIsFilterActive] = useState(false);
+
+  useEffect(() => {
+    const checkFilters = () => {
+      const input = document.querySelector('input[placeholder="Search by name or category…"]') as HTMLInputElement | null;
+      const searchActive = input ? input.value.trim() !== "" : false;
+
+      const toggle = Array.from(document.querySelectorAll('label')).find(el => el.textContent?.includes('Low stock only'));
+      const toggleActive = toggle ? !!toggle.querySelector('.bg-amber-500') : false;
+
+      setIsFilterActive(searchActive || toggleActive);
+    };
+
+    checkFilters();
+
+    const handleEvents = () => {
+      setTimeout(checkFilters, 0);
+    };
+
+    document.addEventListener("input", handleEvents);
+    document.addEventListener("click", handleEvents);
+
+    return () => {
+      document.removeEventListener("input", handleEvents);
+      document.removeEventListener("click", handleEvents);
+    };
+  }, [filteredProducts]);
 
   const totalPages = Math.ceil(filteredProducts.length / ITEMS_PER_PAGE);
 
@@ -74,10 +101,21 @@ export default function StockTable({
   // ── Empty state ──
   if (!loading && filteredProducts.length === 0) {
     return (
-      <div className="mt-6 flex flex-col items-center justify-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm text-center">
+      <div className="mt-6 flex flex-col items-center justify-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm text-center px-4">
         <Package className="w-12 h-12 text-gray-300 mb-3" />
-        <p className="text-gray-600 font-semibold">No products found</p>
-        <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
+        {isFilterActive ? (
+          <>
+            <p className="text-gray-600 font-semibold">No products found</p>
+            <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
+          </>
+        ) : (
+          <>
+            <p className="text-gray-600 font-semibold">No stock entries yet</p>
+            <p className="text-gray-400 text-sm mt-1">
+              You haven't added any stock entries yet. Use the <strong>Restock</strong> tab above to get started.
+            </p>
+          </>
+        )}
       </div>
     );
   }
