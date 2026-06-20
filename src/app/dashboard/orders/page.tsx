@@ -865,19 +865,17 @@ function OrdersPageInner() {
           )}
 
           {/* ── PAGE HEADER ─────────────────────────────────────────────── */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-                Orders
-              </h1>
-              <p className="text-sm text-slate-500 mt-0.5">
+          <div className="page-header">
+            <div className="page-header-left">
+              <h1 className="page-title">Orders</h1>
+              <p className="page-subtitle">
                 {invoicesUsed !== null && invoicesLimit !== null
                   ? `${invoicesUsed} / ${invoicesLimit} ${subscription?.planId === "free_trial" ? "trial invoices used" : "invoices this month"}`
                   : "Track, settle, and manage every order in one place"}
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="page-header-actions">
               {/* Search — lives in header for immediate access */}
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -948,6 +946,9 @@ function OrdersPageInner() {
               ))}
             </div>
           </div>
+
+          {/* Active Tab Description Line */}
+          <p className="tab-description">{currentTabMeta.description}</p>
 
 
           {/* ── ORDER LIST (table) ──────────────────────────────────────── */}

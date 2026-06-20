@@ -112,40 +112,46 @@ export default function DashboardPage() {
 
   // ========= TAB CONFIGURATION =========
   const tabs = [
-    { id: "activity-log" as TabType, label: "Activity Log", icon: Activity, color: "slate" },
+    { id: "activity-log" as TabType, label: "Activity Log", description: "Recent system activities and logs", icon: Activity, color: "slate" },
     {
       id: "delivery" as TabType,
       label: "Delivery Overview",
+      description: "Today's orders and their delivery status",
       icon: Truck,
       color: "blue",
     },
     {
       id: "popular-products" as TabType,
       label: "Popular Products",
+      description: "Top products sold by volume",
       icon: TrendingUp,
       color: "purple",
     },
     {
       id: "customers" as TabType,
       label: "Customers",
+      description: "Customer directory and overview statistics",
       icon: Users,
       color: "blue",
     },
     {
       id: "delivery-partners" as TabType,
       label: "Delivery Partners",
+      description: "Active delivery team tracking",
       icon: TruckIcon,
       color: "orange",
     },
     {
       id: "low-stock" as TabType,
       label: "Low Stock Alerts",
+      description: "Alerts for products below minimum threshold",
       icon: AlertTriangle,
       color: "red",
     },
     {
       id: "sticky-notes" as TabType,
       label: "Sticky Notes",
+      description: "Personal scratchpad for quick reminders",
       icon: StickyNote,
       color: "yellow",
     },
@@ -318,6 +324,13 @@ export default function DashboardPage() {
               })}
             </div>
           </div>
+
+          {/* Active Tab Description Line */}
+          {activeTab && (
+            <p className="tab-description">
+              {tabs.find((t) => t.id === activeTab)?.description || ""}
+            </p>
+          )}
 
           {/* Tab Content */}
           <div className="min-h-[500px]">{renderTabContent()}</div>
