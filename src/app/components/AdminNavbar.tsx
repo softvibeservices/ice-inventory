@@ -6,6 +6,7 @@
 
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -49,6 +50,7 @@ const navLinks = [
 export default function AdminNavbar() {
   const router = useRouter();
   const pathname = usePathname();
+  const [showDialog, setShowDialog] = useState(false);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -61,7 +63,36 @@ export default function AdminNavbar() {
   };
 
   return (
-    <aside className="admin-sidebar">
+    <>
+      {/* ================= LOGOUT CONFIRM DIALOG ================= */}
+      {showDialog && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
+          <div className="w-full max-w-sm rounded-xl bg-[#020617] border border-white/10 p-6 text-center shadow-xl">
+            <h2 className="text-lg font-semibold text-cyan-400 mb-2">
+              Confirm Logout
+            </h2>
+            <p className="text-slate-300 mb-6">
+              Are you sure you want to logout?
+            </p>
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={() => setShowDialog(false)}
+                className="px-4 py-2 rounded-md bg-white/10 text-white hover:bg-white/20 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white transition"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <aside className="admin-sidebar">
       {/* Logo / Brand */}
       <div className="sidebar-brand">
         <div className="brand-icon">
@@ -99,7 +130,7 @@ export default function AdminNavbar() {
           <ExternalLink size={15} />
           <span>Main Dashboard</span>
         </Link>
-        <button className="footer-logout" onClick={handleLogout}>
+        <button className="footer-logout" onClick={() => setShowDialog(true)}>
           <LogOut size={15} />
           <span>Logout</span>
         </button>
@@ -263,5 +294,6 @@ export default function AdminNavbar() {
         }
       `}</style>
     </aside>
+    </>
   );
 }

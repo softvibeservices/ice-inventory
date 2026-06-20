@@ -50,6 +50,9 @@ export default function DashboardNavbar() {
   const [userId, setUserId] = useState<string | null>(null);
   const [showDialog, setShowDialog] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [shopName, setShopName] = useState<string | null>(null);
 
   // Sidebar collapse state — persisted to localStorage and singleton module cache
   const [collapsed, setCollapsed] = useState(() => {
@@ -136,6 +139,9 @@ export default function DashboardNavbar() {
         const parsed = JSON.parse(stored);
         setRole(parsed.role || "admin");
         setUserId(parsed._id || null);
+        setUserName(parsed.name || null);
+        setUserEmail(parsed.email || null);
+        setShopName(parsed.shopName || null);
       }
     } catch (error) {
       console.error("Error loading user data:", error);
@@ -261,6 +267,18 @@ export default function DashboardNavbar() {
           <span className="font-semibold text-white text-sm">Ice Inventory</span>
         </Link>
 
+        {/* Breadcrumb Context Label */}
+        <span className="dash-topbar-context text-slate-200">
+          {pathname.startsWith("/dashboard/products") ? "Products"
+            : pathname.startsWith("/dashboard/stocks") ? "Stocks"
+            : pathname.startsWith("/dashboard/customers") ? "Customers"
+            : pathname.startsWith("/dashboard/orders") ? "Orders"
+            : pathname.startsWith("/dashboard/delivery") ? "Live Map"
+            : pathname.startsWith("/dashboard/profile") ? "Profile"
+            : pathname.startsWith("/dashboard/sales") ? "Sales"
+            : "Dashboard"}
+        </span>
+
         {/* Right cluster — always visible on all breakpoints */}
         <div className="ml-auto flex items-center gap-3">
           {/* Subscription badge — admin only, hidden on very small screens */}
@@ -277,6 +295,7 @@ export default function DashboardNavbar() {
               className="relative"
               onClick={() => setMobileOpen(false)}
               aria-label="Delivery requests"
+              data-tip="Delivery requests"
             >
               <Bell
                 className={`transition ${
@@ -303,6 +322,7 @@ export default function DashboardNavbar() {
               href="/dashboard/profile"
               onClick={() => setMobileOpen(false)}
               aria-label="Profile"
+              data-tip="Your profile"
             >
               <UserCircle
                 size={26}
@@ -353,6 +373,7 @@ export default function DashboardNavbar() {
             className="hidden lg:flex items-center justify-center w-7 h-7 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition flex-shrink-0"
             onClick={toggleCollapsed}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            data-tip={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
@@ -477,6 +498,21 @@ export default function DashboardNavbar() {
           {role !== "manager" && !collapsed && (
             <div className="px-1 pb-1">
               <SubscriptionBadge />
+            </div>
+          )}
+
+          {/* User Identity Chip */}
+          {!collapsed && (
+            <div className="dash-user-chip">
+              <div className="dash-user-avatar">
+                {(userName || role || "U").charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="dash-user-name truncate">
+                  {userName || shopName || (role ? role.charAt(0).toUpperCase() + role.slice(1) : "User")}
+                </p>
+                {userEmail && <p className="dash-user-email truncate">{userEmail}</p>}
+              </div>
             </div>
           )}
 
