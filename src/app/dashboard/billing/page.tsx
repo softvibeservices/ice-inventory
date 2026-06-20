@@ -5,6 +5,7 @@
 import { useEffect, useState, useRef } from "react";
 import { RotateCcw, Save, CheckCircle, FileDown } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import DashboardNavbar from "@/app/components/DashboardNavbar";
 import Footer from "@/app/components/Footer";
 import toast from "react-hot-toast";
@@ -917,8 +918,8 @@ export default function BillingPage() {
           ifscCode: seller.ifscCode,
           bankingName: seller.bankingName,
         });
-        setLoadingBank(false);
       }
+      setLoadingBank(false);
       return;
     }
 
@@ -1395,6 +1396,172 @@ export default function BillingPage() {
     if (!customersExist) return "Add at least one customer first";
     return "";
   };
+
+  const missingCustomer = customers.length === 0;
+  const missingBillDetails = !seller ||
+    !seller.sellerName ||
+    !seller.contact ||
+    !seller.gstNumber ||
+    !seller.fullAddress ||
+    !seller.logoUrl ||
+    !seller.signatureUrl ||
+    !seller.qrCodeUrl ||
+    !seller.slogan;
+
+  const bankName = bank?.bankName || seller?.bankName;
+  const accNo =
+    bank?.accountNumber ||
+    (seller as any)?.accountNumber ||
+    (seller as any)?.accountNo;
+  const ifsc = bank?.ifscCode || (seller as any)?.ifscCode;
+  const inFavor = bank?.bankingName || seller?.bankingName;
+
+  const missingBankDetails = !bankName || !accNo || !ifsc || !inFavor;
+
+  const isRestricted = missingCustomer || missingBillDetails || missingBankDetails;
+
+  if (loadingData || loadingBank) {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
+        <DashboardNavbar />
+        <main className="flex-grow flex flex-col items-center justify-center py-12">
+          <div className="flex flex-col items-center gap-4">
+            <span className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-500 text-sm font-medium">Loading billing configurations...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (isRestricted) {
+    return (
+      <div className="flex flex-col min-h-screen bg-gray-50 dash-content-offset">
+        <DashboardNavbar />
+        <main className="flex-grow container mx-auto px-4 sm:px-6 py-8 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 max-w-2xl w-full p-6 sm:p-8">
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Billing Setup Required</h1>
+              <p className="text-gray-500 text-sm mt-2">
+                Before you can generate supply bills and invoices, please complete the following setup steps.
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              {/* Step 1: Customers */}
+              <div className={`p-4 rounded-xl border flex items-start gap-4 transition-all duration-200 ${
+                missingCustomer
+                  ? "bg-red-50/50 border-red-100"
+                  : "bg-green-50/30 border-green-100"
+              }`}>
+                <div className="mt-0.5">
+                  {missingCustomer ? (
+                    <span className="flex w-5 h-5 rounded-full bg-red-100 border border-red-200 items-center justify-center text-xs font-bold text-red-600">✗</span>
+                  ) : (
+                    <span className="flex w-5 h-5 rounded-full bg-green-100 border border-green-200 items-center justify-center text-xs font-bold text-green-600">✓</span>
+                  )}
+                </div>
+                <div className="flex-grow">
+                  <h3 className={`text-[15px] font-semibold ${missingCustomer ? "text-red-950" : "text-green-950"}`}>
+                    1. Add Customers
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Add at least one customer to select during billing.
+                  </p>
+                  {missingCustomer && (
+                    <Link
+                      href="/dashboard/customers"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 mt-2 hover:underline"
+                    >
+                      Add Customers &rarr;
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 2: Bill/Seller Details */}
+              <div className={`p-4 rounded-xl border flex items-start gap-4 transition-all duration-200 ${
+                missingBillDetails
+                  ? "bg-red-50/50 border-red-100"
+                  : "bg-green-50/30 border-green-100"
+              }`}>
+                <div className="mt-0.5">
+                  {missingBillDetails ? (
+                    <span className="flex w-5 h-5 rounded-full bg-red-100 border border-red-200 items-center justify-center text-xs font-bold text-red-600">✗</span>
+                  ) : (
+                    <span className="flex w-5 h-5 rounded-full bg-green-100 border border-green-200 items-center justify-center text-xs font-bold text-green-600">✓</span>
+                  )}
+                </div>
+                <div className="flex-grow">
+                  <h3 className={`text-[15px] font-semibold ${missingBillDetails ? "text-red-950" : "text-green-950"}`}>
+                    2. Configure Bill Details
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Fill in your shop name, address, GSTIN, and upload your payment QR code, logo, and signature.
+                  </p>
+                  {missingBillDetails && (
+                    <Link
+                      href="/dashboard/profile?tab=billing"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 mt-2 hover:underline"
+                    >
+                      Setup Bill Details &rarr;
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 3: Bank Details */}
+              <div className={`p-4 rounded-xl border flex items-start gap-4 transition-all duration-200 ${
+                missingBankDetails
+                  ? "bg-red-50/50 border-red-100"
+                  : "bg-green-50/30 border-green-100"
+              }`}>
+                <div className="mt-0.5">
+                  {missingBankDetails ? (
+                    <span className="flex w-5 h-5 rounded-full bg-red-100 border border-red-200 items-center justify-center text-xs font-bold text-red-600">✗</span>
+                  ) : (
+                    <span className="flex w-5 h-5 rounded-full bg-green-100 border border-green-200 items-center justify-center text-xs font-bold text-green-600">✓</span>
+                  )}
+                </div>
+                <div className="flex-grow">
+                  <h3 className={`text-[15px] font-semibold ${missingBankDetails ? "text-red-950" : "text-green-950"}`}>
+                    3. Bank Details
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Enter bank information to enable bank/UPI payment details on supply invoices.
+                  </p>
+                  {missingBankDetails && (
+                    <Link
+                      href="/dashboard/profile?tab=bank"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 mt-2 hover:underline"
+                    >
+                      Configure Bank Details &rarr;
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 pt-6 flex justify-end">
+              <Link
+                href="/dashboard"
+                className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-lg transition-colors"
+              >
+                Back to Dashboard
+              </Link>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  RENDER
