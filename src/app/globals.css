@@ -668,3 +668,176 @@ input[type="number"] {
 .no-transition * {
   transition: none !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   IMPLEMENTATION_FIFTH.MD — Comprehension Toolkit
+   Purely additive. Nothing above this line is changed.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 5.1: Hide the public-site footer inside the logged-in app ─────────────
+   Footer.tsx itself is NOT touched — it still renders correctly on public
+   pages (/login, /register, /, etc.) which live outside .dash-content-offset.
+   This rule only hides it where it's a sibling inside the dashboard shell. */
+.dash-content-offset footer { display: none; }
+
+/* ── 5.2: Contextual info banner ────────────────────────────────────────── */
+.info-banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.info-banner-icon { flex-shrink: 0; color: #2563eb; margin-top: 1px; }
+.info-banner-amber { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.info-banner-amber .info-banner-icon { color: #d97706; }
+
+/* ── 5.3: CSS-only tooltip (for icons that don't have a `title=` yet) ──────
+   Usage: <button data-tip="Your shop's notifications">…</button>
+   Coexists peacefully with existing native title= tooltips elsewhere —
+   this is only used for NEW tooltips added in Phase 2. */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 5px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 80;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── 5.4: Status legend (dot + label key) ───────────────────────────────── */
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  font-size: 12px;
+  color: #64748b;
+}
+.status-legend-item { display: flex; align-items: center; gap: 6px; }
+.status-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── 5.5: Stepper (multi-step flow progress) ────────────────────────────── */
+.stepper { display: flex; align-items: center; gap: 8px; margin-bottom: 22px; }
+.stepper-step { display: flex; align-items: center; gap: 8px; }
+.stepper-step-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 1.5px solid #e2e8f0;
+  flex-shrink: 0;
+  font-family: 'Inter', Arial, sans-serif;
+}
+.stepper-step-active .stepper-step-circle { background: #2563eb; color: #fff; border-color: #2563eb; }
+.stepper-step-done .stepper-step-circle   { background: #ecfdf5; color: #059669; border-color: #6ee7b7; }
+.stepper-step-label { font-size: 12.5px; font-weight: 600; color: #94a3b8; }
+.stepper-step-active .stepper-step-label { color: #0f172a; }
+.stepper-step-done .stepper-step-label   { color: #059669; }
+.stepper-connector { width: 28px; height: 2px; background: #e2e8f0; flex-shrink: 0; }
+
+/* ── 5.6: Helper text under fields / buttons ────────────────────────────── */
+.helper-text {
+  font-size: 12.5px;
+  color: #6b7280;
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+/* ── 5.7: Touch-friendly minimum tap target for icon-only buttons ──────── */
+.tap-target {
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+@media (max-width: 1024px) {
+  .tap-target { min-width: 40px; min-height: 40px; }
+}
+
+/* ── 5.8: Spacing for a CTA button placed inside .empty-state ──────────── */
+.empty-state-action { margin-top: 16px; }
+
+/* ── 5.9: One-line description under an active tab strip ───────────────── */
+.tab-description {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: -2px 0 14px 2px;
+}
+
+/* ── 5.10: Accessible keyboard focus ring (additive, used selectively) ─── */
+.focus-ring:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── 5.11: Sidebar footer user-identity block ───────────────────────────── */
+.dash-user-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  margin-bottom: 6px;
+}
+.dash-user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: 'Inter', Arial, sans-serif;
+}
+.dash-user-name  { font-size: 12.5px; font-weight: 600; color: #f1f5f9; line-height: 1.3; }
+.dash-user-email { font-size: 11px; color: #94a3b8; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+
+/* ── 5.12: Topbar page-context label (lightweight breadcrumb) ──────────── */
+.dash-topbar-context {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  display: none;
+}
+@media (min-width: 1024px) {
+  .dash-topbar-context { display: block; }
+}
