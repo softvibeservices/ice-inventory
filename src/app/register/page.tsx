@@ -37,6 +37,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const submittingRef = useRef(false);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,6 +102,7 @@ export default function RegisterPage() {
           email: form.email.trim().toLowerCase(),
           contact: form.contact,
           password: form.password,
+          termsAccepted,
           _hp: "",
         }),
       });
@@ -342,11 +344,57 @@ export default function RegisterPage() {
                 )}
               </div>
 
+              {/* ── Terms & Conditions checkbox ── */}
+              <div className="flex items-start gap-3 py-1">
+                <input
+                  type="checkbox"
+                  id="terms-accept-register"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  disabled={loading}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer flex-shrink-0"
+                  style={{ accentColor: "#2563eb" }}
+                />
+                <label htmlFor="terms-accept-register" className="text-sm text-gray-600 leading-snug cursor-pointer select-none">
+                  I have read and accept the{" "}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline font-medium"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Terms &amp; Conditions
+                  </a>
+                  ,{" "}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline font-medium"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Privacy Policy
+                  </a>{" "}
+                  and{" "}
+                  <a
+                    href="/refund"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline font-medium"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Refund Policy
+                  </a>{" "}
+                  of IceSaathi. By creating an account, I agree to be bound by these policies.
+                </label>
+              </div>
+
               {/* SUBMIT */}
               <div className="pt-1">
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !termsAccepted}
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-55"
                 >
                   {loading ? (
@@ -363,7 +411,7 @@ export default function RegisterPage() {
           </div>
 
           <p className="mt-4 text-center text-xs leading-5 text-gray-400">
-            By registering, you agree to our Terms of Service and Privacy Policy.
+            By registering, you agree to our Terms &amp; Conditions, Privacy Policy and Refund Policy.
           </p>
         </div>
       </main>

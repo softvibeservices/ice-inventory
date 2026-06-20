@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
     }
 
-    const { email, password, rememberMe, clientDeviceId } = raw;
+    const { email, password, rememberMe, clientDeviceId, termsAccepted } = raw;
 
     // ── 4. Input validation ─────────────────────────────────────────────────
     if (!email || typeof email !== "string" || email.trim() === "") {
@@ -199,6 +199,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── Terms & Conditions enforcement ──────────────────────────────────────────
+    // The frontend sends termsAccepted: true when the user ticks the checkbox.
+    // We validate it here so the login cannot be bypassed by direct API calls.
+    if (!termsAccepted) {
+      return NextResponse.json(
+        {
+          error: "You must accept the Terms & Conditions to log in to IceSaathi.",
+          message: "You must accept the Terms & Conditions to log in to IceSaathi.",
+        },
+        { status: 400 }
+      );
+    }
+
     // ── 8. Password check ───────────────────────────────────────────────────
     const isMatch = await bcrypt.compare(passwordNorm, user.password);
 
@@ -254,6 +267,16 @@ export async function POST(req: NextRequest) {
         { _id: user._id },
         { $set: { failedAttempts: 0 } }
       );
+    }
+
+    // ── Stamp termsAcceptedAt on first acceptance ────────────────────────────────
+    // Only write to the DB if the user has never accepted terms before.
+    // This silently migrates existing users on their next login.
+    if (!user.termsAcceptedAt) {
+      await user.updateOne({
+        termsAcceptedAt: new Date(),
+        termsVersion: "1.0",
+      });
     }
 
     // ── 10. Resolve userId (admin vs manager) ────────────────────────────────

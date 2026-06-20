@@ -5,7 +5,7 @@ export default function Footer() {
   return (
     <footer className="border-t border-gray-200 bg-gray-50" aria-label="Site footer">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
 
           {/* Brand */}
           <div className="lg:col-span-1">
@@ -91,6 +91,30 @@ export default function Footer() {
             </ul>
           </div>
 
+          {/* Legal */}
+          <div>
+            <h3 className="font-semibold text-gray-900 text-sm mb-4 uppercase tracking-wider">
+              Legal
+            </h3>
+            <ul className="space-y-3 text-sm text-gray-600">
+              <li>
+                <Link href="/terms" className="hover:text-gray-900 transition-colors">
+                  Terms &amp; Conditions
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy" className="hover:text-gray-900 transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/refund" className="hover:text-gray-900 transition-colors">
+                  Refund Policy
+                </Link>
+              </li>
+            </ul>
+          </div>
+
         </div>
 
         <div className="mt-12 pt-8 border-t border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -106,6 +130,11 @@ export default function Footer() {
             </a>
             . All rights reserved.
           </p>
+          <div className="flex items-center gap-4 text-sm text-gray-500">
+            <Link href="/terms" className="hover:text-gray-900 transition-colors">Terms</Link>
+            <Link href="/privacy" className="hover:text-gray-900 transition-colors">Privacy</Link>
+            <Link href="/refund" className="hover:text-gray-900 transition-colors">Refund</Link>
+          </div>
           <p className="text-sm text-gray-500">
             India&apos;s Best Software for Ice Cream Business
           </p>

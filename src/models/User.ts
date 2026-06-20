@@ -24,6 +24,8 @@ export interface IUser extends Document {
   failedAttempts: number;
   /** Set to now + 2 h when failedAttempts reaches the cap; null otherwise */
   blockedUntil: Date | null;
+  termsAcceptedAt?: Date | null;
+  termsVersion?: string | null;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -68,6 +70,22 @@ const UserSchema = new Schema<IUser>(
     // Null  → no active temporary block (or permanent admin block with no expiry)
     // Date  → locked until this timestamp; auto-cleared on first login after expiry
     blockedUntil: { type: Date, default: null },
+
+    // ── Legal acceptance ────────────────────────────────────────────
+    // Timestamp of when the user first accepted the Terms & Conditions.
+    // Optional so existing users are not broken. Stamped at login or registration.
+    termsAcceptedAt: {
+      type: Date,
+      default: null,
+    },
+
+    // The version of the Terms & Conditions the user accepted.
+    // Increment this string (e.g. "1.1", "2.0") when T&C changes
+    // significantly, so you can detect users who accepted an old version.
+    termsVersion: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );
