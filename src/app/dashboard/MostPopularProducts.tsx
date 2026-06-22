@@ -202,7 +202,7 @@ export default function MostPopularProducts() {
   /* ── Empty State ── */
   if (!loading && !error && summary.length === 0) {
     return (
-      <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="saas-card saas-card-flush overflow-hidden">
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -239,7 +239,7 @@ export default function MostPopularProducts() {
   const paginatedList = displayed.slice(0, visibleCount);
 
   return (
-    <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="saas-card saas-card-flush overflow-hidden">
 
       {/* ── Top bar ── */}
       <div className="px-4 sm:px-6 py-4 border-b border-gray-100">

@@ -235,67 +235,51 @@ export default function DeliveryOverview({
       typeof o.settlementAmount === "number" ? o.settlementAmount : 0;
     const remaining = Math.max(0, (o.total || 0) - paid);
 
+    const deliveryStatusBadge = o.deliveryStatus === "Delivered"
+      ? "badge badge-green"
+      : o.deliveryStatus === "On the Way"
+      ? "badge badge-blue"
+      : "badge badge-amber";
+
     return (
       <li
         key={o._id}
-        className="bg-white border border-gray-200 rounded-lg px-2.5 py-2 sm:px-3 sm:py-2.5 shadow-sm hover:shadow-md transition-shadow"
+        className="bg-white border border-white/80 rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-150"
       >
         {/* Top row: customer info + delivery status badge + view button */}
         <div className="flex justify-between items-start gap-2">
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] sm:text-xs font-semibold text-gray-900 truncate">
+            <p className="text-xs font-semibold text-gray-900 truncate leading-tight">
               {o.customerName}
             </p>
-            <p className="text-[10px] sm:text-xs font-medium text-gray-700 truncate">
+            <p className="text-[10px] font-medium text-gray-500 truncate mt-0.5">
               {o.shopName}
             </p>
           </div>
 
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">
+            <span className={deliveryStatusBadge} style={{ fontSize: '10px', padding: '2px 7px' }}>
               {o.deliveryStatus}
             </span>
-
-            {/* ── View Order: compact icon-only button with tooltip ── */}
             <button
               onClick={() => handleViewOrder(o)}
               title="View order details"
-              className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-700 hover:bg-slate-800 text-white transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-1 flex-shrink-0"
+              className="tap-target w-6 h-6 rounded-lg bg-slate-800 hover:bg-blue-600 text-white transition-colors flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-400"
             >
               <ExternalLink className="w-3 h-3" />
             </button>
           </div>
         </div>
 
-        {/* Details */}
-        <div className="text-[9px] sm:text-[10px] text-gray-600 space-y-0.5 mt-1.5">
-          <p>
-            <span className="font-medium">Date:</span>{" "}
-            {formatBillDate(o.createdAt)}
-          </p>
-          <p>
-            <span className="font-medium">Serial:</span> #{o.serialNumber}
-          </p>
-          <p>
-            <span className="font-medium">Amount:</span>{" "}
-            <span className="font-semibold text-gray-800">
-              {formatCurrency(o.total)}
-            </span>
-          </p>
+        {/* Details row */}
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 text-[10px] text-gray-500">
+          <span>#{o.serialNumber}</span>
+          <span>{formatBillDate(o.createdAt)}</span>
+          <span className="font-semibold text-gray-800">{formatCurrency(o.total)}</span>
           {showPaymentStatus && (
             <>
-              <p>
-                <span className="font-medium">Paid:</span>{" "}
-                <span className="font-semibold text-green-600">
-                  {formatCurrency(paid)}
-                </span>
-              </p>
-              <p>
-                <span className="font-medium">Remain:</span>{" "}
-                <span className="font-semibold text-amber-600">
-                  {formatCurrency(remaining)}
-                </span>
-              </p>
+              <span className="text-green-600 font-medium">Pd: {formatCurrency(paid)}</span>
+              <span className="text-amber-600 font-medium">Rem: {formatCurrency(remaining)}</span>
             </>
           )}
         </div>
@@ -327,21 +311,21 @@ export default function DeliveryOverview({
   ) => {
     return (
       <div
-        className={`border ${borderColor} rounded-lg p-2.5 sm:p-3 lg:p-4 ${bgColor} flex flex-col h-full`}
+        className={`border ${borderColor} rounded-xl p-3 sm:p-4 ${bgColor} flex flex-col h-full`}
       >
         {/* Header */}
-        <div className="flex items-center gap-2 mb-2 sm:mb-3">
-          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
             {icon}
-            <h3 className="font-semibold text-xs sm:text-sm lg:text-base text-gray-800 truncate">
+            <h3 className="font-semibold text-sm text-gray-900 truncate">
               {title}
             </h3>
-            <span
-              className={`ml-auto flex-shrink-0 ${badgeColor} text-white text-[10px] sm:text-xs font-semibold px-1.5 sm:px-2 py-0.5 rounded-full`}
-            >
-              {count}
-            </span>
           </div>
+          <span
+            className={`flex-shrink-0 ${badgeColor} text-white text-[10px] font-bold px-2.5 py-1 rounded-full`}
+          >
+            {count}
+          </span>
         </div>
 
         {/* Search Bar */}
@@ -415,16 +399,15 @@ export default function DeliveryOverview({
 
   // ========= RENDER =========
   return (
-    <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-2 sm:p-3 lg:p-4">
+    <div className="saas-card saas-card-flush">
       {loadingOrders ? (
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
-          <p className="text-xs sm:text-sm text-gray-500">
-            Loading delivery data…
-          </p>
+        <div className="p-6 space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="skeleton h-24 rounded-xl" />
+          ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 p-4">
           {/* ========= BOX 1: UNSETTLED PENDING / ON THE WAY ========= */}
           {renderBox(
             "Unsettled Pending",

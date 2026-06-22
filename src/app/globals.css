@@ -935,3 +935,107 @@ input[type="number"] {
   width: 0 !important;
   padding: 0 !important;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   DASHBOARD PREMIUM TAB STRIP
+   Purely additive — used by dashboard/page.tsx tab navigation.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Horizontal scroll strip (hides scrollbar visually) ───────────────────── */
+.dash-tab-strip {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.dash-tab-strip::-webkit-scrollbar { display: none; }
+
+/* ── Base tab button ────────────────────────────────────────────────────────── */
+.dash-tab-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'Inter', Arial, sans-serif;
+  color: #64748b;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+  /* Only show icon on xs — text hidden by sm:hidden md:hidden logic in JSX */
+}
+.dash-tab-btn:hover {
+  background: #f8fafc;
+  color: #1e293b;
+  border-color: #e2e8f0;
+}
+
+/* ── Active state ─────────────────────────────────────────────────────────── */
+.dash-tab-btn-active {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.1);
+}
+/* Blue (default / delivery) */
+.dash-tab-btn-active[data-color="blue"] { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+/* Amber / sticky notes */
+.dash-tab-btn-active[data-color="amber"] { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+/* Red / low stock */
+.dash-tab-btn-active[data-color="red"] { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+/* Emerald / popular */
+.dash-tab-btn-active[data-color="emerald"] { background: #ecfdf5; color: #065f46; border-color: #6ee7b7; }
+/* Violet / customers */
+.dash-tab-btn-active[data-color="violet"] { background: #f5f3ff; color: #5b21b6; border-color: #ddd6fe; }
+/* Cyan / partners */
+.dash-tab-btn-active[data-color="cyan"] { background: #ecfeff; color: #0e7490; border-color: #a5f3fc; }
+/* Slate / activity */
+.dash-tab-btn-active[data-color="slate"] { background: #f8fafc; color: #334155; border-color: #cbd5e1; }
+
+/* ── Red notification badge inside tab button ─────────────────────────────── */
+.dash-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'Inter', Arial, sans-serif;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+/* ── Context dot (green pulsing indicator beside active description) ────────── */
+.dash-tab-context-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+  animation: dot-pulse 2s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* ── Stat card sub-value (delta / change text) ────────────────────────────── */
+.stat-delta {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  margin-top: 1px;
+}
+.stat-delta-up   { color: #059669; }
+.stat-delta-down { color: #dc2626; }

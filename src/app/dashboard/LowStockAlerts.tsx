@@ -135,11 +135,20 @@ export default function LowStockAlerts({
   };
 
   return (
-    <div className="w-full bg-white rounded-xl shadow-sm border border-gray-100 p-3 sm:p-4 lg:p-6">
+    <div className="saas-card">
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
-          <p className="text-xs sm:text-sm text-gray-600">Loading stock data...</p>
+        <div className="space-y-3">
+          <div className="skeleton h-10 rounded-xl w-2/3" />
+          <div className="flex gap-3">
+            <div className="skeleton h-20 rounded-xl flex-1" />
+            <div className="skeleton h-20 rounded-xl flex-1" />
+            <div className="skeleton h-20 rounded-xl flex-1" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">
+            {[1,2,3,4,5,6].map((i) => (
+              <div key={i} className="skeleton h-32 rounded-xl" />
+            ))}
+          </div>
         </div>
       ) : (
         <>
@@ -163,19 +172,32 @@ export default function LowStockAlerts({
 
               {/* Stats Cards */}
               <div className="flex gap-2 sm:gap-3">
-                <div className="flex-1 sm:flex-none bg-red-50 border border-red-200 rounded-lg px-3 py-2 sm:px-4 sm:py-3">
-                  <p className="text-[10px] sm:text-xs text-red-600 font-medium">Critical</p>
-                  <p className="text-lg sm:text-2xl font-bold text-red-700">{criticalCount}</p>
+                <div className="stat-card flex-1 sm:flex-none" style={{ padding: '10px 14px' }}>
+                  <div className="stat-icon-wrap stat-icon-red" style={{ width: 30, height: 30 }}>
+                    <AlertCircle size={14} />
+                  </div>
+                  <div>
+                    <p className="stat-label" style={{ fontSize: '10px' }}>Critical</p>
+                    <p className="stat-value" style={{ fontSize: '16px', color: '#b91c1c' }}>{criticalCount}</p>
+                  </div>
                 </div>
-                <div className="flex-1 sm:flex-none bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 sm:px-4 sm:py-3">
-                  <p className="text-[10px] sm:text-xs text-amber-600 font-medium">Low</p>
-                  <p className="text-lg sm:text-2xl font-bold text-amber-700">{lowCount}</p>
+                <div className="stat-card flex-1 sm:flex-none" style={{ padding: '10px 14px' }}>
+                  <div className="stat-icon-wrap stat-icon-amber" style={{ width: 30, height: 30 }}>
+                    <TrendingDown size={14} />
+                  </div>
+                  <div>
+                    <p className="stat-label" style={{ fontSize: '10px' }}>Low</p>
+                    <p className="stat-value" style={{ fontSize: '16px', color: '#b45309' }}>{lowCount}</p>
+                  </div>
                 </div>
-                <div className="flex-1 sm:flex-none bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 sm:px-4 sm:py-3">
-                  <p className="text-[10px] sm:text-xs text-gray-600 font-medium">Total</p>
-                  <p className="text-lg sm:text-2xl font-bold text-gray-700">
-                    {lowStockProducts.length}
-                  </p>
+                <div className="stat-card flex-1 sm:flex-none" style={{ padding: '10px 14px' }}>
+                  <div className="stat-icon-wrap stat-icon-slate" style={{ width: 30, height: 30 }}>
+                    <Package size={14} />
+                  </div>
+                  <div>
+                    <p className="stat-label" style={{ fontSize: '10px' }}>Total</p>
+                    <p className="stat-value" style={{ fontSize: '16px' }}>{lowStockProducts.length}</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -194,33 +216,27 @@ export default function LowStockAlerts({
               </div>
 
               {/* Severity Filter */}
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <button
                   onClick={() => setSeverityFilter("all")}
-                  className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
-                    severityFilter === "all"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  className={`btn btn-sm ${
+                    severityFilter === "all" ? "btn-primary" : "btn-secondary"
                   }`}
                 >
                   All
                 </button>
                 <button
                   onClick={() => setSeverityFilter("critical")}
-                  className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
-                    severityFilter === "critical"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  className={`btn btn-sm ${
+                    severityFilter === "critical" ? "btn-danger" : "btn-secondary"
                   }`}
                 >
                   Critical
                 </button>
                 <button
                   onClick={() => setSeverityFilter("low")}
-                  className={`px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
-                    severityFilter === "low"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  className={`btn btn-sm ${
+                    severityFilter === "low" ? "btn-warning" : "btn-secondary"
                   }`}
                 >
                   Low
@@ -230,7 +246,7 @@ export default function LowStockAlerts({
               {filteredProducts.length > 0 && (
                 <button
                   onClick={() => setShowAll(!showAll)}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  className="btn btn-sm btn-secondary"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   {showAll ? "Show Pages" : "View All"}

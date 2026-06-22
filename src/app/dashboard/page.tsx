@@ -16,9 +16,11 @@ import {
   AlertTriangle,
   TrendingUp,
   Users,
-  TruckIcon,
+  Bike,
   Activity,
-  Boxes
+  ShoppingBag,
+  Package,
+  DollarSign,
 } from "lucide-react";
 
 import type { Order, Product, Customer } from "./types";
@@ -27,7 +29,6 @@ import { StickyNotesPanel } from "./sticky-notes";
 import ActivityLogPanel from "./ActivityLog";
 import { useSubscription } from "@/hooks/useSubscription";
 
-// FIX 1: Added "activity-log" to TabType union
 type TabType =
   | "activity-log"
   | "delivery"
@@ -43,8 +44,36 @@ function getAuthHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// ── Metric stat card for summary row ──────────────────────────────────────────
+function MetricCard({
+  icon,
+  iconColorClass,
+  label,
+  value,
+  loading,
+}: {
+  icon: React.ReactNode;
+  iconColorClass: string;
+  label: string;
+  value: string | number;
+  loading?: boolean;
+}) {
+  return (
+    <div className="stat-card">
+      <div className={`stat-icon-wrap ${iconColorClass}`}>{icon}</div>
+      <div>
+        <p className="stat-label">{label}</p>
+        {loading ? (
+          <div className="skeleton h-5 w-12 mt-1" />
+        ) : (
+          <p className="stat-value">{value}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
-  // ========= STATE =========
   const [activeTab, setActiveTab] = useState<TabType>("delivery");
   const [userId, setUserId] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -53,11 +82,8 @@ export default function DashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
-  // ── PHASE 8: Subscription data for limit warnings ─────────────────────────
   const { subscription } = useSubscription();
-  // ─────────────────────────────────────────────────────────────────────────
 
-  // ========= INIT USER =========
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) {
@@ -70,35 +96,29 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // ========= FETCH DATA =========
   const fetchMasterData = useCallback(async () => {
     if (!userId) return;
-
     try {
       setLoadingOrders(true);
       setLoadingProducts(true);
-
       const headers = getAuthHeaders();
-
       const [prodRes, custRes, ordersRes] = await Promise.all([
         fetch(`/api/products`, { headers }),
         fetch(`/api/customers`, { headers }),
         fetch(`/api/orders`, { headers }),
       ]);
-
       if (!prodRes.ok) throw new Error("Products fetch failed");
       if (!custRes.ok) throw new Error("Customers fetch failed");
       if (!ordersRes.ok) throw new Error("Orders fetch failed");
-
       const prodData = await prodRes.json();
       const custData = await custRes.json();
       const ordersData = await ordersRes.json();
-
       setProducts(Array.isArray(prodData) ? prodData : []);
       setCustomers(Array.isArray(custData) ? custData : []);
       setOrders(Array.isArray(ordersData) ? ordersData : []);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load dashboard data";
+      const msg =
+        err instanceof Error ? err.message : "Failed to load dashboard data";
       console.error(err);
       toast.error(msg);
     } finally {
@@ -111,94 +131,91 @@ export default function DashboardPage() {
     fetchMasterData();
   }, [fetchMasterData]);
 
-  // ========= TAB CONFIGURATION =========
   const tabs = [
     {
       id: "delivery" as TabType,
-      label: "Delivery Overview",
+      label: "Delivery",
+      fullLabel: "Delivery Overview",
       description: "Today's orders and their delivery status",
       icon: Truck,
+      color: "blue",
     },
     {
       id: "sticky-notes" as TabType,
-      label: "Sticky Notes",
+      label: "Notes",
+      fullLabel: "Sticky Notes",
       description: "Personal scratchpad for quick reminders",
       icon: StickyNote,
+      color: "amber",
     },
     {
       id: "low-stock" as TabType,
-      label: "Low Stock Alerts",
+      label: "Stock",
+      fullLabel: "Low Stock Alerts",
       description: "Alerts for products below minimum threshold",
       icon: AlertTriangle,
+      color: "red",
     },
     {
       id: "popular-products" as TabType,
-      label: "Popular Products",
+      label: "Popular",
+      fullLabel: "Popular Products",
       description: "Top products sold by volume",
       icon: TrendingUp,
+      color: "emerald",
     },
     {
       id: "customers" as TabType,
       label: "Customers",
+      fullLabel: "Customers",
       description: "Customer directory and overview statistics",
       icon: Users,
+      color: "violet",
     },
     {
       id: "delivery-partners" as TabType,
-      label: "Delivery Partners",
+      label: "Partners",
+      fullLabel: "Delivery Partners",
       description: "Active delivery team tracking",
-      icon: TruckIcon,
+      icon: Bike,
+      color: "cyan",
     },
     {
       id: "activity-log" as TabType,
-      label: "Activity Log",
+      label: "Activity",
+      fullLabel: "Activity Log",
       description: "Recent system activities and logs",
       icon: Activity,
+      color: "slate",
     },
   ];
 
-  // Count low stock items for badge
   const lowStockCount = products.filter((p) => {
     const hasMinStock = p.minStock !== undefined && p.minStock > 0;
     return hasMinStock && p.quantity < (p.minStock ?? 0);
   }).length;
 
-  // ========= GET BUTTON CLASSES =========
-  const getButtonClasses = (tabId: TabType) => {
-    const isActive = activeTab === tabId;
+  const activeOrders = orders.filter((o) => !o.discardedAt);
+  const pendingOrders = activeOrders.filter(
+    (o) =>
+      o.status === "Unsettled" &&
+      (o.deliveryStatus === "Pending" || o.deliveryStatus === "On the Way")
+  ).length;
 
-    return `flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all border relative ${
-      isActive
-        ? "bg-blue-600 text-white shadow-md shadow-blue-100 border-blue-600"
-        : "bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-800 border-slate-200"
-    }`;
-  };
+  const totalRevenue = activeOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
-  // ========= RENDER TAB CONTENT =========
   const renderTabContent = () => {
     switch (activeTab) {
       case "delivery":
-        return (
-          <DeliveryOverview
-            orders={orders}
-            loadingOrders={loadingOrders}
-          />
-        );
-
+        return <DeliveryOverview orders={orders} loadingOrders={loadingOrders} />;
       case "popular-products":
         return <MostPopularProducts />;
-
       case "customers":
         return <CustomerOverview />;
-
       case "delivery-partners":
         return <DeliveryPartnerOverview />;
-
       case "low-stock":
-        return (
-          <LowStockAlerts products={products} loading={loadingProducts} />
-        );
-
+        return <LowStockAlerts products={products} loading={loadingProducts} />;
       case "sticky-notes":
         return (
           <div className="w-full">
@@ -207,30 +224,14 @@ export default function DashboardPage() {
         );
       case "activity-log":
         return <ActivityLogPanel />;
-
       default:
         return null;
     }
   };
 
-  // ========= DERIVE LIMIT WARNING DATA ─────────────────────────────────────
-  //  Compute the values PlanLimitWarning needs from the live subscription data.
-  //  Using server-side counts (subscription.usage) keeps these accurate.
-  //  ✅ FIXED: Added proper null/undefined checks for subscription.usage
-  const invoicesUsed = subscription && subscription.usage
-    ? (subscription.planId === "free_trial"
-      ? subscription.usage.invoicesUsedTotal
-      : subscription.usage.invoicesUsedThisMonth)
-    : null;
+  // Find the active tab config
+  const activeTabConfig = tabs.find((t) => t.id === activeTab);
 
-  const invoicesLimit = subscription && subscription.effectiveLimits
-    ? (subscription.planId === "free_trial"
-      ? subscription.effectiveLimits.invoicesTotal
-      : subscription.effectiveLimits.invoicesPerMonth)
-    : null;
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ========= RENDER =========
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 dash-content-offset">
       <DashboardNavbar />
@@ -238,49 +239,78 @@ export default function DashboardPage() {
       <main className="flex-grow">
         <div className="page-wrapper">
 
+          {/* ── Page Header ─────────────────────────────────────────────── */}
+          <div className="page-header mb-5">
+            <div className="page-header-left">
+              <h1 className="page-title">Dashboard</h1>
+              <p className="page-subtitle">
+                Overview of your business operations at a glance
+              </p>
+            </div>
+          </div>
 
+          {/* ── Summary Metrics Row ──────────────────────────────────────── */}
+          <div className="stats-grid mb-6">
+            <MetricCard
+              icon={<ShoppingBag size={18} />}
+              iconColorClass="stat-icon-blue"
+              label="Total Orders"
+              value={loadingOrders ? "—" : activeOrders.length.toLocaleString("en-IN")}
+              loading={loadingOrders}
+            />
+            <MetricCard
+              icon={<Package size={18} />}
+              iconColorClass="stat-icon-amber"
+              label="Pending Delivery"
+              value={loadingOrders ? "—" : pendingOrders}
+              loading={loadingOrders}
+            />
+            <MetricCard
+              icon={<AlertTriangle size={18} />}
+              iconColorClass="stat-icon-red"
+              label="Low Stock Items"
+              value={loadingProducts ? "—" : lowStockCount}
+              loading={loadingProducts}
+            />
+            <MetricCard
+              icon={<DollarSign size={18} />}
+              iconColorClass="stat-icon-green"
+              label="Total Revenue"
+              value={
+                loadingOrders
+                  ? "—"
+                  : new Intl.NumberFormat("en-IN", {
+                      style: "currency",
+                      currency: "INR",
+                      maximumFractionDigits: 0,
+                    }).format(totalRevenue)
+              }
+              loading={loadingOrders}
+            />
+          </div>
 
-
-
-
-
-          {/* Tab Navigation */}
-          <div className="saas-card saas-card-compact mb-6">
-            <div className="flex flex-wrap gap-2 sm:gap-3">
+          {/* ── Tab Navigation ───────────────────────────────────────────── */}
+          <div className="saas-card mb-4" style={{ padding: "6px 8px" }}>
+            <div className="flex items-center gap-1 overflow-x-auto dash-tab-strip">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
-                const showBadge =
-                  tab.id === "low-stock" && lowStockCount > 0;
+                const isActive = activeTab === tab.id;
+                const showBadge = tab.id === "low-stock" && lowStockCount > 0;
 
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={getButtonClasses(tab.id)}
+                    className={`dash-tab-btn${isActive ? " dash-tab-btn-active" : ""}`}
+                    data-color={tab.color}
                   >
-                    <Icon className="w-4 h-4" />
-                    <span className="hidden sm:inline">{tab.label}</span>
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    {/* Full label on md+, short label on sm, icon-only on xs */}
+                    <span className="hidden md:inline whitespace-nowrap">{tab.fullLabel}</span>
+                    <span className="hidden sm:inline md:hidden whitespace-nowrap">{tab.label}</span>
 
-                    {/* FIX 2: Added "activity-log" case to the mobile label switch */}
-                    <span className="sm:hidden">
-                      {tab.id === "activity-log"
-                        ? "Activity"
-                        : tab.id === "delivery"
-                          ? "Delivery"
-                          : tab.id === "popular-products"
-                            ? "Popular"
-                            : tab.id === "customers"
-                              ? "Customers"
-                              : tab.id === "delivery-partners"
-                                ? "Partners"
-                                : tab.id === "low-stock"
-                                  ? "Stock"
-                                  : "Notes"}
-                    </span>
-
-                    {/* Badge for low stock count */}
                     {showBadge && (
-                      <span className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 bg-red-600 text-white text-[10px] font-bold rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center shadow-md">
+                      <span className="dash-tab-badge">
                         {lowStockCount > 99 ? "99+" : lowStockCount}
                       </span>
                     )}
@@ -290,20 +320,36 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Active Tab Description Line */}
-          {activeTab && (
-            <p className="tab-description">
-              {tabs.find((t) => t.id === activeTab)?.description || ""}
-            </p>
+          {/* ── Active Tab Context Line ──────────────────────────────────── */}
+          {activeTabConfig && (
+            <div className="flex items-center gap-2 mb-4">
+              <div className="dash-tab-context-dot" />
+              <p className="tab-description" style={{ margin: 0 }}>
+                {activeTabConfig.description}
+              </p>
+            </div>
           )}
 
-          {/* Tab Content */}
-          <div className="min-h-[500px]">{renderTabContent()}</div>
+          {/* ── Tab Content ──────────────────────────────────────────────── */}
+          <div className="min-h-[500px] animate-fadeIn" key={activeTab}>
+            {renderTabContent()}
+          </div>
         </div>
       </main>
 
       <Footer />
-      <Toaster position="top-right" reverseOrder={false} />
+      <Toaster
+        position="top-right"
+        reverseOrder={false}
+        toastOptions={{
+          style: {
+            fontFamily: "'Inter', Arial, sans-serif",
+            fontSize: "13px",
+            borderRadius: "10px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.1)",
+          },
+        }}
+      />
     </div>
   );
 }

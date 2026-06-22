@@ -268,7 +268,7 @@ export default function DashboardNavbar() {
         </Link>
 
         {/* Breadcrumb Context Label */}
-        <span className="dash-topbar-context text-slate-200">
+        <span className="dash-topbar-context text-slate-800">
           {pathname.startsWith("/dashboard/products") ? "Products"
             : pathname.startsWith("/dashboard/stocks") ? "Stocks"
             : pathname.startsWith("/dashboard/customers") ? "Customers"
