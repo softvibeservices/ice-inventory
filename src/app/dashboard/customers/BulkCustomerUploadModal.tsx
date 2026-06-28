@@ -22,27 +22,31 @@ interface BulkCustomerUploadModalProps {
   onSuccess: () => void;
 }
 
-// ── Sample data shared by both CSV + Excel downloads ──────────────────────────
+// ── Column headers (required first, then optional) ────────────────────────────
 const HEADERS = [
-  "Customer Name",
-  "Contact 1",
-  "Contact 2",
-  "Contact 3",
-  "Shop Name",
-  "Shop Address",
-  "Area",
-  "Remarks",
-  "Opening Credit",
-  "Opening Debit",
+  "Customer Name",   // ✅ required
+  "Shop Name",       // ✅ required
+  "Contact 1",       // ✅ required
+  "Latitude",        // ✅ required
+  "Longitude",       // ✅ required
+  "Contact 2",       // optional
+  "Contact 3",       // optional
+  "Shop Address",    // optional
+  "Area",            // optional
+  "Remarks",         // optional
+  "Opening Credit",  // optional
+  "Opening Debit",   // optional
 ];
 
 const SAMPLE_ROWS_CSV = [
   [
     "Raj Patel",
+    "Raj Ice Cream",
     "9876543210",
+    "21.1702",
+    "72.8311",
     "9876543211",
     "",
-    "Raj Ice Cream",
     "Shop 5 Main Road Adajan",
     "Adajan",
     "Regular customer",
@@ -51,10 +55,12 @@ const SAMPLE_ROWS_CSV = [
   ],
   [
     "Suresh Shah",
-    "9988776655",
-    "",
-    "",
     "Shah Cold Store",
+    "9988776655",
+    "21.1940",
+    "72.8290",
+    "",
+    "",
     "Near Bus Stand Varachha",
     "Varachha",
     "",
@@ -66,10 +72,12 @@ const SAMPLE_ROWS_CSV = [
 const SAMPLE_ROWS_EXCEL = [
   [
     "Raj Patel",
+    "Raj Ice Cream",
     "9876543210",
+    21.1702,
+    72.8311,
     "9876543211",
     "",
-    "Raj Ice Cream",
     "Shop 5 Main Road Adajan",
     "Adajan",
     "Regular customer",
@@ -78,10 +86,12 @@ const SAMPLE_ROWS_EXCEL = [
   ],
   [
     "Suresh Shah",
-    "9988776655",
-    "",
-    "",
     "Shah Cold Store",
+    "9988776655",
+    21.1940,
+    72.8290,
+    "",
+    "",
     "Near Bus Stand Varachha",
     "Varachha",
     "",
@@ -156,21 +166,21 @@ export default function BulkCustomerUploadModal({
     XLSX.writeFile(workbook, "customers_template.xlsx");
   };
 
-  // ── Duplicate check ────────────────────────────────────────────────────────
+  // ── Duplicate check (name + shopName + contact1) ───────────────────────────
   const isDuplicateCustomer = (
     name: string,
     shopName: string,
-    area: string
+    contact1: string
   ): boolean => {
     const n = name.trim().toLowerCase();
     const s = shopName.trim().toLowerCase();
-    const a = area.trim().toLowerCase();
+    const c = contact1.trim();
 
     return existingCustomers.some(
       (ex) =>
         ex.name.trim().toLowerCase() === n &&
         ex.shopName.trim().toLowerCase() === s &&
-        ex.area.trim().toLowerCase() === a
+        (ex.contacts?.[0] || "").trim() === c
     );
   };
 
@@ -243,16 +253,18 @@ export default function BulkCustomerUploadModal({
   const processUploadedData = (data: any[]) => {
     try {
       const parsed = data.map((row: any, index: number) => {
-        const name = row["Customer Name"]?.toString().trim() || "";
-        const contact1 = row["Contact 1"]?.toString().trim() || "";
-        const contact2 = row["Contact 2"]?.toString().trim() || "";
-        const contact3 = row["Contact 3"]?.toString().trim() || "";
-        const shopName = row["Shop Name"]?.toString().trim() || "";
-        const shopAddress = row["Shop Address"]?.toString().trim() || "";
-        const area = row["Area"]?.toString().trim() || "";
-        const remarks = row["Remarks"]?.toString().trim() || "";
-        const credit = row["Opening Credit"]?.toString().trim() || "0";
-        const debit = row["Opening Debit"]?.toString().trim() || "0";
+        const name        = row["Customer Name"]?.toString().trim()  || "";
+        const contact1    = row["Contact 1"]?.toString().trim()      || "";
+        const contact2    = row["Contact 2"]?.toString().trim()      || "";
+        const contact3    = row["Contact 3"]?.toString().trim()      || "";
+        const shopName    = row["Shop Name"]?.toString().trim()      || "";
+        const shopAddress = row["Shop Address"]?.toString().trim()   || "";
+        const area        = row["Area"]?.toString().trim()           || "";
+        const latitude    = row["Latitude"]?.toString().trim()       || "";
+        const longitude   = row["Longitude"]?.toString().trim()      || "";
+        const remarks     = row["Remarks"]?.toString().trim()        || "";
+        const credit      = row["Opening Credit"]?.toString().trim() || "0";
+        const debit       = row["Opening Debit"]?.toString().trim()  || "0";
 
         const customer: BulkCustomer = {
           id: `bulk-${Date.now()}-${index}`,
@@ -263,12 +275,14 @@ export default function BulkCustomerUploadModal({
           shopName,
           shopAddress,
           area,
+          latitude,
+          longitude,
           remarks,
           credit,
           debit,
         };
 
-        customer.isDuplicate = isDuplicateCustomer(name, shopName, area);
+        customer.isDuplicate = isDuplicateCustomer(name, shopName, contact1);
         customer.errors = validateCustomer(customer);
 
         return customer;
@@ -291,9 +305,8 @@ export default function BulkCustomerUploadModal({
     }
   };
 
-  const validateCustomer = (
-    customer: BulkCustomer
-  ): Record<string, string> => {
+  // ── Validation — required: name, contact1, shopName, latitude, longitude ──
+  const validateCustomer = (customer: BulkCustomer): Record<string, string> => {
     const errors: Record<string, string> = {};
 
     if (!customer.name.trim()) {
@@ -310,12 +323,22 @@ export default function BulkCustomerUploadModal({
       errors.shopName = "Required";
     }
 
-    if (!customer.shopAddress.trim()) {
-      errors.shopAddress = "Required";
+    if (!customer.latitude.trim()) {
+      errors.latitude = "Required";
+    } else {
+      const lat = parseFloat(customer.latitude);
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        errors.latitude = "Must be –90 to 90";
+      }
     }
 
-    if (!customer.area.trim()) {
-      errors.area = "Required";
+    if (!customer.longitude.trim()) {
+      errors.longitude = "Required";
+    } else {
+      const lng = parseFloat(customer.longitude);
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        errors.longitude = "Must be –180 to 180";
+      }
     }
 
     return errors;
@@ -330,11 +353,12 @@ export default function BulkCustomerUploadModal({
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
 
-      if (field === "name" || field === "shopName" || field === "area") {
+      // Re-check duplicates when any of the 3 key fields change
+      if (field === "name" || field === "shopName" || field === "contact1") {
         updated[index].isDuplicate = isDuplicateCustomer(
-          field === "name" ? value : updated[index].name,
-          field === "shopName" ? value : updated[index].shopName,
-          field === "area" ? value : updated[index].area
+          field === "name"      ? value : updated[index].name,
+          field === "shopName"  ? value : updated[index].shopName,
+          field === "contact1"  ? value : updated[index].contact1
         );
       }
 
@@ -381,8 +405,12 @@ export default function BulkCustomerUploadModal({
           name: c.name,
           contacts,
           shopName: c.shopName,
-          shopAddress: c.shopAddress,
-          area: c.area,
+          shopAddress: c.shopAddress || "",
+          area: c.area || "",
+          location: {
+            latitude: parseFloat(c.latitude),
+            longitude: parseFloat(c.longitude),
+          },
           remarks: c.remarks || "",
           credit: Number(c.credit) || 0,
           debit: Number(c.debit) || 0,
@@ -485,25 +513,28 @@ export default function BulkCustomerUploadModal({
                       </li>
                       <li className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                        Contact 1 <span className="text-gray-500">(6–15 digits)</span>
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
                         Shop Name
                       </li>
                       <li className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                        Shop Address
+                        Contact 1{" "}
+                        <span className="text-gray-500">(6–15 digits)</span>
                       </li>
                       <li className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-                        Area
+                        Latitude{" "}
+                        <span className="text-gray-500">(–90 to 90)</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        Longitude{" "}
+                        <span className="text-gray-500">(–180 to 180)</span>
                       </li>
                     </ul>
                   </div>
                   <div>
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
-                      ❌ Optional Columns
+                      ⬜ Optional Columns
                     </p>
                     <ul className="space-y-1.5 text-xs text-blue-800">
                       <li className="flex items-center gap-1.5">
@@ -512,15 +543,20 @@ export default function BulkCustomerUploadModal({
                       </li>
                       <li className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                        Shop Address
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                        Area
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
                         Remarks
                       </li>
                       <li className="flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
-                        Opening Credit <span className="text-gray-500">(number)</span>
-                      </li>
-                      <li className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
-                        Opening Debit <span className="text-gray-500">(number)</span>
+                        Opening Credit / Debit{" "}
+                        <span className="text-gray-500">(number)</span>
                       </li>
                     </ul>
                   </div>

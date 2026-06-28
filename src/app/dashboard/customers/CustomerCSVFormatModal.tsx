@@ -9,26 +9,31 @@ interface CustomerCSVFormatModalProps {
 }
 
 export default function CustomerCSVFormatModal({ onClose }: CustomerCSVFormatModalProps) {
+  // Required fields first, optional after
   const headers = [
-    "Customer Name",
-    "Contact 1",
-    "Contact 2",
-    "Contact 3",
-    "Shop Name",
-    "Shop Address",
-    "Area",
-    "Remarks",
-    "Opening Credit",
-    "Opening Debit",
+    "Customer Name",   // ✅
+    "Shop Name",       // ✅
+    "Contact 1",       // ✅
+    "Latitude",        // ✅
+    "Longitude",       // ✅
+    "Contact 2",       // optional
+    "Contact 3",       // optional
+    "Shop Address",    // optional
+    "Area",            // optional
+    "Remarks",         // optional
+    "Opening Credit",  // optional
+    "Opening Debit",   // optional
   ];
 
   const sampleData = [
     [
       "Raj Patel",
+      "Raj Ice Cream",
       "9876543210",
+      "21.1702",
+      "72.8311",
       "9876543211",
       "",
-      "Raj Ice Cream",
       "Shop 5 Main Road Adajan",
       "Adajan",
       "Regular customer",
@@ -37,10 +42,12 @@ export default function CustomerCSVFormatModal({ onClose }: CustomerCSVFormatMod
     ],
     [
       "Suresh Shah",
-      "9988776655",
-      "",
-      "",
       "Shah Cold Store",
+      "9988776655",
+      "21.1940",
+      "72.8290",
+      "",
+      "",
       "Near Bus Stand Varachha",
       "Varachha",
       "",
@@ -68,10 +75,12 @@ export default function CustomerCSVFormatModal({ onClose }: CustomerCSVFormatMod
     const excelSampleData = [
       [
         "Raj Patel",
+        "Raj Ice Cream",
         "9876543210",
+        21.1702,
+        72.8311,
         "9876543211",
         "",
-        "Raj Ice Cream",
         "Shop 5 Main Road Adajan",
         "Adajan",
         "Regular customer",
@@ -80,10 +89,12 @@ export default function CustomerCSVFormatModal({ onClose }: CustomerCSVFormatMod
       ],
       [
         "Suresh Shah",
-        "9988776655",
-        "",
-        "",
         "Shah Cold Store",
+        "9988776655",
+        21.1940,
+        72.8290,
+        "",
+        "",
         "Near Bus Stand Varachha",
         "Varachha",
         "",
@@ -146,6 +157,18 @@ export default function CustomerCSVFormatModal({ onClose }: CustomerCSVFormatMod
               <li className="flex items-start gap-3">
                 <span className="font-bold mt-1">•</span>
                 <span>
+                  <strong>Latitude</strong> must be a decimal number between –90 and 90 (e.g. 21.1702)
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="font-bold mt-1">•</span>
+                <span>
+                  <strong>Longitude</strong> must be a decimal number between –180 and 180 (e.g. 72.8311)
+                </span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="font-bold mt-1">•</span>
+                <span>
                   Required fields are marked with ✅ — they cannot be empty
                 </span>
               </li>
@@ -183,10 +206,28 @@ export default function CustomerCSVFormatModal({ onClose }: CustomerCSVFormatMod
                     <td className="px-4 py-3 text-gray-600 text-sm">Full name of the customer</td>
                   </tr>
                   <tr className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-semibold text-gray-900">Shop Name</td>
+                    <td className="px-4 py-3 text-center"><span className="text-green-600 font-bold text-lg">✅</span></td>
+                    <td className="px-4 py-3 text-gray-700">Raj Ice Cream</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">Name of the customer's shop</td>
+                  </tr>
+                  <tr className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold text-gray-900">Contact 1</td>
                     <td className="px-4 py-3 text-center"><span className="text-green-600 font-bold text-lg">✅</span></td>
                     <td className="px-4 py-3 text-gray-700">9876543210</td>
-                    <td className="px-4 py-3 text-gray-600 text-sm">Primary contact, 6–15 digits</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">Primary contact, 6–15 digits only</td>
+                  </tr>
+                  <tr className="hover:bg-blue-50">
+                    <td className="px-4 py-3 font-semibold text-gray-900">Latitude</td>
+                    <td className="px-4 py-3 text-center"><span className="text-green-600 font-bold text-lg">✅</span></td>
+                    <td className="px-4 py-3 text-gray-700">21.1702</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">GPS latitude, decimal number –90 to 90</td>
+                  </tr>
+                  <tr className="hover:bg-blue-50">
+                    <td className="px-4 py-3 font-semibold text-gray-900">Longitude</td>
+                    <td className="px-4 py-3 text-center"><span className="text-green-600 font-bold text-lg">✅</span></td>
+                    <td className="px-4 py-3 text-gray-700">72.8311</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">GPS longitude, decimal number –180 to 180</td>
                   </tr>
                   <tr className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold text-gray-900">Contact 2</td>
@@ -201,20 +242,14 @@ export default function CustomerCSVFormatModal({ onClose }: CustomerCSVFormatMod
                     <td className="px-4 py-3 text-gray-600 text-sm">Optional third contact</td>
                   </tr>
                   <tr className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-semibold text-gray-900">Shop Name</td>
-                    <td className="px-4 py-3 text-center"><span className="text-green-600 font-bold text-lg">✅</span></td>
-                    <td className="px-4 py-3 text-gray-700">Raj Ice Cream</td>
-                    <td className="px-4 py-3 text-gray-600 text-sm">Name of the customer's shop</td>
-                  </tr>
-                  <tr className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold text-gray-900">Shop Address</td>
-                    <td className="px-4 py-3 text-center"><span className="text-green-600 font-bold text-lg">✅</span></td>
+                    <td className="px-4 py-3 text-center"><span className="text-gray-400 font-bold text-lg">❌</span></td>
                     <td className="px-4 py-3 text-gray-700">Shop 5 Main Road</td>
                     <td className="px-4 py-3 text-gray-600 text-sm">Full address of the shop</td>
                   </tr>
                   <tr className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold text-gray-900">Area</td>
-                    <td className="px-4 py-3 text-center"><span className="text-green-600 font-bold text-lg">✅</span></td>
+                    <td className="px-4 py-3 text-center"><span className="text-gray-400 font-bold text-lg">❌</span></td>
                     <td className="px-4 py-3 text-gray-700">Adajan</td>
                     <td className="px-4 py-3 text-gray-600 text-sm">Locality / area name</td>
                   </tr>
@@ -244,10 +279,10 @@ export default function CustomerCSVFormatModal({ onClose }: CustomerCSVFormatMod
           {/* Example preview */}
           <div className="bg-gray-100 border-2 border-gray-300 rounded-lg p-5">
             <h4 className="font-bold text-lg text-gray-900 mb-3">📝 Example File Content</h4>
-            <pre className="text-sm text-gray-800 overflow-x-auto bg-white p-4 rounded-lg border border-gray-300 font-mono">
-{`Customer Name,Contact 1,Contact 2,Contact 3,Shop Name,Shop Address,Area,Remarks,Opening Credit,Opening Debit
-Raj Patel,9876543210,9876543211,,Raj Ice Cream,Shop 5 Main Road Adajan,Adajan,Regular customer,500,0
-Suresh Shah,9988776655,,,Shah Cold Store,Near Bus Stand Varachha,Varachha,,0,200`}
+            <pre className="text-sm text-gray-800 overflow-x-auto bg-white p-4 rounded-lg border border-gray-300 font-mono whitespace-pre">
+{`Customer Name,Shop Name,Contact 1,Latitude,Longitude,Contact 2,Contact 3,Shop Address,Area,Remarks,Opening Credit,Opening Debit
+Raj Patel,Raj Ice Cream,9876543210,21.1702,72.8311,9876543211,,Shop 5 Main Road Adajan,Adajan,Regular customer,500,0
+Suresh Shah,Shah Cold Store,9988776655,21.1940,72.8290,,,Near Bus Stand Varachha,Varachha,,0,200`}
             </pre>
           </div>
         </div>

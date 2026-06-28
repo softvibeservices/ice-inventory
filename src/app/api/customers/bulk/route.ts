@@ -69,11 +69,13 @@ export async function POST(req: Request) {
     for (let i = 0; i < customers.length; i++) {
       const c = customers[i];
 
+      // ── Required: Customer Name ────────────────────────────────────────────
       if (!c.name?.trim()) {
         errors.push({ index: i, field: "name", message: "Customer name required" });
         continue;
       }
 
+      // ── Required: Contact 1 (primary contact) ─────────────────────────────
       const contacts = Array.isArray(c.contacts)
         ? c.contacts.map((x: string) => x.trim()).filter(Boolean)
         : [];
@@ -83,28 +85,49 @@ export async function POST(req: Request) {
         continue;
       }
 
+      // ── Required: Shop Name ────────────────────────────────────────────────
       if (!c.shopName?.trim()) {
         errors.push({ index: i, field: "shopName", message: "Shop name required" });
         continue;
       }
 
-      if (!c.shopAddress?.trim()) {
-        errors.push({ index: i, field: "shopAddress", message: "Shop address required" });
+      // ── Required: Latitude ─────────────────────────────────────────────────
+      const lat = c.location?.latitude;
+      if (lat === undefined || lat === null) {
+        errors.push({ index: i, field: "latitude", message: "Latitude is required" });
+        continue;
+      }
+      const latNum = Number(lat);
+      if (isNaN(latNum) || latNum < -90 || latNum > 90) {
+        errors.push({ index: i, field: "latitude", message: "Latitude must be between -90 and 90" });
         continue;
       }
 
-      if (!c.area?.trim()) {
-        errors.push({ index: i, field: "area", message: "Area required" });
+      // ── Required: Longitude ────────────────────────────────────────────────
+      const lng = c.location?.longitude;
+      if (lng === undefined || lng === null) {
+        errors.push({ index: i, field: "longitude", message: "Longitude is required" });
+        continue;
+      }
+      const lngNum = Number(lng);
+      if (isNaN(lngNum) || lngNum < -180 || lngNum > 180) {
+        errors.push({ index: i, field: "longitude", message: "Longitude must be between -180 and 180" });
         continue;
       }
 
+      // ── All validations passed — build the document ────────────────────────
       validatedCustomers.push({
         userId: new mongoose.Types.ObjectId(auth.userId),
         name: c.name.trim(),
         contacts,
         shopName: c.shopName.trim(),
-        shopAddress: c.shopAddress.trim(),
-        area: c.area.trim(),
+        // shopAddress and area are now optional
+        shopAddress: c.shopAddress?.trim() || "",
+        area: c.area?.trim() || "",
+        location: {
+          latitude: latNum,
+          longitude: lngNum,
+        },
         remarks: c.remarks?.trim() || "",
         credit: Number(c.credit) || 0,
         debit: Number(c.debit) || 0,
