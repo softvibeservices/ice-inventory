@@ -6,6 +6,7 @@ import {
   Users, Plus, Search, SlidersHorizontal, Upload,
   X, AlertTriangle, CheckCircle2, Loader2,
   Zap, ArrowRight, TrendingUp, TrendingDown, BarChart3,
+  FileSpreadsheet,
 } from "lucide-react";
 
 import DashboardNavbar from "@/app/components/DashboardNavbar";
@@ -17,6 +18,7 @@ import CustomerList from "./CustomerList";
 import CustomerViewModal from "./CustomerViewModal";
 import CustomerReportPDF from "./CustomerReportPDF";
 import BulkCustomerUploadModal from "./BulkCustomerUploadModal";
+import CustomerCSVFormatModal from "./CustomerCSVFormatModal";
 
 import { Customer, FormState, SortMode } from "@/types/customer.type";
 
@@ -80,6 +82,9 @@ export default function CustomersPage() {
 
   // bulk upload
   const [showBulkModal, setShowBulkModal] = useState(false);
+
+  // ── NEW: file template modal (same pattern as products page) ──
+  const [showFileTemplate, setShowFileTemplate] = useState(false);
 
   // toast
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
@@ -369,12 +374,22 @@ export default function CustomersPage() {
           <div className="page-header-actions">
             <CustomerReportPDF customers={customers} />
 
+            {/* ── NEW: File Templates button — mirrors the products page ── */}
+            <button
+              onClick={() => setShowFileTemplate(true)}
+              className="btn btn-secondary btn-sm"
+            >
+              <FileSpreadsheet size={14} />
+              File Templates
+            </button>
+
+            {/* Bulk Upload */}
             <button
               onClick={() => setShowBulkModal(true)}
               className="btn btn-secondary btn-sm"
             >
               <Upload size={14} />
-              Bulk Import
+              Bulk Upload
             </button>
 
             <button
@@ -763,6 +778,11 @@ export default function CustomersPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── NEW: File Templates modal — mirrors products page pattern ── */}
+      {showFileTemplate && (
+        <CustomerCSVFormatModal onClose={() => setShowFileTemplate(false)} />
       )}
 
       {/* ── Bulk Upload Modal ── */}
