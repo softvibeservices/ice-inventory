@@ -12,6 +12,8 @@ export interface BulkCustomer {
   shopName: string;
   shopAddress: string;
   area: string;
+  latitude: string;
+  longitude: string;
   remarks: string;
   credit: string;
   debit: string;
@@ -34,6 +36,12 @@ export default function BulkCustomerRow({
 }: BulkCustomerRowProps) {
   const hasErrors = customer.errors && Object.keys(customer.errors).length > 0;
   const isDuplicate = customer.isDuplicate;
+
+  const fieldClass = (field: string, isRequired = false) => {
+    if (customer.errors?.[field]) return "border-red-500 bg-red-50 text-red-900";
+    if (isDuplicate && isRequired) return "border-orange-400 bg-orange-50 text-orange-900";
+    return "border-gray-300 text-gray-900 hover:border-blue-400";
+  };
 
   return (
     <div
@@ -70,13 +78,13 @@ export default function BulkCustomerRow({
       {isDuplicate && (
         <div className="mb-4 p-3 bg-orange-100 border-2 border-orange-300 rounded-lg">
           <p className="text-sm font-bold text-orange-900">
-            ⚠️ A customer with this name, shop name, and area already exists in your database.
+            ⚠️ A customer with this name, shop name, and contact already exists in your database.
             Please modify or remove this entry.
           </p>
         </div>
       )}
 
-      {/* Row 1: Name, Contact 1, Contact 2, Contact 3, Area */}
+      {/* ── Row 1: Required fields — Name, Contact 1, Shop Name, Latitude, Longitude ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
         {/* Customer Name */}
         <div>
@@ -88,13 +96,7 @@ export default function BulkCustomerRow({
             value={customer.name}
             onChange={(e) => onChange(index, "name", e.target.value)}
             placeholder="e.g. Raj Patel"
-            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-              customer.errors?.name
-                ? "border-red-500 bg-red-50 text-red-900"
-                : isDuplicate
-                ? "border-orange-400 bg-orange-50 text-orange-900"
-                : "border-gray-300 text-gray-900 hover:border-blue-400"
-            }`}
+            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${fieldClass("name", true)}`}
           />
           {customer.errors?.name && (
             <p className="text-sm font-semibold text-red-700 mt-1.5">{customer.errors.name}</p>
@@ -111,22 +113,75 @@ export default function BulkCustomerRow({
             value={customer.contact1}
             onChange={(e) => onChange(index, "contact1", e.target.value)}
             placeholder="e.g. 9876543210"
-            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-              customer.errors?.contact1
-                ? "border-red-500 bg-red-50 text-red-900"
-                : isDuplicate
-                ? "border-orange-400 bg-orange-50 text-orange-900"
-                : "border-gray-300 text-gray-900 hover:border-blue-400"
-            }`}
+            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${fieldClass("contact1", true)}`}
           />
           {customer.errors?.contact1 && (
             <p className="text-sm font-semibold text-red-700 mt-1.5">{customer.errors.contact1}</p>
           )}
         </div>
 
+        {/* Shop Name */}
+        <div>
+          <label className="block text-sm font-bold text-gray-800 mb-1.5">
+            Shop Name <span className="text-red-600">*</span>
+          </label>
+          <input
+            type="text"
+            value={customer.shopName}
+            onChange={(e) => onChange(index, "shopName", e.target.value)}
+            placeholder="e.g. Raj Ice Cream"
+            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${fieldClass("shopName", true)}`}
+          />
+          {customer.errors?.shopName && (
+            <p className="text-sm font-semibold text-red-700 mt-1.5">{customer.errors.shopName}</p>
+          )}
+        </div>
+
+        {/* Latitude */}
+        <div>
+          <label className="block text-sm font-bold text-gray-800 mb-1.5">
+            Latitude <span className="text-red-600">*</span>
+          </label>
+          <input
+            type="number"
+            step="any"
+            value={customer.latitude}
+            onChange={(e) => onChange(index, "latitude", e.target.value)}
+            placeholder="e.g. 21.1702"
+            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${fieldClass("latitude", true)}`}
+          />
+          {customer.errors?.latitude && (
+            <p className="text-sm font-semibold text-red-700 mt-1.5">{customer.errors.latitude}</p>
+          )}
+        </div>
+
+        {/* Longitude */}
+        <div>
+          <label className="block text-sm font-bold text-gray-800 mb-1.5">
+            Longitude <span className="text-red-600">*</span>
+          </label>
+          <input
+            type="number"
+            step="any"
+            value={customer.longitude}
+            onChange={(e) => onChange(index, "longitude", e.target.value)}
+            placeholder="e.g. 72.8311"
+            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${fieldClass("longitude", true)}`}
+          />
+          {customer.errors?.longitude && (
+            <p className="text-sm font-semibold text-red-700 mt-1.5">{customer.errors.longitude}</p>
+          )}
+        </div>
+      </div>
+
+      {/* ── Row 2: Optional fields — Contact 2, Contact 3, Area, Credit, Debit ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
         {/* Contact 2 */}
         <div>
-          <label className="block text-sm font-bold text-gray-800 mb-1.5">Contact 2</label>
+          <label className="block text-sm font-bold text-gray-800 mb-1.5">
+            Contact 2{" "}
+            <span className="text-xs font-normal text-gray-400">(optional)</span>
+          </label>
           <input
             type="text"
             value={customer.contact2}
@@ -138,7 +193,10 @@ export default function BulkCustomerRow({
 
         {/* Contact 3 */}
         <div>
-          <label className="block text-sm font-bold text-gray-800 mb-1.5">Contact 3</label>
+          <label className="block text-sm font-bold text-gray-800 mb-1.5">
+            Contact 3{" "}
+            <span className="text-xs font-normal text-gray-400">(optional)</span>
+          </label>
           <input
             type="text"
             value={customer.contact3}
@@ -151,77 +209,23 @@ export default function BulkCustomerRow({
         {/* Area */}
         <div>
           <label className="block text-sm font-bold text-gray-800 mb-1.5">
-            Area <span className="text-red-600">*</span>
+            Area{" "}
+            <span className="text-xs font-normal text-gray-400">(optional)</span>
           </label>
           <input
             type="text"
             value={customer.area}
             onChange={(e) => onChange(index, "area", e.target.value)}
             placeholder="e.g. Adajan"
-            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-              customer.errors?.area
-                ? "border-red-500 bg-red-50 text-red-900"
-                : isDuplicate
-                ? "border-orange-400 bg-orange-50 text-orange-900"
-                : "border-gray-300 text-gray-900 hover:border-blue-400"
-            }`}
+            className="w-full px-3 py-2.5 text-base font-medium border-2 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 hover:border-blue-400 outline-none transition-all"
           />
-          {customer.errors?.area && (
-            <p className="text-sm font-semibold text-red-700 mt-1.5">{customer.errors.area}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Row 2: Shop Name, Shop Address, Remarks, Credit, Debit */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        {/* Shop Name */}
-        <div>
-          <label className="block text-sm font-bold text-gray-800 mb-1.5">
-            Shop Name <span className="text-red-600">*</span>
-          </label>
-          <input
-            type="text"
-            value={customer.shopName}
-            onChange={(e) => onChange(index, "shopName", e.target.value)}
-            placeholder="e.g. Raj Ice Cream"
-            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-              customer.errors?.shopName
-                ? "border-red-500 bg-red-50 text-red-900"
-                : isDuplicate
-                ? "border-orange-400 bg-orange-50 text-orange-900"
-                : "border-gray-300 text-gray-900 hover:border-blue-400"
-            }`}
-          />
-          {customer.errors?.shopName && (
-            <p className="text-sm font-semibold text-red-700 mt-1.5">{customer.errors.shopName}</p>
-          )}
-        </div>
-
-        {/* Shop Address */}
-        <div className="lg:col-span-2">
-          <label className="block text-sm font-bold text-gray-800 mb-1.5">
-            Shop Address <span className="text-red-600">*</span>
-          </label>
-          <input
-            type="text"
-            value={customer.shopAddress}
-            onChange={(e) => onChange(index, "shopAddress", e.target.value)}
-            placeholder="Full shop address"
-            className={`w-full px-3 py-2.5 text-base font-medium border-2 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all ${
-              customer.errors?.shopAddress
-                ? "border-red-500 bg-red-50 text-red-900"
-                : "border-gray-300 text-gray-900 hover:border-blue-400"
-            }`}
-          />
-          {customer.errors?.shopAddress && (
-            <p className="text-sm font-semibold text-red-700 mt-1.5">{customer.errors.shopAddress}</p>
-          )}
         </div>
 
         {/* Opening Credit */}
         <div>
           <label className="block text-sm font-bold text-gray-800 mb-1.5">
-            Opening Credit (₹)
+            Opening Credit (₹){" "}
+            <span className="text-xs font-normal text-gray-400">(optional)</span>
           </label>
           <input
             type="number"
@@ -237,7 +241,8 @@ export default function BulkCustomerRow({
         {/* Opening Debit */}
         <div>
           <label className="block text-sm font-bold text-gray-800 mb-1.5">
-            Opening Debit (₹)
+            Opening Debit (₹){" "}
+            <span className="text-xs font-normal text-gray-400">(optional)</span>
           </label>
           <input
             type="number"
@@ -251,16 +256,34 @@ export default function BulkCustomerRow({
         </div>
       </div>
 
-      {/* Remarks row */}
-      <div className="mt-4">
-        <label className="block text-sm font-bold text-gray-800 mb-1.5">Remarks</label>
-        <input
-          type="text"
-          value={customer.remarks}
-          onChange={(e) => onChange(index, "remarks", e.target.value)}
-          placeholder="Optional notes about this customer"
-          className="w-full px-3 py-2.5 text-base font-medium border-2 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 hover:border-blue-400 outline-none transition-all"
-        />
+      {/* ── Row 3: Shop Address + Remarks ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-bold text-gray-800 mb-1.5">
+            Shop Address{" "}
+            <span className="text-xs font-normal text-gray-400">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={customer.shopAddress}
+            onChange={(e) => onChange(index, "shopAddress", e.target.value)}
+            placeholder="Full address of the shop"
+            className="w-full px-3 py-2.5 text-base font-medium border-2 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 hover:border-blue-400 outline-none transition-all"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-bold text-gray-800 mb-1.5">
+            Remarks{" "}
+            <span className="text-xs font-normal text-gray-400">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={customer.remarks}
+            onChange={(e) => onChange(index, "remarks", e.target.value)}
+            placeholder="Optional notes about this customer"
+            className="w-full px-3 py-2.5 text-base font-medium border-2 border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500 hover:border-blue-400 outline-none transition-all"
+          />
+        </div>
       </div>
 
       {/* Error Summary */}

@@ -5,8 +5,8 @@ export interface ICustomer extends Document {
   name: string;
   contacts: string[]; // multiple contact numbers
   shopName: string;
-  shopAddress: string;
-  area: string;
+  shopAddress?: string;  // now optional
+  area?: string;         // now optional
   location?: {
     latitude?: number;
     longitude?: number;
@@ -31,8 +31,8 @@ const CustomerSchema = new Schema<ICustomer>(
       },
     },
     shopName: { type: String, required: true },
-    shopAddress: { type: String, required: true },
-    area: { type: String, required: true },
+    shopAddress: { type: String, default: "" },   // optional — no required: true
+    area: { type: String, default: "" },           // optional — no required: true
     location: {
       latitude: { type: Number, required: false },
       longitude: { type: Number, required: false },
