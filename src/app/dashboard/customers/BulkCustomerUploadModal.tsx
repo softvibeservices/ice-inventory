@@ -2,7 +2,15 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, Upload, AlertCircle, CheckCircle, FileSpreadsheet } from "lucide-react";
+import {
+  X,
+  Upload,
+  AlertCircle,
+  CheckCircle,
+  FileSpreadsheet,
+  Download,
+  Info,
+} from "lucide-react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
@@ -13,6 +21,74 @@ interface BulkCustomerUploadModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
+
+// ── Sample data shared by both CSV + Excel downloads ──────────────────────────
+const HEADERS = [
+  "Customer Name",
+  "Contact 1",
+  "Contact 2",
+  "Contact 3",
+  "Shop Name",
+  "Shop Address",
+  "Area",
+  "Remarks",
+  "Opening Credit",
+  "Opening Debit",
+];
+
+const SAMPLE_ROWS_CSV = [
+  [
+    "Raj Patel",
+    "9876543210",
+    "9876543211",
+    "",
+    "Raj Ice Cream",
+    "Shop 5 Main Road Adajan",
+    "Adajan",
+    "Regular customer",
+    "500",
+    "0",
+  ],
+  [
+    "Suresh Shah",
+    "9988776655",
+    "",
+    "",
+    "Shah Cold Store",
+    "Near Bus Stand Varachha",
+    "Varachha",
+    "",
+    "0",
+    "200",
+  ],
+];
+
+const SAMPLE_ROWS_EXCEL = [
+  [
+    "Raj Patel",
+    "9876543210",
+    "9876543211",
+    "",
+    "Raj Ice Cream",
+    "Shop 5 Main Road Adajan",
+    "Adajan",
+    "Regular customer",
+    500,
+    0,
+  ],
+  [
+    "Suresh Shah",
+    "9988776655",
+    "",
+    "",
+    "Shah Cold Store",
+    "Near Bus Stand Varachha",
+    "Varachha",
+    "",
+    0,
+    200,
+  ],
+];
 
 export default function BulkCustomerUploadModal({
   userId,
@@ -26,7 +102,7 @@ export default function BulkCustomerUploadModal({
   const [loadingExisting, setLoadingExisting] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch existing customers for duplicate detection
+  // ── Fetch existing customers for duplicate detection ───────────────────────
   useEffect(() => {
     const fetchExisting = async () => {
       try {
@@ -51,8 +127,41 @@ export default function BulkCustomerUploadModal({
     }
   }, [userId]);
 
-  // Duplicate check: name + shopName + area (case-insensitive)
-  const isDuplicateCustomer = (name: string, shopName: string, area: string): boolean => {
+  // ── Template downloads ─────────────────────────────────────────────────────
+  const handleDownloadCSV = () => {
+    const csvContent = [
+      HEADERS.join(","),
+      ...SAMPLE_ROWS_CSV.map((row) =>
+        row
+          .map((cell) =>
+            typeof cell === "string" && cell.includes(",")
+              ? `"${cell}"`
+              : cell
+          )
+          .join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "customers_template.csv";
+    link.click();
+  };
+
+  const handleDownloadExcel = () => {
+    const worksheet = XLSX.utils.aoa_to_sheet([HEADERS, ...SAMPLE_ROWS_EXCEL]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Customers");
+    XLSX.writeFile(workbook, "customers_template.xlsx");
+  };
+
+  // ── Duplicate check ────────────────────────────────────────────────────────
+  const isDuplicateCustomer = (
+    name: string,
+    shopName: string,
+    area: string
+  ): boolean => {
     const n = name.trim().toLowerCase();
     const s = shopName.trim().toLowerCase();
     const a = area.trim().toLowerCase();
@@ -65,6 +174,7 @@ export default function BulkCustomerUploadModal({
     );
   };
 
+  // ── File parsing ───────────────────────────────────────────────────────────
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -181,7 +291,9 @@ export default function BulkCustomerUploadModal({
     }
   };
 
-  const validateCustomer = (customer: BulkCustomer): Record<string, string> => {
+  const validateCustomer = (
+    customer: BulkCustomer
+  ): Record<string, string> => {
     const errors: Record<string, string> = {};
 
     if (!customer.name.trim()) {
@@ -218,7 +330,6 @@ export default function BulkCustomerUploadModal({
       const updated = [...prev];
       updated[index] = { ...updated[index], [field]: value };
 
-      // Re-check duplicates when relevant fields change
       if (field === "name" || field === "shopName" || field === "area") {
         updated[index].isDuplicate = isDuplicateCustomer(
           field === "name" ? value : updated[index].name,
@@ -237,7 +348,6 @@ export default function BulkCustomerUploadModal({
   };
 
   const handleSaveAll = async () => {
-    // Block if duplicates exist
     const duplicates = customers.filter((c) => c.isDuplicate);
     if (duplicates.length > 0) {
       toast.error(
@@ -247,7 +357,6 @@ export default function BulkCustomerUploadModal({
       return;
     }
 
-    // Block if any errors
     const withErrors = customers.filter(
       (c) => c.errors && Object.keys(c.errors).length > 0
     );
@@ -315,6 +424,7 @@ export default function BulkCustomerUploadModal({
 
   const duplicateCount = customers.filter((c) => c.isDuplicate).length;
 
+  // ── Loading state ──────────────────────────────────────────────────────────
   if (loadingExisting) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -326,10 +436,12 @@ export default function BulkCustomerUploadModal({
     );
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col">
-        {/* Header */}
+
+        {/* ── Header ── */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
           <div>
             <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
@@ -348,14 +460,105 @@ export default function BulkCustomerUploadModal({
           </button>
         </div>
 
-        {/* Content */}
+        {/* ── Content ── */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
           {customers.length === 0 ? (
-            // Upload Section
-            <div className="flex flex-col items-center justify-center py-16">
+
+            /* ══════════════════════════ UPLOAD SECTION ══════════════════════════ */
+            <div className="flex flex-col items-center justify-start py-6 gap-6">
+
+              {/* ── Inline Format Guide ── */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 w-full max-w-2xl">
+                <h4 className="text-sm font-bold text-blue-900 mb-4 flex items-center gap-2">
+                  <Info className="w-4 h-4 shrink-0" />
+                  Quick Guide — Before You Upload
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-green-700 uppercase tracking-wide mb-2">
+                      ✅ Required Columns
+                    </p>
+                    <ul className="space-y-1.5 text-xs text-blue-800">
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        Customer Name
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        Contact 1 <span className="text-gray-500">(6–15 digits)</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        Shop Name
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        Shop Address
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                        Area
+                      </li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                      ❌ Optional Columns
+                    </p>
+                    <ul className="space-y-1.5 text-xs text-blue-800">
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                        Contact 2 / Contact 3
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                        Remarks
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                        Opening Credit <span className="text-gray-500">(number)</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                        Opening Debit <span className="text-gray-500">(number)</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                <p className="text-xs text-blue-700 mt-4 pt-3 border-t border-blue-200">
+                  ⚠️ Do <strong>not</strong> change column names — they must match exactly as shown above.
+                </p>
+              </div>
+
+              {/* ── Download Template Buttons ── */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-2xl">
+                <span className="text-sm text-gray-600 font-medium shrink-0">
+                  Download sample template:
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleDownloadCSV}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-blue-300 bg-white text-blue-700 text-sm font-semibold hover:bg-blue-50 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    CSV Template
+                  </button>
+                  <button
+                    onClick={handleDownloadExcel}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-green-300 bg-white text-green-700 text-sm font-semibold hover:bg-green-50 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Excel Template
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Upload Drop Zone ── */}
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-dashed border-blue-400 rounded-2xl p-12 max-w-lg w-full text-center">
                 <Upload className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-                <h4 className="text-xl font-bold text-gray-900 mb-2">Upload Your File</h4>
+                <h4 className="text-xl font-bold text-gray-900 mb-2">
+                  Upload Your File
+                </h4>
                 <p className="text-base text-gray-700 mb-6">
                   Select a CSV or Excel file containing your customers
                 </p>
@@ -373,12 +576,17 @@ export default function BulkCustomerUploadModal({
                 >
                   {uploading ? "Loading..." : "Choose File"}
                 </button>
-                <p className="text-sm text-gray-500 mt-4">Supports: CSV, XLSX, XLS</p>
+                <p className="text-sm text-gray-500 mt-4">
+                  Supports: CSV, XLSX, XLS
+                </p>
               </div>
             </div>
+
           ) : (
-            // Review Section
+
+            /* ══════════════════════════ REVIEW SECTION ══════════════════════════ */
             <div className="space-y-4">
+
               {/* Stats Bar */}
               <div className="flex items-center justify-between bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-300 rounded-xl px-6 py-4 shadow-sm">
                 <div className="flex items-center gap-6">
@@ -432,13 +640,14 @@ export default function BulkCustomerUploadModal({
           )}
         </div>
 
-        {/* Footer */}
+        {/* ── Footer ── */}
         {customers.length > 0 && (
           <div className="flex items-center justify-between px-6 py-5 border-t border-gray-200 bg-gray-50">
             <div className="text-base font-medium">
               {duplicateCount > 0 ? (
                 <span className="text-orange-700">
-                  ⚠️ Remove {duplicateCount} duplicate customer{duplicateCount > 1 ? "s" : ""} before saving
+                  ⚠️ Remove {duplicateCount} duplicate customer
+                  {duplicateCount > 1 ? "s" : ""} before saving
                 </span>
               ) : errorCount > 0 ? (
                 <span className="text-red-700">
